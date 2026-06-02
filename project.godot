@@ -11,7 +11,14 @@ config_version=5
 [application]
 
 config/name="unbox"
+run/main_scene="uid://dutb4nvr876nw"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
+
+[autoload]
+
+BlockRegistry="*uid://bq87pxxs8plky"
+ItemRegistry="*uid://beu6skyqc1ji7"
+AudioManager="*uid://dhl121uir0mqw"
 
 [dotnet]
 
