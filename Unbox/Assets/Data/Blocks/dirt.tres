@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="BlockResource" format=3 uid="uid://fqbu17tv1x8j"]
+
+[ext_resource type="Script" uid="uid://bedh82urg6gg1" path="res://Unbox/Core/Blocks/BlockResource.cs" id="1_7arwf"]
+
+[resource]
+script = ExtResource("1_7arwf")
+BlockId = "dirt"
+DisplayName = "Dirt"
+metadata/_custom_type_script = "uid://bedh82urg6gg1"

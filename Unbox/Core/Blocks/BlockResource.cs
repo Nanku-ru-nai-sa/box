@@ -20,6 +20,9 @@ public partial class BlockResource : Resource
     [Export] public bool IsTransparent { get; set; } = false;
     [Export] public bool CanRotate { get; set; } = false;
 
+    [Export] public bool CanHaveFeatures { get; set; } = true;
+    [Export] public bool GrassCanGrow { get; set; } = true;
+
     // Sound IDs (strings that reference AudioRegistry)
     [Export] public string SoundBreak { get; set; } = "";
     [Export] public string SoundPlace { get; set; } = "";

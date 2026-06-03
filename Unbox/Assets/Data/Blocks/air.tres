@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BlockResource" format=3 uid="uid://b27gjuxuhk5si"]
+
+[ext_resource type="Script" uid="uid://bedh82urg6gg1" path="res://Unbox/Core/Blocks/BlockResource.cs" id="1_7or0q"]
+
+[resource]
+script = ExtResource("1_7or0q")
+BlockId = "air"
+DisplayName = "Air"
+CanChisel = false
+IsSolid = false
+CanHaveFeatures = false
+GrassCanGrow = false
+metadata/_custom_type_script = "uid://bedh82urg6gg1"
