@@ -145,48 +145,19 @@ public partial class Chunk : Node3D
 
         if (arrayMesh.GetSurfaceCount() > 0)
         {
-            _meshInstance.Mesh = arrayMesh;
-        }
+            // Clear old shapes
+            foreach (Node child in _collisionBody.GetChildren())
+                child.QueueFree();
 
-        // Build box collision per block
-        BuildBoxCollision();
+            var collisionShape = new CollisionShape3D();
+            collisionShape.Shape = arrayMesh.CreateTrimeshShape();
+            _collisionBody.AddChild(collisionShape);
+            _collisionBody.Position = Vector3.Zero;
+        }
 
         IsGenerated = true;
     }
 
-    private void BuildBoxCollision()
-    {
-        // Clear old collision shapes
-        foreach (Node child in _collisionBody.GetChildren())
-            child.QueueFree();
-
-        for (int x = 0; x < SIZE; x++)
-        {
-            for (int y = 0; y < HEIGHT; y++)
-            {
-                for (int z = 0; z < SIZE; z++)
-                {
-                    BlockState block = _blocks[x, y, z];
-                    if (block.IsAir()) continue;
-
-                    BlockResource resource =
-                        BlockRegistry.Instance.GetBlock(block.BlockId);
-                    if (resource == null || !resource.IsSolid) continue;
-
-                    var shape = new CollisionShape3D();
-                    var box = new BoxShape3D();
-                    box.Size = new Vector3(1f, 1f, 1f);
-                    shape.Shape = box;
-                    shape.Position = new Vector3(
-                        x + 0.5f,
-                        y + 0.5f,
-                        z + 0.5f
-                    );
-                    _collisionBody.AddChild(shape);
-                }
-            }
-        }
-    }
 
     private SurfaceTool GetOrCreateSurface(
         Dictionary<Texture2D, SurfaceTool> surfaces,
