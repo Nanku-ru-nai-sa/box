@@ -1,10 +1,6 @@
 using Godot;
 using System.Collections.Generic;
 
-/// <summary>
-/// A 16x16x16 chunk of blocks.
-/// Handles block storage and mesh generation.
-/// </summary>
 public partial class Chunk : Node3D
 {
     public const int SIZE = 16;
@@ -15,7 +11,6 @@ public partial class Chunk : Node3D
     private MeshInstance3D _meshInstance;
     private MeshInstance3D _transparentMeshInstance;
     private StaticBody3D _collisionBody;
-    private CollisionShape3D _collisionShape;
 
     public Vector3I ChunkPosition { get; private set; }
     public bool IsGenerated { get; private set; } = false;
@@ -35,10 +30,9 @@ public partial class Chunk : Node3D
         AddChild(_transparentMeshInstance);
 
         _collisionBody = new StaticBody3D();
+        _collisionBody.CollisionLayer = 1;
+        _collisionBody.CollisionMask = 1;
         AddChild(_collisionBody);
-
-        _collisionShape = new CollisionShape3D();
-        _collisionBody.AddChild(_collisionShape);
     }
 
     public void Initialize(Vector3I chunkPosition)
@@ -122,7 +116,6 @@ public partial class Chunk : Node3D
         {
             kvp.Value.GenerateNormals();
             kvp.Value.Commit(arrayMesh);
-
             int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
             {
@@ -138,7 +131,6 @@ public partial class Chunk : Node3D
         {
             kvp.Value.GenerateNormals();
             kvp.Value.Commit(arrayMesh);
-
             int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
             {
@@ -154,10 +146,46 @@ public partial class Chunk : Node3D
         if (arrayMesh.GetSurfaceCount() > 0)
         {
             _meshInstance.Mesh = arrayMesh;
-            _collisionShape.Shape = arrayMesh.CreateTrimeshShape();
         }
 
+        // Build box collision per block
+        BuildBoxCollision();
+
         IsGenerated = true;
+    }
+
+    private void BuildBoxCollision()
+    {
+        // Clear old collision shapes
+        foreach (Node child in _collisionBody.GetChildren())
+            child.QueueFree();
+
+        for (int x = 0; x < SIZE; x++)
+        {
+            for (int y = 0; y < HEIGHT; y++)
+            {
+                for (int z = 0; z < SIZE; z++)
+                {
+                    BlockState block = _blocks[x, y, z];
+                    if (block.IsAir()) continue;
+
+                    BlockResource resource =
+                        BlockRegistry.Instance.GetBlock(block.BlockId);
+                    if (resource == null || !resource.IsSolid) continue;
+
+                    var shape = new CollisionShape3D();
+                    var box = new BoxShape3D();
+                    box.Size = new Vector3(1f, 1f, 1f);
+                    shape.Shape = box;
+                    shape.Position = new Vector3(
+                        x + 0.5f,
+                        y + 0.5f,
+                        z + 0.5f
+                    );
+                    _collisionBody.AddChild(shape);
+                }
+            }
+        }
     }
 
     private SurfaceTool GetOrCreateSurface(
@@ -228,7 +256,6 @@ public partial class Chunk : Node3D
             float bx = x + offset.X * 0.5f;
             float by = y + offset.Y * 0.5f;
             float bz = z + offset.Z * 0.5f;
-
             float s = 0.5f;
 
             int topBit = bit + 4;

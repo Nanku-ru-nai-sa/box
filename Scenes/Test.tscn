@@ -1,14 +1,28 @@
 [gd_scene format=3 uid="uid://dutb4nvr876nw"]
 
-[ext_resource type="Script" uid="uid://cl1261uxe0ccn" path="res://Unbox/Core/World/ChunkManager.cs" id="1_ko2s7"]
+[ext_resource type="Script" uid="uid://cl1261uxe0ccn" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
+[ext_resource type="Script" uid="uid://bj78p0dqf6imn" path="res://Player/Player.cs" id="2_gxb1y"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_ko2s7"]
+radius = 0.4
+height = 1.8
 
 [node name="TestWorld" type="Node3D" unique_id=1392221281]
-
-[node name="Camera3D" type="Camera3D" parent="." unique_id=1854609826]
-transform = Transform3D(1, 0, 0, 0, 0.81915206, 0.57357645, 0, -0.57357645, 0.81915206, 32, 60, 60)
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=156471249]
 transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 0, 0)
 
 [node name="ChunkManager" type="Node3D" parent="." unique_id=1617427409]
 script = ExtResource("1_ko2s7")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=1638944358]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 80, 0)
+script = ExtResource("2_gxb1y")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=950644921]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, -50, -8)
+shape = SubResource("CapsuleShape3D_ko2s7")
+
+[node name="PlayerCamera" type="Node3D" parent="Player" unique_id=1413732969]
+
+[node name="Camera3D" type="Camera3D" parent="Player/PlayerCamera" unique_id=1240226194]
