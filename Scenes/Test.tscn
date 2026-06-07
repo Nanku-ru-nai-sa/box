@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cl1261uxe0ccn" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
 [ext_resource type="Script" uid="uid://bj78p0dqf6imn" path="res://Player/Player.cs" id="2_gxb1y"]
+[ext_resource type="Script" uid="uid://c4ersv2a4gm7d" path="res://Player/PlayerCamera.cs" id="3_0dy5s"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_ko2s7"]
 radius = 0.4
@@ -16,7 +17,7 @@ transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70
 script = ExtResource("1_ko2s7")
 
 [node name="Player" type="CharacterBody3D" parent="." unique_id=1638944358]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 80, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 50, 8)
 script = ExtResource("2_gxb1y")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=950644921]
@@ -24,5 +25,11 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, -50, -8)
 shape = SubResource("CapsuleShape3D_ko2s7")
 
 [node name="PlayerCamera" type="Node3D" parent="Player" unique_id=1413732969]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
+script = ExtResource("3_0dy5s")
 
 [node name="Camera3D" type="Camera3D" parent="Player/PlayerCamera" unique_id=1240226194]
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=915298380]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 50, 8)
+current = true

@@ -45,7 +45,7 @@ public partial class Player : CharacterBody3D
     }
 
     public override void _PhysicsProcess(double delta)
-{
+    {
         if (_stats == null || _stats.IsDead) return;
 
         float dt = (float)delta;

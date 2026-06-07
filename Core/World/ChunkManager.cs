@@ -1,52 +1,44 @@
 using Godot;
 using System.Collections.Generic;
 
-/// <summary>
-/// Manages chunk loading and unloading around the player.
-/// </summary>
 public partial class ChunkManager : Node3D
 {
-    // How many chunks to load in each direction from player
     [Export] public int RenderDistance { get; set; } = 4;
-
-    // Reference to player node
-    [Export] public NodePath PlayerPath { get; set; }
-    private Node3D _player;
-
-    // All currently loaded chunks
-    private Dictionary<Vector3I, Chunk> _chunks = new();
-
-    // Chunk scene to instance
-    private PackedScene _chunkScene;
-
-    // Player's last known chunk position
-    private Vector3I _lastPlayerChunk = Vector3I.Zero;
-
-    // World generation seed
     [Export] public int Seed { get; set; } = 12345;
 
+    private Dictionary<Vector3I, Chunk> _chunks = new();
+    private Vector3I _lastPlayerChunk = new Vector3I(999, 999, 999);
+    private Node3D _player;
+
     public override void _Ready()
+{
+    GD.Print("ChunkManager _Ready called");
+    
+    _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
+    
+    if (_player == null)
+        GD.Print("ChunkManager: No player found");
+    else
+        GD.Print("ChunkManager: Player found");
+
+    // Generate chunks at origin first
+    UpdateChunks();
+
+    // Move player to terrain surface
+    if (_player != null)
     {
-        // Create chunk scene dynamically
-        _chunkScene = null;
-
-        // Get player reference
-        if (PlayerPath != null)
-            _player = GetNode<Node3D>(PlayerPath);
-
-        // Initial chunk load
-        UpdateChunks();
-
-        GD.Print("ChunkManager ready.");
+        // Terrain generates between Y16 and Y48
+        // Place player at Y50 to land on surface
+        _player.GlobalPosition = new Vector3(8, 50, 8);
+        GD.Print("Player moved to spawn position");
     }
+}
 
     public override void _Process(double delta)
     {
         if (_player == null) return;
 
-        // Check if player moved to a new chunk
         Vector3I currentChunk = WorldToChunk(_player.GlobalPosition);
-
         if (currentChunk != _lastPlayerChunk)
         {
             _lastPlayerChunk = currentChunk;
@@ -54,8 +46,7 @@ public partial class ChunkManager : Node3D
         }
     }
 
-    // Convert world position to chunk coordinates
-    public Vector3I WorldToChunk(Vector3 worldPos)
+    private Vector3I WorldToChunk(Vector3 worldPos)
     {
         return new Vector3I(
             Mathf.FloorToInt(worldPos.X / Chunk.SIZE),
@@ -64,8 +55,7 @@ public partial class ChunkManager : Node3D
         );
     }
 
-    // Convert chunk coordinates to world position
-    public Vector3 ChunkToWorld(Vector3I chunkPos)
+    private Vector3 ChunkToWorld(Vector3I chunkPos)
     {
         return new Vector3(
             chunkPos.X * Chunk.SIZE,
@@ -74,23 +64,22 @@ public partial class ChunkManager : Node3D
         );
     }
 
-    // Load chunks around player, unload far chunks
     private void UpdateChunks()
     {
+        GD.Print("UpdateChunks called");
+
         Vector3I playerChunk = _player != null
             ? WorldToChunk(_player.GlobalPosition)
             : Vector3I.Zero;
 
-        // Find chunks to load
-        List<Vector3I> chunksToLoad = new();
+        GD.Print($"Player chunk: {playerChunk}");
 
+        // Load chunks around player
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
             for (int z = -RenderDistance; z <= RenderDistance; z++)
             {
-                // For now just one layer of chunks vertically
-                // We'll expand this when we add proper world height
-                for (int y = 0; y < 4; y++)
+                for (int y = 0; y < 6; y++)
                 {
                     Vector3I chunkPos = new Vector3I(
                         playerChunk.X + x,
@@ -99,32 +88,27 @@ public partial class ChunkManager : Node3D
                     );
 
                     if (!_chunks.ContainsKey(chunkPos))
-                        chunksToLoad.Add(chunkPos);
+                        LoadChunk(chunkPos);
                 }
             }
         }
 
-        // Load new chunks
-        foreach (var pos in chunksToLoad)
-            LoadChunk(pos);
-
         // Unload distant chunks
-        List<Vector3I> chunksToUnload = new();
-
+        var toUnload = new List<Vector3I>();
         foreach (var pos in _chunks.Keys)
         {
             int dx = Mathf.Abs(pos.X - playerChunk.X);
             int dz = Mathf.Abs(pos.Z - playerChunk.Z);
-
             if (dx > RenderDistance + 1 || dz > RenderDistance + 1)
-                chunksToUnload.Add(pos);
+                toUnload.Add(pos);
         }
 
-        foreach (var pos in chunksToUnload)
+        foreach (var pos in toUnload)
             UnloadChunk(pos);
+
+        GD.Print($"Total chunks loaded: {_chunks.Count}");
     }
 
-    // Load and generate a single chunk
     private void LoadChunk(Vector3I chunkPos)
     {
         if (_chunks.ContainsKey(chunkPos)) return;
@@ -132,29 +116,22 @@ public partial class ChunkManager : Node3D
         var chunk = new Chunk();
         AddChild(chunk);
         chunk.Initialize(chunkPos);
-
-        // Generate terrain for this chunk
         GenerateChunk(chunk, chunkPos);
-
-        // Build the visual mesh
         chunk.BuildMesh();
-
         _chunks[chunkPos] = chunk;
+
+        GD.Print($"Loaded chunk {chunkPos}");
     }
 
-    // Unload a chunk and free its memory
     private void UnloadChunk(Vector3I chunkPos)
     {
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk)) return;
-
         chunk.QueueFree();
         _chunks.Remove(chunkPos);
     }
 
-    // Generate terrain for a chunk using noise
     private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
     {
-        // Setup noise for terrain generation
         var noise = new FastNoiseLite();
         noise.Seed = Seed;
         noise.Frequency = 0.02f;
@@ -168,56 +145,36 @@ public partial class ChunkManager : Node3D
         {
             for (int z = 0; z < Chunk.SIZE; z++)
             {
-                // Get terrain height at this x,z position
                 float noiseVal = noise.GetNoise2D(
-                    worldX + x,
-                    worldZ + z
-                );
+                    worldX + x, worldZ + z);
 
-                // Convert noise (-1 to 1) to terrain height
                 int terrainHeight = Mathf.RoundToInt(
-                    (noiseVal + 1f) * 0.5f * 32f + 16f
-                );
-                // Range: 16 to 48 blocks high
+                    (noiseVal + 1f) * 0.5f * 32f + 16f);
 
                 for (int y = 0; y < Chunk.HEIGHT; y++)
                 {
                     int globalY = worldY + y;
 
                     if (globalY < terrainHeight - 4)
-                    {
-                        // Deep underground - stone
                         chunk.SetBlock(x, y, z,
                             new BlockState("stone"));
-                    }
                     else if (globalY < terrainHeight - 1)
-                    {
-                        // Near surface - dirt
                         chunk.SetBlock(x, y, z,
                             new BlockState("dirt"));
-                    }
                     else if (globalY == terrainHeight - 1)
-                    {
-                        // Surface - dirt with grass feature
                         chunk.SetBlock(x, y, z,
                             new BlockState("dirt",
                                 new string[] { "grass" }));
-                    }
                     else
-                    {
-                        // Above terrain - air
                         chunk.SetBlock(x, y, z, BlockState.Air);
-                    }
                 }
             }
         }
     }
 
-    // Get a block at world coordinates
     public BlockState GetBlockAtWorld(Vector3I worldPos)
     {
         Vector3I chunkPos = WorldToChunk(worldPos);
-
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk))
             return BlockState.Air;
 
@@ -228,11 +185,9 @@ public partial class ChunkManager : Node3D
         return chunk.GetBlock(localX, localY, localZ);
     }
 
-    // Set a block at world coordinates
     public void SetBlockAtWorld(Vector3I worldPos, BlockState state)
     {
         Vector3I chunkPos = WorldToChunk(worldPos);
-
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk))
             return;
 
