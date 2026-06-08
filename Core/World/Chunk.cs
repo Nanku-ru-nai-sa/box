@@ -21,29 +21,24 @@ public partial class Chunk : Node3D
         Top, Bottom, North, South, East, West
     }
 
-    public override void _Ready()
-    {
-        _meshInstance = new MeshInstance3D();
-        AddChild(_meshInstance);
+public override void _Ready()
+{
+    _meshInstance = new MeshInstance3D();
+    AddChild(_meshInstance);
 
-        _transparentMeshInstance = new MeshInstance3D();
-        AddChild(_transparentMeshInstance);
+    _transparentMeshInstance = new MeshInstance3D();
+    AddChild(_transparentMeshInstance);
+}
 
-        _collisionBody = new StaticBody3D();
-        _collisionBody.CollisionLayer = 1;
-        _collisionBody.CollisionMask = 1;
-        AddChild(_collisionBody);
-    }
-
-    public void Initialize(Vector3I chunkPosition)
-    {
-        ChunkPosition = chunkPosition;
-        GlobalPosition = new Vector3(
-            chunkPosition.X * SIZE,
-            chunkPosition.Y * HEIGHT,
-            chunkPosition.Z * SIZE
-        );
-    }
+public void Initialize(Vector3I chunkPosition)
+{
+    ChunkPosition = chunkPosition;
+    GlobalPosition = new Vector3(
+        chunkPosition.X * SIZE,
+        chunkPosition.Y * HEIGHT,
+        chunkPosition.Z * SIZE
+    );
+}
 
     public BlockState GetBlock(int x, int y, int z)
     {
@@ -73,15 +68,17 @@ public partial class Chunk : Node3D
 
     public override void _Process(double delta)
     {
-        if (_isDirty)
+        if (_isDirty && IsGenerated)
         {
             BuildMesh();
             _isDirty = false;
         }
     }
 
-    public void BuildMesh()
-    {
+ public void BuildMesh()
+{
+    GD.Print($"BuildMesh called for chunk {ChunkPosition}");
+
         var solidSurfaces = new Dictionary<Texture2D, SurfaceTool>();
         var transparentSurfaces = new Dictionary<Texture2D, SurfaceTool>();
 
@@ -145,19 +142,64 @@ public partial class Chunk : Node3D
 
         if (arrayMesh.GetSurfaceCount() > 0)
         {
-            // Clear old shapes
-            foreach (Node child in _collisionBody.GetChildren())
-                child.QueueFree();
+            _meshInstance.Mesh = arrayMesh;
 
-            var collisionShape = new CollisionShape3D();
-            collisionShape.Shape = arrayMesh.CreateTrimeshShape();
-            _collisionBody.AddChild(collisionShape);
-            _collisionBody.Position = Vector3.Zero;
+            // Defer collision building to next frame
+            // so physics engine registers it properly
+            CallDeferred("BuildCollision", arrayMesh);
         }
 
         IsGenerated = true;
     }
+private void BuildCollision(ArrayMesh mesh)
+{
+    if (_collisionBody != null && IsInstanceValid(_collisionBody))
+        _collisionBody.QueueFree();
 
+    _collisionBody = new StaticBody3D();
+    _collisionBody.CollisionLayer = 1;
+    _collisionBody.CollisionMask = 1;
+    
+    // Add to parent first so it's in the scene tree
+    GetParent().AddChild(_collisionBody);
+    
+    // Set world position AFTER adding to tree
+    _collisionBody.GlobalPosition = GlobalPosition;
+
+    for (int x = 0; x < SIZE; x++)
+    {
+        for (int z = 0; z < SIZE; z++)
+        {
+            int topY = -1;
+            for (int y = HEIGHT - 1; y >= 0; y--)
+            {
+                if (!_blocks[x, y, z].IsAir())
+                {
+                    topY = y;
+                    break;
+                }
+            }
+
+            if (topY < 0) continue;
+
+            var shape = new CollisionShape3D();
+            var box = new BoxShape3D();
+            box.Size = new Vector3(1f, 0.2f, 1f);
+            shape.Shape = box;
+            
+            // Use LOCAL position relative to collision body
+            shape.Position = new Vector3(
+                x + 0.5f,
+                topY + 1.0f,
+                z + 0.5f
+            );
+            
+            _collisionBody.AddChild(shape);
+        }
+    }
+
+    GD.Print($"Collision built for chunk {ChunkPosition}");
+}
 
     private SurfaceTool GetOrCreateSurface(
         Dictionary<Texture2D, SurfaceTool> surfaces,

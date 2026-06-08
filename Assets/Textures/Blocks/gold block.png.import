@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://canxaw6ncga8k"
-path="res://.godot/imported/stone.png-415ff897c27dbdc69da9c3147aa94380.ctex"
+uid="uid://brof6jcxqlx7n"
+path="res://.godot/imported/gold block.png-3fca532e58d2c76415675d3c4fad3714.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/stone.png"
-dest_files=["res://.godot/imported/stone.png-415ff897c27dbdc69da9c3147aa94380.ctex"]
+source_file="res://Assets/Textures/Blocks/gold block.png"
+dest_files=["res://.godot/imported/gold block.png-3fca532e58d2c76415675d3c4fad3714.ctex"]
 
 [params]
 

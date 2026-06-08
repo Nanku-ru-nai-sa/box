@@ -1,7 +1,6 @@
 using Godot;
 using System.Collections.Generic;
 
-[GlobalClass]
 public partial class BlockRegistry : Node
 {
     public static BlockRegistry Instance { get; private set; }
@@ -14,51 +13,47 @@ public partial class BlockRegistry : Node
         GD.Print($"BlockRegistry loaded {_blocks.Count} blocks.");
     }
 
-   private void RegisterBlocks()
-{
-    // Load textures
-    var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
-    var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
-    var grassTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
-    var grassSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
+    private void RegisterBlocks()
+    {
+        var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
+        var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
+        var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
+        var grassSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
 
-    // AIR
-    var air = new BlockResource();
-    air.BlockId = "air";
-    air.DisplayName = "Air";
-    air.IsSolid = false;
-    air.CanChisel = false;
-    air.IsTransparent = true;
-    Register(air);
+        var air = new BlockResource();
+        air.BlockId = "air";
+        air.DisplayName = "Air";
+        air.IsSolid = false;
+        air.CanChisel = false;
+        air.IsTransparent = true;
+        Register(air);
 
-    // DIRT
-    var dirt = new BlockResource();
-    dirt.BlockId = "dirt";
-    dirt.DisplayName = "Dirt";
-    dirt.IsSolid = true;
-    dirt.CanChisel = true;
-    dirt.GrassCanGrow = true;
-    dirt.Hardness = 0.5f;
-    dirt.TextureTop = dirtTex;
-    dirt.TextureSide = dirtTex;
-    dirt.TextureBottom = dirtTex;
-    Register(dirt);
+        var dirt = new BlockResource();
+        dirt.BlockId = "dirt";
+        dirt.DisplayName = "Dirt";
+        dirt.IsSolid = true;
+        dirt.CanChisel = true;
+        dirt.GrassCanGrow = true;
+        dirt.Hardness = 0.5f;
+        dirt.TextureTop = dirtTex;
+        dirt.TextureSide = dirtTex;
+        dirt.TextureBottom = dirtTex;
+        Register(dirt);
 
-    // STONE
-    var stone = new BlockResource();
-    stone.BlockId = "stone";
-    stone.DisplayName = "Stone";
-    stone.IsSolid = true;
-    stone.CanChisel = true;
-    stone.GrassCanGrow = false;
-    stone.Hardness = 1.5f;
-    stone.TextureTop = stoneTex;
-    stone.TextureSide = stoneTex;
-    stone.TextureBottom = stoneTex;
-    Register(stone);
+        var stone = new BlockResource();
+        stone.BlockId = "stone";
+        stone.DisplayName = "Stone";
+        stone.IsSolid = true;
+        stone.CanChisel = true;
+        stone.GrassCanGrow = false;
+        stone.Hardness = 1.5f;
+        stone.TextureTop = stoneTex;
+        stone.TextureSide = stoneTex;
+        stone.TextureBottom = stoneTex;
+        Register(stone);
 
-    GD.Print("Blocks registered.");
-}
+        GD.Print("Blocks registered.");
+    }
 
     private void Register(BlockResource block)
     {

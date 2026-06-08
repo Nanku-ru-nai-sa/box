@@ -11,28 +11,21 @@ public partial class ChunkManager : Node3D
     private Node3D _player;
 
     public override void _Ready()
-{
-    GD.Print("ChunkManager _Ready called");
-    
-    _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
-    
-    if (_player == null)
-        GD.Print("ChunkManager: No player found");
-    else
-        GD.Print("ChunkManager: Player found");
-
-    // Generate chunks at origin first
-    UpdateChunks();
-
-    // Move player to terrain surface
-    if (_player != null)
     {
-        // Terrain generates between Y16 and Y48
-        // Place player at Y50 to land on surface
-        _player.GlobalPosition = new Vector3(8, 50, 8);
-        GD.Print("Player moved to spawn position");
+        GD.Print("ChunkManager ready.");
+        _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
+
+        if (_player == null)
+            GD.Print("ChunkManager: No player found");
+        else
+            GD.Print("ChunkManager: Player found");
+
+        GD.Print("Calling UpdateChunks...");
+        UpdateChunks();
+
+        if (_player != null)
+    _player.GlobalPosition = new Vector3(8, 55, 8);
     }
-}
 
     public override void _Process(double delta)
     {
@@ -55,26 +48,14 @@ public partial class ChunkManager : Node3D
         );
     }
 
-    private Vector3 ChunkToWorld(Vector3I chunkPos)
-    {
-        return new Vector3(
-            chunkPos.X * Chunk.SIZE,
-            chunkPos.Y * Chunk.HEIGHT,
-            chunkPos.Z * Chunk.SIZE
-        );
-    }
-
     private void UpdateChunks()
     {
-        GD.Print("UpdateChunks called");
-
         Vector3I playerChunk = _player != null
             ? WorldToChunk(_player.GlobalPosition)
             : Vector3I.Zero;
 
-        GD.Print($"Player chunk: {playerChunk}");
+        GD.Print($"UpdateChunks - player chunk: {playerChunk}");
 
-        // Load chunks around player
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
             for (int z = -RenderDistance; z <= RenderDistance; z++)
@@ -93,7 +74,6 @@ public partial class ChunkManager : Node3D
             }
         }
 
-        // Unload distant chunks
         var toUnload = new List<Vector3I>();
         foreach (var pos in _chunks.Keys)
         {
@@ -106,22 +86,20 @@ public partial class ChunkManager : Node3D
         foreach (var pos in toUnload)
             UnloadChunk(pos);
 
-        GD.Print($"Total chunks loaded: {_chunks.Count}");
+        GD.Print($"Total chunks: {_chunks.Count}");
     }
 
     private void LoadChunk(Vector3I chunkPos)
-    {
-        if (_chunks.ContainsKey(chunkPos)) return;
+{
+    if (_chunks.ContainsKey(chunkPos)) return;
 
-        var chunk = new Chunk();
-        AddChild(chunk);
-        chunk.Initialize(chunkPos);
-        GenerateChunk(chunk, chunkPos);
-        chunk.BuildMesh();
-        _chunks[chunkPos] = chunk;
-
-        GD.Print($"Loaded chunk {chunkPos}");
-    }
+    var chunk = new Chunk();
+    AddChild(chunk);
+    chunk.Initialize(chunkPos);
+    GenerateChunk(chunk, chunkPos);
+    chunk.BuildMesh();
+    _chunks[chunkPos] = chunk;
+}
 
     private void UnloadChunk(Vector3I chunkPos)
     {

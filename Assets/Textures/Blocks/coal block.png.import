@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cpfpen74h0xcb"
-path="res://.godot/imported/clay.png-222311b70a6a4d2fd87ca4c356f04731.ctex"
+uid="uid://dnxln503q8t6e"
+path="res://.godot/imported/coal block.png-8d4ed24a7ca3e79413a8255f025d1a3a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/clay.png"
-dest_files=["res://.godot/imported/clay.png-222311b70a6a4d2fd87ca4c356f04731.ctex"]
+source_file="res://Assets/Textures/Blocks/coal block.png"
+dest_files=["res://.godot/imported/coal block.png-8d4ed24a7ca3e79413a8255f025d1a3a.ctex"]
 
 [params]
 

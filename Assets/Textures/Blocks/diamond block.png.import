@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://enf47pjenjkt"
-path="res://.godot/imported/soil.png-e3cea15c2194a6369a858f920f34a60b.ctex"
+uid="uid://haag104fi7d5"
+path="res://.godot/imported/diamond block.png-557313e9bd7bcb4f7ff6bb24d2ac6e1f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/soil.png"
-dest_files=["res://.godot/imported/soil.png-e3cea15c2194a6369a858f920f34a60b.ctex"]
+source_file="res://Assets/Textures/Blocks/diamond block.png"
+dest_files=["res://.godot/imported/diamond block.png-557313e9bd7bcb4f7ff6bb24d2ac6e1f.ctex"]
 
 [params]
 

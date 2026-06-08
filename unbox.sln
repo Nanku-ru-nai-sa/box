@@ -1,6 +1,6 @@
 ﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "unbox", "unbox.csproj", "{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "unbox", "unbox.csproj", "{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -9,11 +9,11 @@ Global
 	ExportRelease|Any CPU = ExportRelease|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
-		{8615BCEA-29B8-4EF4-91EB-B7D4308AB381}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.ExportDebug|Any CPU.ActiveCfg = ExportDebug|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.ExportDebug|Any CPU.Build.0 = ExportDebug|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.ExportRelease|Any CPU.ActiveCfg = ExportRelease|Any CPU
+		{E1FBDE12-A165-4EC3-B217-B1B0809EE3FB}.ExportRelease|Any CPU.Build.0 = ExportRelease|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -16,9 +16,9 @@ config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
 [autoload]
 
-BlockRegistry="*uid://bq87pxxs8plky"
-ItemRegistry="*uid://beu6skyqc1ji7"
-AudioManager="*uid://dhl121uir0mqw"
+ItemRegistry="*uid://bydal6mir581d"
+AudioManager="*uid://bmys8t32u05v1"
+BlockRegistry="*uid://hxvef2suqv2e"
 
 [dotnet]
 

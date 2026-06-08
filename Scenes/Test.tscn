@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://dutb4nvr876nw"]
 
-[ext_resource type="Script" uid="uid://cl1261uxe0ccn" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
+[ext_resource type="Script" uid="uid://dhfrwx04yvws0" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
 [ext_resource type="Script" uid="uid://bj78p0dqf6imn" path="res://Player/Player.cs" id="2_gxb1y"]
 [ext_resource type="Script" uid="uid://c4ersv2a4gm7d" path="res://Player/PlayerCamera.cs" id="3_0dy5s"]
 
@@ -29,6 +29,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 script = ExtResource("3_0dy5s")
 
 [node name="Camera3D" type="Camera3D" parent="Player/PlayerCamera" unique_id=1240226194]
+current = true
 
 [node name="Camera3D" type="Camera3D" parent="." unique_id=915298380]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 50, 8)
