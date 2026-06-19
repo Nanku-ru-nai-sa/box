@@ -47,12 +47,11 @@ public void Initialize(Vector3I chunkPosition)
         return _blocks[x, y, z];
     }
 
-    public void SetBlock(int x, int y, int z, BlockState state)
-    {
-        if (!IsInBounds(x, y, z)) return;
-        _blocks[x, y, z] = state;
-        _isDirty = true;
-    }
+    public void SetBlock(int x, int y, int z, BlockState block)
+{
+    _blocks[x, y, z] = block;
+    _isDirty = true;
+}
 
     private bool IsInBounds(int x, int y, int z)
     {
@@ -66,9 +65,13 @@ public void Initialize(Vector3I chunkPosition)
         _isDirty = true;
     }
 
-    public override void _Process(double delta)
+ public override void _Process(double delta)
 {
-    // Disabled during collision debugging
+    if (_isDirty && IsGenerated)
+    {
+        BuildMesh();
+        _isDirty = false;
+    }
 }
 
  public void BuildMesh()
@@ -152,41 +155,45 @@ private void BuildCollision(ArrayMesh mesh)
     if (_collisionBody != null && IsInstanceValid(_collisionBody))
         _collisionBody.QueueFree();
 
-    // Create FIRST, then add to tree
     _collisionBody = new StaticBody3D();
     _collisionBody.CollisionLayer = 1;
     _collisionBody.CollisionMask = 1;
     GetParent().AddChild(_collisionBody);
     _collisionBody.GlobalPosition = GlobalPosition;
+    _collisionBody.SetMeta("chunk", this);
 
-    for (int x = 0; x < SIZE; x++)
-    {
-        for (int z = 0; z < SIZE; z++)
-        {
-            int topY = -1;
-            for (int y = HEIGHT - 1; y >= 0; y--)
-            {
-                if (!_blocks[x, y, z].IsAir())
-                {
-                    topY = y;
-                    break;
-                }
-            }
+    var faces = mesh.GetFaces();
+    if (faces.Length < 3) return;
 
-            if (topY < 0) continue;
+    var concave = new ConcavePolygonShape3D();
+    concave.BackfaceCollision = true;
+    concave.SetFaces(faces);
 
-            var box = new BoxShape3D();
-            box.Size = new Vector3(1f, 0.2f, 1f);
+    var shape = new CollisionShape3D();
+    shape.Shape = concave;
+    _collisionBody.AddChild(shape);
 
-            var shape = new CollisionShape3D();
-            shape.Shape = box;
-            shape.Position = new Vector3(x + 0.5f, topY + 0.5f, z + 0.5f);
+    GD.Print($"Mesh collision built for chunk {ChunkPosition} - {faces.Length} face vertices");
+}
 
-            _collisionBody.AddChild(shape);
-        }
-    }
+private bool HasExposedFace(int x, int y, int z)
+{
+    return IsAirAt(x + 1, y, z) || IsAirAt(x - 1, y, z) ||
+           IsAirAt(x, y + 1, z) || IsAirAt(x, y - 1, z) ||
+           IsAirAt(x, y, z + 1) || IsAirAt(x, y, z - 1);
+}
 
-    GD.Print($"Collision built for chunk {ChunkPosition} at world Y:{GlobalPosition.Y}, topY sample:{( _blocks[8,5,8].IsAir() ? -1 : 5)}");
+private bool IsAirAt(int x, int y, int z)
+{
+    // Y out of bounds = treat as air (so top/bottom surfaces still get collision)
+    if (y < 0 || y >= HEIGHT)
+        return true;
+
+    // X/Z out of bounds = treat as solid (neighboring chunk likely fills it)
+    if (x < 0 || x >= SIZE || z < 0 || z >= SIZE)
+        return false;
+
+    return _blocks[x, y, z].IsAir();
 }
     private SurfaceTool GetOrCreateSurface(
         Dictionary<Texture2D, SurfaceTool> surfaces,

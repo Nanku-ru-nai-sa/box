@@ -12,6 +12,7 @@ public partial class Player : CharacterBody3D
     private float _gravity = 20f;
     private PlayerStats _stats;
     private PlayerCamera _playerCamera;
+    private RayCast3D _rayCast;
     private bool _isSprinting = false;
     private bool _isCrouching = false;
     private bool _hasDoubleJumped = false;
@@ -26,6 +27,7 @@ public partial class Player : CharacterBody3D
     {
         _stats = GetNodeOrNull<PlayerStats>("PlayerStats");
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
+        _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");_rayCast.AddException(this);
 
         if (_stats == null)
         {
@@ -106,8 +108,17 @@ public partial class Player : CharacterBody3D
     MoveAndSlide();
 }
 
-    public override void _Input(InputEvent @event)
+    public override void _UnhandledInput(InputEvent @event)
+{
+    if (@event is InputEventMouseButton mb && mb.Pressed)
     {
+        if (mb.ButtonIndex == MouseButton.Left)
+            TryBreakBlock();
+        else if (mb.ButtonIndex == MouseButton.Right)
+            TryPlaceBlock();
+    }
+
+        
         if (@event is InputEventKey key && key.Pressed
             && key.Keycode == Key.Escape)
         {
@@ -117,6 +128,35 @@ public partial class Player : CharacterBody3D
                 Input.MouseMode = Input.MouseModeEnum.Captured;
         }
     }
+    private void TryBreakBlock()
+{
+    if (!_rayCast.IsColliding()) return;
+
+    var collider = _rayCast.GetCollider() as Node;
+    if (collider == null || !collider.HasMeta("chunk")) return;
+
+    Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+    Vector3 hitPoint = _rayCast.GetCollisionPoint();
+    Vector3 hitNormal = _rayCast.GetCollisionNormal();
+
+    // Step slightly INTO the block we're looking at (not the surface)
+    Vector3 targetPos = hitPoint - hitNormal * 0.5f;
+
+    Vector3 localPos = targetPos - chunk.GlobalPosition;
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    GD.Print($"Breaking block at local ({bx},{by},{bz}) in chunk {chunk.ChunkPosition}");
+
+    chunk.SetBlock(bx, by, bz, BlockState.Air);
+}
+
+private void TryPlaceBlock()
+{
+    if (!_rayCast.IsColliding()) return;
+    GD.Print("Place block triggered");
+}
 
     public PlayerStats GetStats() => _stats;
     public PlayerCamera GetPlayerCamera() => _playerCamera;
