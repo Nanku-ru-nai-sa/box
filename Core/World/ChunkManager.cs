@@ -13,6 +13,10 @@ public partial class ChunkManager : Node3D
     public override void _Ready()
     {
         GD.Print("ChunkManager ready.");
+        _noise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _noise.Seed = 12345;
+        _noise.Frequency = 0.02f;
+
         _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
 
         if (_player == null)
@@ -24,7 +28,7 @@ public partial class ChunkManager : Node3D
         UpdateChunks();
 
         if (_player != null)
-    _player.GlobalPosition = new Vector3(8, 80, 8);
+    _player.GlobalPosition = new Vector3(8, 60, 8);
     }
 
    public override void _Process(double delta)
@@ -113,22 +117,30 @@ public partial class ChunkManager : Node3D
         _chunks.Remove(chunkPos);
     }
 
-    private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
+    private FastNoiseLite _noise = new FastNoiseLite();
+
+private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
 {
     for (int x = 0; x < Chunk.SIZE; x++)
     {
         for (int z = 0; z < Chunk.SIZE; z++)
         {
+            int worldX = chunkPos.X * Chunk.SIZE + x;
+            int worldZ = chunkPos.Z * Chunk.SIZE + z;
+
+            float noiseValue = _noise.GetNoise2D(worldX, worldZ);
+            int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
+
             for (int y = 0; y < Chunk.HEIGHT; y++)
             {
                 int worldY = chunkPos.Y * Chunk.HEIGHT + y;
 
                 BlockState block;
-                if (worldY == 5)
+                if (worldY == terrainHeight)
                 {
                     block = new BlockState { BlockId = "dirt", BitMask = 0xFF, Features = new[] { "grass" } };
                 }
-                else if (worldY < 5)
+                else if (worldY < terrainHeight)
                 {
                     block = new BlockState { BlockId = "stone", BitMask = 0xFF };
                 }
