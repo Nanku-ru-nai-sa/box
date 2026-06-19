@@ -47,8 +47,13 @@ public partial class ChunkManager : Node3D
         UpdateChunks();
     }
 }
+    public Chunk GetChunk(Vector3I chunkPos)
+{
+    _chunks.TryGetValue(chunkPos, out Chunk chunk);
+    return chunk;
+}
 
-    private Vector3I WorldToChunk(Vector3 worldPos)
+    public Vector3I WorldToChunk(Vector3 worldPos)
     {
         return new Vector3I(
             Mathf.FloorToInt(worldPos.X / Chunk.SIZE),

@@ -155,7 +155,33 @@ public partial class Player : CharacterBody3D
 private void TryPlaceBlock()
 {
     if (!_rayCast.IsColliding()) return;
-    GD.Print("Place block triggered");
+
+    var collider = _rayCast.GetCollider() as Node;
+    if (collider == null || !collider.HasMeta("chunk")) return;
+
+    Chunk hitChunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+    Vector3 hitPoint = _rayCast.GetCollisionPoint();
+    Vector3 hitNormal = _rayCast.GetCollisionNormal();
+
+    Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
+
+    // Ask ChunkManager which chunk actually owns this world position
+    var chunkManager = hitChunk.GetParent() as ChunkManager;
+    if (chunkManager == null) return;
+
+    Vector3I chunkPos = chunkManager.WorldToChunk(worldTargetPos);
+    Chunk targetChunk = chunkManager.GetChunk(chunkPos);
+    if (targetChunk == null) return;
+
+    Vector3 localPos = worldTargetPos - targetChunk.GlobalPosition;
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    GD.Print($"Placing block at local ({bx},{by},{bz}) in chunk {chunkPos}");
+
+    var newBlock = new BlockState { BlockId = "stone", BitMask = 0xFF };
+    targetChunk.SetBlock(bx, by, bz, newBlock);
 }
 
     public PlayerStats GetStats() => _stats;
