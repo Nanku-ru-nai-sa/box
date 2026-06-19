@@ -67,13 +67,9 @@ public void Initialize(Vector3I chunkPosition)
     }
 
     public override void _Process(double delta)
-    {
-        if (_isDirty && IsGenerated)
-        {
-            BuildMesh();
-            _isDirty = false;
-        }
-    }
+{
+    // Disabled during collision debugging
+}
 
  public void BuildMesh()
 {
@@ -156,14 +152,11 @@ private void BuildCollision(ArrayMesh mesh)
     if (_collisionBody != null && IsInstanceValid(_collisionBody))
         _collisionBody.QueueFree();
 
+    // Create FIRST, then add to tree
     _collisionBody = new StaticBody3D();
     _collisionBody.CollisionLayer = 1;
     _collisionBody.CollisionMask = 1;
-    
-    // Add to parent first so it's in the scene tree
     GetParent().AddChild(_collisionBody);
-    
-    // Set world position AFTER adding to tree
     _collisionBody.GlobalPosition = GlobalPosition;
 
     for (int x = 0; x < SIZE; x++)
@@ -182,25 +175,19 @@ private void BuildCollision(ArrayMesh mesh)
 
             if (topY < 0) continue;
 
-            var shape = new CollisionShape3D();
             var box = new BoxShape3D();
             box.Size = new Vector3(1f, 0.2f, 1f);
+
+            var shape = new CollisionShape3D();
             shape.Shape = box;
-            
-            // Use LOCAL position relative to collision body
-            shape.Position = new Vector3(
-                x + 0.5f,
-                topY + 1.0f,
-                z + 0.5f
-            );
-            
+            shape.Position = new Vector3(x + 0.5f, topY + 0.5f, z + 0.5f);
+
             _collisionBody.AddChild(shape);
         }
     }
 
-    GD.Print($"Collision built for chunk {ChunkPosition}");
+    GD.Print($"Collision built for chunk {ChunkPosition} at world Y:{GlobalPosition.Y}, topY sample:{( _blocks[8,5,8].IsAir() ? -1 : 5)}");
 }
-
     private SurfaceTool GetOrCreateSurface(
         Dictionary<Texture2D, SurfaceTool> surfaces,
         Texture2D texture)

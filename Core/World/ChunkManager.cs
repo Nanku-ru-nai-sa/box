@@ -24,20 +24,25 @@ public partial class ChunkManager : Node3D
         UpdateChunks();
 
         if (_player != null)
-    _player.GlobalPosition = new Vector3(8, 55, 8);
+    _player.GlobalPosition = new Vector3(8, 80, 8);
     }
 
-    public override void _Process(double delta)
+   public override void _Process(double delta)
+{
+    if (_player == null) return;
+
+    Vector3I currentChunk = WorldToChunk(_player.GlobalPosition);
+    
+    // Only trigger on X/Z change, ignore Y (player falling changes Y constantly)
+    Vector3I currentChunkXZ = new Vector3I(currentChunk.X, 0, currentChunk.Z);
+    Vector3I lastChunkXZ = new Vector3I(_lastPlayerChunk.X, 0, _lastPlayerChunk.Z);
+    
+    if (currentChunkXZ != lastChunkXZ)
     {
-        if (_player == null) return;
-
-        Vector3I currentChunk = WorldToChunk(_player.GlobalPosition);
-        if (currentChunk != _lastPlayerChunk)
-        {
-            _lastPlayerChunk = currentChunk;
-            UpdateChunks();
-        }
+        _lastPlayerChunk = currentChunk;
+        UpdateChunks();
     }
+}
 
     private Vector3I WorldToChunk(Vector3 worldPos)
     {
@@ -109,46 +114,34 @@ public partial class ChunkManager : Node3D
     }
 
     private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
+{
+    for (int x = 0; x < Chunk.SIZE; x++)
     {
-        var noise = new FastNoiseLite();
-        noise.Seed = Seed;
-        noise.Frequency = 0.02f;
-        noise.FractalOctaves = 4;
-
-        int worldX = chunkPos.X * Chunk.SIZE;
-        int worldY = chunkPos.Y * Chunk.HEIGHT;
-        int worldZ = chunkPos.Z * Chunk.SIZE;
-
-        for (int x = 0; x < Chunk.SIZE; x++)
+        for (int z = 0; z < Chunk.SIZE; z++)
         {
-            for (int z = 0; z < Chunk.SIZE; z++)
+            for (int y = 0; y < Chunk.HEIGHT; y++)
             {
-                float noiseVal = noise.GetNoise2D(
-                    worldX + x, worldZ + z);
+                int worldY = chunkPos.Y * Chunk.HEIGHT + y;
 
-                int terrainHeight = Mathf.RoundToInt(
-                    (noiseVal + 1f) * 0.5f * 32f + 16f);
-
-                for (int y = 0; y < Chunk.HEIGHT; y++)
+                BlockState block;
+                if (worldY == 5)
                 {
-                    int globalY = worldY + y;
-
-                    if (globalY < terrainHeight - 4)
-                        chunk.SetBlock(x, y, z,
-                            new BlockState("stone"));
-                    else if (globalY < terrainHeight - 1)
-                        chunk.SetBlock(x, y, z,
-                            new BlockState("dirt"));
-                    else if (globalY == terrainHeight - 1)
-                        chunk.SetBlock(x, y, z,
-                            new BlockState("dirt",
-                                new string[] { "grass" }));
-                    else
-                        chunk.SetBlock(x, y, z, BlockState.Air);
+                    block = new BlockState { BlockId = "dirt", BitMask = 0xFF, Features = new[] { "grass" } };
                 }
+                else if (worldY < 5)
+                {
+                    block = new BlockState { BlockId = "stone", BitMask = 0xFF };
+                }
+                else
+                {
+                    block = BlockState.Air;
+                }
+
+                chunk.SetBlock(x, y, z, block);
             }
         }
     }
+}
 
     public BlockState GetBlockAtWorld(Vector3I worldPos)
     {

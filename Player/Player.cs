@@ -9,7 +9,7 @@ public partial class Player : CharacterBody3D
     [Export] public float SprintStaminaCost { get; set; } = 10f;
     [Export] public float JumpStaminaCost { get; set; } = 10f;
 
-    private float _gravity = 5f;
+    private float _gravity = 20f;
     private PlayerStats _stats;
     private PlayerCamera _playerCamera;
     private bool _isSprinting = false;
@@ -48,44 +48,65 @@ public partial class Player : CharacterBody3D
 {
     if (_stats == null || _stats.IsDead) return;
 
+GD.Print($"PhysicsProcess running, IsOnFloor: {IsOnFloor()}, Pos: {GlobalPosition}");
+
     float dt = (float)delta;
     Vector3 velocity = Velocity;
 
-    // TEMP: Manual up/down with Q and E keys
-    // No gravity - pure collision test
-    if (Input.IsActionPressed("move_forward"))
-        velocity.Y = -2f; // slowly move down
-    else if (Input.IsActionPressed("move_back"))
-        velocity.Y = 2f;  // slowly move up
+    if (!IsOnFloor())
+    {
+        velocity.Y -= _gravity * dt;
+    }
     else
-        velocity.Y = 0f;
+    {
+        _hasDoubleJumped = false;
+        _isGliding = false;
+    }
 
-    // Horizontal movement
+    if (Input.IsActionJustPressed("jump") && IsOnFloor())
+    {
+        if (_stats.UseStamina(JumpStaminaCost))
+            velocity.Y = JumpVelocity;
+    }
+
+    _isCrouching = Input.IsActionPressed("crouch");
+
+    bool wantsSprint = Input.IsActionPressed("sprint");
+    if (wantsSprint && _stats.Stamina > 0 && !_isCrouching)
+    {
+        _isSprinting = true;
+        _stats.UseStamina(SprintStaminaCost * dt);
+    }
+    else
+    {
+        _isSprinting = false;
+    }
+
     Vector2 inputDir = Input.GetVector(
         "move_left", "move_right",
         "move_forward", "move_back");
 
     Vector3 direction = (
-        Transform.Basis * new Vector3(inputDir.X, 0, 0)
+        Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)
     ).Normalized();
+
+    float speed = _isCrouching ? CrouchSpeed
+        : _isSprinting ? SprintSpeed
+        : WalkSpeed;
 
     if (direction != Vector3.Zero)
     {
-        velocity.X = direction.X * WalkSpeed;
-        velocity.Z = direction.Z * WalkSpeed;
+        velocity.X = direction.X * speed;
+        velocity.Z = direction.Z * speed;
     }
     else
     {
-        velocity.X = Mathf.MoveToward(velocity.X, 0, WalkSpeed);
-        velocity.Z = Mathf.MoveToward(velocity.Z, 0, WalkSpeed);
+        velocity.X = Mathf.MoveToward(velocity.X, 0, speed * dt * 10f);
+        velocity.Z = Mathf.MoveToward(velocity.Z, 0, speed * dt * 10f);
     }
 
     Velocity = velocity;
     MoveAndSlide();
-
-    // Print when on floor
-    if (IsOnFloor())
-        GD.Print($"ON FLOOR at Y:{GlobalPosition.Y}");
 }
 
     public override void _Input(InputEvent @event)
