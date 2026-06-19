@@ -4,22 +4,30 @@
 [ext_resource type="Script" uid="uid://c4ersv2a4gm7d" path="res://Player/PlayerCamera.cs" id="2_btcbx"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_hvfyp"]
+radius = 0.4
+height = 1.8
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_l8h54"]
 albedo_color = Color(2.2140146e-06, 0.59648365, 0.67040837, 1)
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_4ntmi"]
 material = SubResource("StandardMaterial3D_l8h54")
+radius = 0.4
+height = 1.8
 
 [node name="player" type="CharacterBody3D" unique_id=189951435]
 script = ExtResource("1_4ntmi")
+
+[node name="PlayerCamera" type="Node3D" parent="." unique_id=1669677860]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+script = ExtResource("2_btcbx")
+
+[node name="Camera3D" type="Camera3D" parent="PlayerCamera" unique_id=1577013604]
+fov = 90.0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=564389083]
 shape = SubResource("CapsuleShape3D_hvfyp")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1907663862]
+visible = false
 mesh = SubResource("CapsuleMesh_4ntmi")
-
-[node name="Camera3D" type="Camera3D" parent="." unique_id=1577013604]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.31863564, 0)
-script = ExtResource("2_btcbx")

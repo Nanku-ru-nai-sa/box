@@ -48,8 +48,6 @@ public partial class Player : CharacterBody3D
 {
     if (_stats == null || _stats.IsDead) return;
 
-GD.Print($"PhysicsProcess running, IsOnFloor: {IsOnFloor()}, Pos: {GlobalPosition}");
-
     float dt = (float)delta;
     Vector3 velocity = Velocity;
 
@@ -65,7 +63,6 @@ GD.Print($"PhysicsProcess running, IsOnFloor: {IsOnFloor()}, Pos: {GlobalPositio
 
     if (Input.IsActionJustPressed("jump") && IsOnFloor())
     {
-        if (_stats.UseStamina(JumpStaminaCost))
             velocity.Y = JumpVelocity;
     }
 
