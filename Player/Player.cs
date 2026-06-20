@@ -17,6 +17,12 @@ public partial class Player : CharacterBody3D
     private bool _isCrouching = false;
     private bool _hasDoubleJumped = false;
     private bool _isGliding = false;
+    private bool _isPlacing = false;
+    private float _placeTimer = 0f;
+    private const float PlaceInterval = 0.15f; // seconds between placements while held
+    private bool _isBreaking = false;
+private float _breakTimer = 0f;
+private const float BreakInterval = 0.15f;
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
@@ -88,7 +94,25 @@ public partial class Player : CharacterBody3D
     Vector3 direction = (
         Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)
     ).Normalized();
+if (_isBreaking)
+{
+    _breakTimer += dt;
+    if (_breakTimer >= BreakInterval)
+    {
+        TryBreakBlock();
+        _breakTimer = 0f;
+    }
+}
 
+if (_isPlacing)
+{
+    _placeTimer += dt;
+    if (_placeTimer >= PlaceInterval)
+    {
+        TryPlaceBlock();
+        _placeTimer = 0f;
+    }
+}
     float speed = _isCrouching ? CrouchSpeed
         : _isSprinting ? SprintSpeed
         : WalkSpeed;
@@ -108,26 +132,31 @@ public partial class Player : CharacterBody3D
     MoveAndSlide();
 }
 
-    public override void _UnhandledInput(InputEvent @event)
+   public override void _UnhandledInput(InputEvent @event)
 {
-    if (@event is InputEventMouseButton mb && mb.Pressed)
+    if (@event is InputEventMouseButton mb)
     {
         if (mb.ButtonIndex == MouseButton.Left)
-            TryBreakBlock();
-        else if (mb.ButtonIndex == MouseButton.Right)
-            TryPlaceBlock();
-    }
-
-        
-        if (@event is InputEventKey key && key.Pressed
-            && key.Keycode == Key.Escape)
         {
-            if (Input.MouseMode == Input.MouseModeEnum.Captured)
-                Input.MouseMode = Input.MouseModeEnum.Visible;
-            else
-                Input.MouseMode = Input.MouseModeEnum.Captured;
+            _isBreaking = mb.Pressed;
+            if (mb.Pressed)
+            {
+                TryBreakBlock();
+                _breakTimer = 0f;
+            }
+        }
+
+        if (mb.ButtonIndex == MouseButton.Right)
+        {
+            _isPlacing = mb.Pressed;
+            if (mb.Pressed)
+            {
+                TryPlaceBlock();
+                _placeTimer = 0f;
+            }
         }
     }
+}
     private void TryBreakBlock()
 {
     if (!_rayCast.IsColliding()) return;
@@ -165,7 +194,20 @@ private void TryPlaceBlock()
 
     Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
 
-    // Ask ChunkManager which chunk actually owns this world position
+    // Prevent placing inside the player
+    Vector3 blockCenter = new Vector3(
+        Mathf.Floor(worldTargetPos.X) + 0.5f,
+        Mathf.Floor(worldTargetPos.Y) + 0.5f,
+        Mathf.Floor(worldTargetPos.Z) + 0.5f
+    );
+
+    float playerDistance = blockCenter.DistanceTo(GlobalPosition);
+    if (playerDistance < 0.9f)
+    {
+        GD.Print("Cannot place block - too close to player");
+        return;
+    }
+
     var chunkManager = hitChunk.GetParent() as ChunkManager;
     if (chunkManager == null) return;
 
@@ -177,8 +219,6 @@ private void TryPlaceBlock()
     int bx = Mathf.FloorToInt(localPos.X);
     int by = Mathf.FloorToInt(localPos.Y);
     int bz = Mathf.FloorToInt(localPos.Z);
-
-    GD.Print($"Placing block at local ({bx},{by},{bz}) in chunk {chunkPos}");
 
     var newBlock = new BlockState { BlockId = "stone", BitMask = 0xFF };
     targetChunk.SetBlock(bx, by, bz, newBlock);
