@@ -29,6 +29,8 @@ public partial class Player : CharacterBody3D
     private Panel[] _hotbarSlots = new Panel[5];
     private string[] _hotbarBlocks = { "dirt", "stone", "sand", "log", "leaves" };
     private int _selectedSlot = 1;
+    private Inventory _inventory;
+    private Label[] _hotbarLabels = new Label[5];
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
@@ -41,6 +43,9 @@ public partial class Player : CharacterBody3D
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
         _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
         _rayCast.AddException(this);
+        _inventory = new Inventory();
+        AddChild(_inventory);
+        
 
         _blockOutline = new MeshInstance3D();
         var outlineMesh = new ArrayMesh();
@@ -107,13 +112,14 @@ public partial class Player : CharacterBody3D
             slot.AddThemeStyleboxOverride("panel", style);
 
             var label = new Label();
-            label.Text = _hotbarBlocks[i];
-            label.HorizontalAlignment = HorizontalAlignment.Center;
-            label.VerticalAlignment = VerticalAlignment.Center;
-            label.AnchorRight = 1.0f;
-            label.AnchorBottom = 1.0f;
-            label.AddThemeFontSizeOverride("font_size", 10);
-            slot.AddChild(label);
+label.Text = _hotbarBlocks[i];
+label.HorizontalAlignment = HorizontalAlignment.Center;
+label.VerticalAlignment = VerticalAlignment.Center;
+label.AnchorRight = 1.0f;
+label.AnchorBottom = 1.0f;
+label.AddThemeFontSizeOverride("font_size", 10);
+slot.AddChild(label);
+_hotbarLabels[i] = label;
 
             hotbarContainer.AddChild(slot);
             _hotbarSlots[i] = slot;
@@ -135,6 +141,8 @@ public partial class Player : CharacterBody3D
         }
 
         Input.MouseMode = Input.MouseModeEnum.Captured;
+        _inventory.OnInventoryChanged += UpdateHotbarLabels;
+UpdateHotbarLabels();
         GD.Print("Player ready.");
     }
 
@@ -251,6 +259,16 @@ if (_isInWater)
 
     private bool _isNearWaterSurface = false;
 
+private void UpdateHotbarLabels()
+{
+    for (int i = 0; i < _hotbarBlocks.Length; i++)
+    {
+        int count = _inventory.GetItemCount(_hotbarBlocks[i]);
+        _hotbarLabels[i].Text = $"{_hotbarBlocks[i]}\n{count}";
+    }
+}
+
+
 private void CheckWaterStatus()
 {
     var chunkManager = GetTree().Root.GetNodeOrNull<ChunkManager>("TestWorld/ChunkManager");
@@ -363,68 +381,83 @@ private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
         }
     }
 
-    private void TryBreakBlock()
+   private void TryBreakBlock()
+{
+    if (!_rayCast.IsColliding()) return;
+
+    var collider = _rayCast.GetCollider() as Node;
+    if (collider == null || !collider.HasMeta("chunk")) return;
+
+    Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+    Vector3 hitPoint = _rayCast.GetCollisionPoint();
+    Vector3 hitNormal = _rayCast.GetCollisionNormal();
+
+    Vector3 targetPos = hitPoint - hitNormal * 0.5f;
+
+    Vector3 localPos = targetPos - chunk.GlobalPosition;
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    BlockState brokenBlock = chunk.GetBlock(bx, by, bz);
+    if (!brokenBlock.IsAir())
     {
-        if (!_rayCast.IsColliding()) return;
-
-        var collider = _rayCast.GetCollider() as Node;
-        if (collider == null || !collider.HasMeta("chunk")) return;
-
-        Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
-        Vector3 hitPoint = _rayCast.GetCollisionPoint();
-        Vector3 hitNormal = _rayCast.GetCollisionNormal();
-
-        Vector3 targetPos = hitPoint - hitNormal * 0.5f;
-
-        Vector3 localPos = targetPos - chunk.GlobalPosition;
-        int bx = Mathf.FloorToInt(localPos.X);
-        int by = Mathf.FloorToInt(localPos.Y);
-        int bz = Mathf.FloorToInt(localPos.Z);
-
-        chunk.SetBlock(bx, by, bz, BlockState.Air);
+        _inventory.AddItem(brokenBlock.BlockId, 1);
+        GD.Print($"Picked up: {brokenBlock.BlockId}, total now: {_inventory.GetItemCount(brokenBlock.BlockId)}");
     }
 
-    private void TryPlaceBlock()
+    chunk.SetBlock(bx, by, bz, BlockState.Air);
+}
+
+   private void TryPlaceBlock()
+{
+    if (!_rayCast.IsColliding()) return;
+
+    if (!_inventory.HasItem(_selectedBlockId, 1))
     {
-        if (!_rayCast.IsColliding()) return;
-
-        var collider = _rayCast.GetCollider() as Node;
-        if (collider == null || !collider.HasMeta("chunk")) return;
-
-        Chunk hitChunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
-        Vector3 hitPoint = _rayCast.GetCollisionPoint();
-        Vector3 hitNormal = _rayCast.GetCollisionNormal();
-
-        Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
-
-        Vector3 blockCenter = new Vector3(
-            Mathf.Floor(worldTargetPos.X) + 0.5f,
-            Mathf.Floor(worldTargetPos.Y) + 0.5f,
-            Mathf.Floor(worldTargetPos.Z) + 0.5f
-        );
-
-        float playerDistance = blockCenter.DistanceTo(GlobalPosition);
-        if (playerDistance < 0.9f)
-        {
-            GD.Print("Cannot place block - too close to player");
-            return;
-        }
-
-        var chunkManager = hitChunk.GetParent() as ChunkManager;
-        if (chunkManager == null) return;
-
-        Vector3I chunkPos = chunkManager.WorldToChunk(worldTargetPos);
-        Chunk targetChunk = chunkManager.GetChunk(chunkPos);
-        if (targetChunk == null) return;
-
-        Vector3 localPos = worldTargetPos - targetChunk.GlobalPosition;
-        int bx = Mathf.FloorToInt(localPos.X);
-        int by = Mathf.FloorToInt(localPos.Y);
-        int bz = Mathf.FloorToInt(localPos.Z);
-
-        var newBlock = new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF };
-        targetChunk.SetBlock(bx, by, bz, newBlock);
+        GD.Print($"No {_selectedBlockId} in inventory to place");
+        return;
     }
+
+    var collider = _rayCast.GetCollider() as Node;
+    if (collider == null || !collider.HasMeta("chunk")) return;
+
+    Chunk hitChunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+    Vector3 hitPoint = _rayCast.GetCollisionPoint();
+    Vector3 hitNormal = _rayCast.GetCollisionNormal();
+
+    Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
+
+    Vector3 blockCenter = new Vector3(
+        Mathf.Floor(worldTargetPos.X) + 0.5f,
+        Mathf.Floor(worldTargetPos.Y) + 0.5f,
+        Mathf.Floor(worldTargetPos.Z) + 0.5f
+    );
+
+    float playerDistance = blockCenter.DistanceTo(GlobalPosition);
+    if (playerDistance < 0.9f)
+    {
+        GD.Print("Cannot place block - too close to player");
+        return;
+    }
+
+    var chunkManager = hitChunk.GetParent() as ChunkManager;
+    if (chunkManager == null) return;
+
+    Vector3I chunkPos = chunkManager.WorldToChunk(worldTargetPos);
+    Chunk targetChunk = chunkManager.GetChunk(chunkPos);
+    if (targetChunk == null) return;
+
+    Vector3 localPos = worldTargetPos - targetChunk.GlobalPosition;
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    var newBlock = new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF };
+    targetChunk.SetBlock(bx, by, bz, newBlock);
+
+    _inventory.RemoveItem(_selectedBlockId, 1);
+}
 
     public PlayerStats GetStats() => _stats;
     public PlayerCamera GetPlayerCamera() => _playerCamera;
