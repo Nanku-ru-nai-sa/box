@@ -232,8 +232,87 @@ private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
                 }
 
                 chunk.SetBlockInternal(x, y, z, block);
+                GenerateTrees(chunk, chunkPos);
                 chunk.MarkDirty();
             }
+        }
+    }
+}
+
+private RandomNumberGenerator _treeRng = new RandomNumberGenerator();
+
+private void GenerateTrees(Chunk chunk, Vector3I chunkPos)
+{
+    _treeRng.Seed = (ulong)(chunkPos.X * 73856093 ^ chunkPos.Z * 19349663 ^ chunkPos.Y * 83492791);
+
+    for (int x = 2; x < Chunk.SIZE - 2; x++)
+    {
+        for (int z = 2; z < Chunk.SIZE - 2; z++)
+        {
+            if (_treeRng.Randf() > 0.02f) continue;
+
+            int worldX = chunkPos.X * Chunk.SIZE + x;
+            int worldZ = chunkPos.Z * Chunk.SIZE + z;
+
+            float noiseValue = _noise.GetNoise2D(worldX, worldZ);
+            int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
+
+            int localSurfaceY = terrainHeight - (chunkPos.Y * Chunk.HEIGHT);
+
+            if (localSurfaceY < 0 || localSurfaceY >= Chunk.HEIGHT - 8) continue;
+
+            int trunkHeight = 4 + _treeRng.RandiRange(0, 2); // 4-6 tall
+
+            // Trunk
+            for (int ty = 1; ty <= trunkHeight; ty++)
+            {
+                int y = localSurfaceY + ty;
+                if (y >= Chunk.HEIGHT) break;
+                chunk.SetBlockInternal(x, y, z, new BlockState { BlockId = "log", BitMask = 0xFF });
+            }
+
+            int canopyBaseY = localSurfaceY + trunkHeight - 1;
+
+            // Tapered canopy - wider in middle, narrow at top and bottom
+            int[] layerRadius = { 2, 2, 1, 1 }; // bottom to top
+
+            for (int layer = 0; layer < layerRadius.Length; layer++)
+            {
+                int radius = layerRadius[layer];
+                int ly = canopyBaseY + layer;
+                if (ly < 0 || ly >= Chunk.HEIGHT) continue;
+
+                for (int lx = -radius; lx <= radius; lx++)
+                {
+                    for (int lz = -radius; lz <= radius; lz++)
+                    {
+                        int bx = x + lx;
+                        int bz = z + lz;
+
+                        if (bx < 0 || bx >= Chunk.SIZE || bz < 0 || bz >= Chunk.SIZE) continue;
+
+                        // Skip corners for a rounder shape
+                        if (Mathf.Abs(lx) == radius && Mathf.Abs(lz) == radius && radius > 1) continue;
+
+                        // Don't overwrite trunk
+                        if (lx == 0 && lz == 0)
+{
+    chunk.SetBlockInternal(bx, ly, bz, new BlockState { BlockId = "log", BitMask = 0xFF });
+}
+else
+{
+    chunk.SetBlockInternal(bx, ly, bz, new BlockState { BlockId = "leaves", BitMask = 0xFF });
+}
+                    }
+                }
+            }
+int trunkTopY = localSurfaceY + trunkHeight +2;
+if (trunkTopY < Chunk.HEIGHT)
+    chunk.SetBlockInternal(x, trunkTopY, z, new BlockState { BlockId = "leaves", BitMask = 0xFF });
+            // Single top block to cap it off
+            int topY = canopyBaseY + layerRadius.Length;
+            if (topY < Chunk.HEIGHT)
+                chunk.SetBlockInternal(x, topY, z, new BlockState { BlockId = "leaves", BitMask = 0xFF });
         }
     }
 }
