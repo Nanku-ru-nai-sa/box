@@ -20,6 +20,11 @@ ItemRegistry="*uid://bydal6mir581d"
 AudioManager="*uid://bmys8t32u05v1"
 BlockRegistry="*uid://hxvef2suqv2e"
 
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+
 [dotnet]
 
 project/assembly_name="unbox"

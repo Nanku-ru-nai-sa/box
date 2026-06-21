@@ -19,12 +19,15 @@ public partial class Player : CharacterBody3D
     private bool _isGliding = false;
     private bool _isPlacing = false;
     private float _placeTimer = 0f;
-    private const float PlaceInterval = 0.15f; // seconds between placements while held
+    private const float PlaceInterval = 0.15f;
     private bool _isBreaking = false;
     private float _breakTimer = 0f;
     private const float BreakInterval = 0.15f;
     private string _selectedBlockId = "stone";
     private MeshInstance3D _blockOutline;
+    private Panel[] _hotbarSlots = new Panel[5];
+    private string[] _hotbarBlocks = { "dirt", "stone", "sand", "log", "leaves" };
+    private int _selectedSlot = 1;
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
@@ -35,42 +38,87 @@ public partial class Player : CharacterBody3D
     {
         _stats = GetNodeOrNull<PlayerStats>("PlayerStats");
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
-        _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");_rayCast.AddException(this);
+        _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
+        _rayCast.AddException(this);
+
         _blockOutline = new MeshInstance3D();
-var outlineMesh = new ArrayMesh();
+        var outlineMesh = new ArrayMesh();
 
-var st = new SurfaceTool();
-st.Begin(Mesh.PrimitiveType.Lines);
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Lines);
 
-Vector3[] corners = new Vector3[]
-{
-    new Vector3(0,0,0), new Vector3(1,0,0), new Vector3(1,0,1), new Vector3(0,0,1),
-    new Vector3(0,1,0), new Vector3(1,1,0), new Vector3(1,1,1), new Vector3(0,1,1)
-};
+        Vector3[] corners = new Vector3[]
+        {
+            new Vector3(0,0,0), new Vector3(1,0,0), new Vector3(1,0,1), new Vector3(0,0,1),
+            new Vector3(0,1,0), new Vector3(1,1,0), new Vector3(1,1,1), new Vector3(0,1,1)
+        };
 
-int[][] edges = new int[][]
-{
-    new int[]{0,1}, new int[]{1,2}, new int[]{2,3}, new int[]{3,0}, // bottom
-    new int[]{4,5}, new int[]{5,6}, new int[]{6,7}, new int[]{7,4}, // top
-    new int[]{0,4}, new int[]{1,5}, new int[]{2,6}, new int[]{3,7}  // verticals
-};
+        int[][] edges = new int[][]
+        {
+            new int[]{0,1}, new int[]{1,2}, new int[]{2,3}, new int[]{3,0},
+            new int[]{4,5}, new int[]{5,6}, new int[]{6,7}, new int[]{7,4},
+            new int[]{0,4}, new int[]{1,5}, new int[]{2,6}, new int[]{3,7}
+        };
 
-foreach (var edge in edges)
-{
-    st.AddVertex(corners[edge[0]]);
-    st.AddVertex(corners[edge[1]]);
-}
+        foreach (var edge in edges)
+        {
+            st.AddVertex(corners[edge[0]]);
+            st.AddVertex(corners[edge[1]]);
+        }
 
-outlineMesh = st.Commit();
-_blockOutline.Mesh = outlineMesh;
+        outlineMesh = st.Commit();
+        _blockOutline.Mesh = outlineMesh;
 
-var mat = new StandardMaterial3D();
-mat.AlbedoColor = new Color(0, 0, 0);
-mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-_blockOutline.MaterialOverride = mat;
+        var mat = new StandardMaterial3D();
+        mat.AlbedoColor = new Color(0, 0, 0);
+        mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+        _blockOutline.MaterialOverride = mat;
 
-_blockOutline.Visible = false;
-GetTree().Root.CallDeferred("add_child", _blockOutline);
+        _blockOutline.Visible = false;
+        GetTree().Root.CallDeferred("add_child", _blockOutline);
+
+        var hotbarLayer = new CanvasLayer();
+        GetTree().Root.CallDeferred("add_child", hotbarLayer);
+
+        var hotbarContainer = new HBoxContainer();
+        hotbarContainer.AnchorLeft = 0.5f;
+        hotbarContainer.AnchorRight = 0.5f;
+        hotbarContainer.AnchorTop = 1.0f;
+        hotbarContainer.AnchorBottom = 1.0f;
+        hotbarContainer.OffsetLeft = -125;
+        hotbarContainer.OffsetRight = 125;
+        hotbarContainer.OffsetTop = -60;
+        hotbarContainer.OffsetBottom = -10;
+        hotbarContainer.AddThemeConstantOverride("separation", 4);
+
+        for (int i = 0; i < 5; i++)
+        {
+            var slot = new Panel();
+            slot.CustomMinimumSize = new Vector2(46, 46);
+
+            var style = new StyleBoxFlat();
+            style.BgColor = new Color(0.1f, 0.1f, 0.1f, 0.6f);
+            style.BorderColor = i == _selectedSlot ? new Color(1, 1, 1) : new Color(0.3f, 0.3f, 0.3f);
+            style.BorderWidthTop = 2;
+            style.BorderWidthBottom = 2;
+            style.BorderWidthLeft = 2;
+            style.BorderWidthRight = 2;
+            slot.AddThemeStyleboxOverride("panel", style);
+
+            var label = new Label();
+            label.Text = _hotbarBlocks[i];
+            label.HorizontalAlignment = HorizontalAlignment.Center;
+            label.VerticalAlignment = VerticalAlignment.Center;
+            label.AnchorRight = 1.0f;
+            label.AnchorBottom = 1.0f;
+            label.AddThemeFontSizeOverride("font_size", 10);
+            slot.AddChild(label);
+
+            hotbarContainer.AddChild(slot);
+            _hotbarSlots[i] = slot;
+        }
+
+        hotbarLayer.CallDeferred("add_child", hotbarContainer);
 
         if (_stats == null)
         {
@@ -91,252 +139,240 @@ GetTree().Root.CallDeferred("add_child", _blockOutline);
 
     public override void _PhysicsProcess(double delta)
     {
-    UpdateBlockOutline();    
-    if (_stats == null || _stats.IsDead) return;
+        UpdateBlockOutline();
+        if (_stats == null || _stats.IsDead) return;
 
-    float dt = (float)delta;
-    Vector3 velocity = Velocity;
+        float dt = (float)delta;
+        Vector3 velocity = Velocity;
 
-    if (!IsOnFloor())
-    {
-        velocity.Y -= _gravity * dt;
-    }
-    else
-    {
-        _hasDoubleJumped = false;
-        _isGliding = false;
-    }
-
-    if (Input.IsActionPressed("jump") && IsOnFloor())
-    {
-        velocity.Y = JumpVelocity;
-    }
-
-    if (Input.IsActionJustReleased("ui_cancel"))
-    {
-        if(Input.MouseMode == Input.MouseModeEnum.Captured)
-            Input.MouseMode = Input.MouseModeEnum.Visible;
+        if (!IsOnFloor())
+        {
+            velocity.Y -= _gravity * dt;
+        }
         else
-            Input.MouseMode = Input.MouseModeEnum.Captured;
-    }
-
-    _isCrouching = Input.IsActionPressed("crouch");
-
-    bool wantsSprint = Input.IsActionPressed("sprint");
-    if (wantsSprint && _stats.Stamina > 0 && !_isCrouching)
-    {
-        _isSprinting = true;
-        _stats.UseStamina(SprintStaminaCost * dt);
-    }
-    else
-    {
-        _isSprinting = false;
-    }
-
-    Vector2 inputDir = Input.GetVector(
-        "move_left", "move_right",
-        "move_forward", "move_back");
-
-    Vector3 direction = (
-        Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)
-    ).Normalized();
-
-    if (_isBreaking)
-    {
-        _breakTimer += dt;
-        if (_breakTimer >= BreakInterval)
         {
-            TryBreakBlock();
-            _breakTimer = 0f;
+            _hasDoubleJumped = false;
+            _isGliding = false;
         }
-    }
 
-    if (_isPlacing)
-    {
-        _placeTimer += dt;
-        if (_placeTimer >= PlaceInterval)
+        if (Input.IsActionPressed("jump") && IsOnFloor())
         {
-            TryPlaceBlock();
-            _placeTimer = 0f;
+            velocity.Y = JumpVelocity;
         }
-    }
-    
-    
 
-    float speed = _isCrouching ? CrouchSpeed
-        : _isSprinting ? SprintSpeed
-        : WalkSpeed;
-
-    if (direction != Vector3.Zero)
-    {
-        velocity.X = direction.X * speed;
-        velocity.Z = direction.Z * speed;
-    }
-    else
-    {
-        velocity.X = Mathf.MoveToward(velocity.X, 0, speed * dt * 10f);
-        velocity.Z = Mathf.MoveToward(velocity.Z, 0, speed * dt * 10f);
-    }
-
-    Velocity = velocity;
-    MoveAndSlide();
-}
-
-private void UpdateBlockOutline()
-{
-    if (!_rayCast.IsColliding())
-    {
-        _blockOutline.Visible = false;
-        return;
-    }
-
-    var collider = _rayCast.GetCollider() as Node;
-    if (collider == null || !collider.HasMeta("chunk"))
-    {
-        _blockOutline.Visible = false;
-        return;
-    }
-
-    Vector3 hitPoint = _rayCast.GetCollisionPoint();
-    Vector3 hitNormal = _rayCast.GetCollisionNormal();
-    Vector3 insidePos = hitPoint - hitNormal * 0.5f;
-
-    Vector3 blockOrigin = new Vector3(
-        Mathf.Floor(insidePos.X),
-        Mathf.Floor(insidePos.Y),
-        Mathf.Floor(insidePos.Z)
-    );
-
-    _blockOutline.GlobalPosition = blockOrigin;
-    _blockOutline.Visible = true;
-}
-
-   public override void _UnhandledInput(InputEvent @event)
-{
-    if (@event is InputEventMouseButton mb)
-    {
-        if (mb.ButtonIndex == MouseButton.Left)
+        if (Input.IsActionJustReleased("ui_cancel"))
         {
-            _isBreaking = mb.Pressed;
-            if (mb.Pressed)
+            if (Input.MouseMode == Input.MouseModeEnum.Captured)
+                Input.MouseMode = Input.MouseModeEnum.Visible;
+            else
+                Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+
+        _isCrouching = Input.IsActionPressed("crouch");
+
+        bool wantsSprint = Input.IsActionPressed("sprint");
+        if (wantsSprint && _stats.Stamina > 0 && !_isCrouching)
+        {
+            _isSprinting = true;
+            _stats.UseStamina(SprintStaminaCost * dt);
+        }
+        else
+        {
+            _isSprinting = false;
+        }
+
+        Vector2 inputDir = Input.GetVector(
+            "move_left", "move_right",
+            "move_forward", "move_back");
+
+        Vector3 direction = (
+            Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)
+        ).Normalized();
+
+        if (_isBreaking)
+        {
+            _breakTimer += dt;
+            if (_breakTimer >= BreakInterval)
             {
                 TryBreakBlock();
                 _breakTimer = 0f;
             }
         }
 
-        if (mb.ButtonIndex == MouseButton.Right)
+        if (_isPlacing)
         {
-            _isPlacing = mb.Pressed;
-            if (mb.Pressed)
+            _placeTimer += dt;
+            if (_placeTimer >= PlaceInterval)
             {
                 TryPlaceBlock();
                 _placeTimer = 0f;
             }
         }
-    }
-    
-    
-    if (@event is InputEventKey keyEvent && keyEvent.Pressed)
-{
-    if (keyEvent.Keycode == Key.Key1)
-    {
-        _selectedBlockId = "dirt";
-        GD.Print("Selected: dirt");
-    }
-    else if (keyEvent.Keycode == Key.Key2)
-    {
-        _selectedBlockId = "stone";
-        GD.Print("Selected: stone");
-    }
-    else if (keyEvent.Keycode == Key.Key3)
-{
-    _selectedBlockId = "sand";
-    GD.Print("Selected: sand");
-}
-if (keyEvent.Keycode == Key.F5)
-{
-    var chunkManager = GetTree().Root.GetNode<ChunkManager>("TestWorld/ChunkManager");
-    chunkManager.Call("SaveModifiedChunks");
-    GD.Print("World saved!");
-}
-else if (keyEvent.Keycode == Key.Key4)
-{
-    _selectedBlockId = "log";
-    GD.Print("Selected: log");
-}
-else if (keyEvent.Keycode == Key.Key5)
-{
-    _selectedBlockId = "leaves";
-    GD.Print("Selected: leaves");
-}
 
-}
-}
+        float speed = _isCrouching ? CrouchSpeed
+            : _isSprinting ? SprintSpeed
+            : WalkSpeed;
+
+        if (direction != Vector3.Zero)
+        {
+            velocity.X = direction.X * speed;
+            velocity.Z = direction.Z * speed;
+        }
+        else
+        {
+            velocity.X = Mathf.MoveToward(velocity.X, 0, speed * dt * 10f);
+            velocity.Z = Mathf.MoveToward(velocity.Z, 0, speed * dt * 10f);
+        }
+
+        Velocity = velocity;
+        MoveAndSlide();
+    }
+
+    private void UpdateBlockOutline()
+    {
+        if (!_rayCast.IsColliding())
+        {
+            _blockOutline.Visible = false;
+            return;
+        }
+
+        var collider = _rayCast.GetCollider() as Node;
+        if (collider == null || !collider.HasMeta("chunk"))
+        {
+            _blockOutline.Visible = false;
+            return;
+        }
+
+        Vector3 hitPoint = _rayCast.GetCollisionPoint();
+        Vector3 hitNormal = _rayCast.GetCollisionNormal();
+        Vector3 insidePos = hitPoint - hitNormal * 0.5f;
+
+        Vector3 blockOrigin = new Vector3(
+            Mathf.Floor(insidePos.X),
+            Mathf.Floor(insidePos.Y),
+            Mathf.Floor(insidePos.Z)
+        );
+
+        _blockOutline.GlobalPosition = blockOrigin;
+        _blockOutline.Visible = true;
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton mb)
+        {
+            if (mb.ButtonIndex == MouseButton.Left)
+            {
+                _isBreaking = mb.Pressed;
+                if (mb.Pressed)
+                {
+                    TryBreakBlock();
+                    _breakTimer = 0f;
+                }
+            }
+
+            if (mb.ButtonIndex == MouseButton.Right)
+            {
+                _isPlacing = mb.Pressed;
+                if (mb.Pressed)
+                {
+                    TryPlaceBlock();
+                    _placeTimer = 0f;
+                }
+            }
+        }
+
+        if (@event is InputEventKey keyEvent && keyEvent.Pressed)
+        {
+            if (keyEvent.Keycode >= Key.Key1 && keyEvent.Keycode <= Key.Key5)
+            {
+                int slot = (int)keyEvent.Keycode - (int)Key.Key1;
+                SelectHotbarSlot(slot);
+            }
+
+            if (keyEvent.Keycode == Key.F5)
+            {
+                var chunkManager = GetTree().Root.GetNode<ChunkManager>("TestWorld/ChunkManager");
+                chunkManager.Call("SaveModifiedChunks");
+                GD.Print("World saved!");
+            }
+        }
+    }
+
+    private void SelectHotbarSlot(int slot)
+    {
+        _selectedSlot = slot;
+        _selectedBlockId = _hotbarBlocks[slot];
+
+        for (int i = 0; i < _hotbarSlots.Length; i++)
+        {
+            var style = (StyleBoxFlat)_hotbarSlots[i].GetThemeStylebox("panel");
+            style.BorderColor = i == slot ? new Color(1, 1, 1) : new Color(0.3f, 0.3f, 0.3f);
+        }
+    }
+
     private void TryBreakBlock()
-{
-    if (!_rayCast.IsColliding()) return;
-
-    var collider = _rayCast.GetCollider() as Node;
-    if (collider == null || !collider.HasMeta("chunk")) return;
-
-    Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
-    Vector3 hitPoint = _rayCast.GetCollisionPoint();
-    Vector3 hitNormal = _rayCast.GetCollisionNormal();
-
-    // Step slightly INTO the block we're looking at (not the surface)
-    Vector3 targetPos = hitPoint - hitNormal * 0.5f;
-
-    Vector3 localPos = targetPos - chunk.GlobalPosition;
-    int bx = Mathf.FloorToInt(localPos.X);
-    int by = Mathf.FloorToInt(localPos.Y);
-    int bz = Mathf.FloorToInt(localPos.Z);
-
-    chunk.SetBlock(bx, by, bz, BlockState.Air);
-}
-
-private void TryPlaceBlock()
-{
-    if (!_rayCast.IsColliding()) return;
-
-    var collider = _rayCast.GetCollider() as Node;
-    if (collider == null || !collider.HasMeta("chunk")) return;
-
-    Chunk hitChunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
-    Vector3 hitPoint = _rayCast.GetCollisionPoint();
-    Vector3 hitNormal = _rayCast.GetCollisionNormal();
-
-    Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
-
-    // Prevent placing inside the player
-    Vector3 blockCenter = new Vector3(
-        Mathf.Floor(worldTargetPos.X) + 0.5f,
-        Mathf.Floor(worldTargetPos.Y) + 0.5f,
-        Mathf.Floor(worldTargetPos.Z) + 0.5f
-    );
-
-    float playerDistance = blockCenter.DistanceTo(GlobalPosition);
-    if (playerDistance < 0.9f)
     {
-        GD.Print("Cannot place block - too close to player");
-        return;
+        if (!_rayCast.IsColliding()) return;
+
+        var collider = _rayCast.GetCollider() as Node;
+        if (collider == null || !collider.HasMeta("chunk")) return;
+
+        Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+        Vector3 hitPoint = _rayCast.GetCollisionPoint();
+        Vector3 hitNormal = _rayCast.GetCollisionNormal();
+
+        Vector3 targetPos = hitPoint - hitNormal * 0.5f;
+
+        Vector3 localPos = targetPos - chunk.GlobalPosition;
+        int bx = Mathf.FloorToInt(localPos.X);
+        int by = Mathf.FloorToInt(localPos.Y);
+        int bz = Mathf.FloorToInt(localPos.Z);
+
+        chunk.SetBlock(bx, by, bz, BlockState.Air);
     }
 
-    var chunkManager = hitChunk.GetParent() as ChunkManager;
-    if (chunkManager == null) return;
+    private void TryPlaceBlock()
+    {
+        if (!_rayCast.IsColliding()) return;
 
-    Vector3I chunkPos = chunkManager.WorldToChunk(worldTargetPos);
-    Chunk targetChunk = chunkManager.GetChunk(chunkPos);
-    if (targetChunk == null) return;
+        var collider = _rayCast.GetCollider() as Node;
+        if (collider == null || !collider.HasMeta("chunk")) return;
 
-    Vector3 localPos = worldTargetPos - targetChunk.GlobalPosition;
-    int bx = Mathf.FloorToInt(localPos.X);
-    int by = Mathf.FloorToInt(localPos.Y);
-    int bz = Mathf.FloorToInt(localPos.Z);
+        Chunk hitChunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
+        Vector3 hitPoint = _rayCast.GetCollisionPoint();
+        Vector3 hitNormal = _rayCast.GetCollisionNormal();
 
-    var newBlock = new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF };
-    targetChunk.SetBlock(bx, by, bz, newBlock);
-}
+        Vector3 worldTargetPos = hitPoint + hitNormal * 0.5f;
+
+        Vector3 blockCenter = new Vector3(
+            Mathf.Floor(worldTargetPos.X) + 0.5f,
+            Mathf.Floor(worldTargetPos.Y) + 0.5f,
+            Mathf.Floor(worldTargetPos.Z) + 0.5f
+        );
+
+        float playerDistance = blockCenter.DistanceTo(GlobalPosition);
+        if (playerDistance < 0.9f)
+        {
+            GD.Print("Cannot place block - too close to player");
+            return;
+        }
+
+        var chunkManager = hitChunk.GetParent() as ChunkManager;
+        if (chunkManager == null) return;
+
+        Vector3I chunkPos = chunkManager.WorldToChunk(worldTargetPos);
+        Chunk targetChunk = chunkManager.GetChunk(chunkPos);
+        if (targetChunk == null) return;
+
+        Vector3 localPos = worldTargetPos - targetChunk.GlobalPosition;
+        int bx = Mathf.FloorToInt(localPos.X);
+        int by = Mathf.FloorToInt(localPos.Y);
+        int bz = Mathf.FloorToInt(localPos.Z);
+
+        var newBlock = new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF };
+        targetChunk.SetBlock(bx, by, bz, newBlock);
+    }
 
     public PlayerStats GetStats() => _stats;
     public PlayerCamera GetPlayerCamera() => _playerCamera;
