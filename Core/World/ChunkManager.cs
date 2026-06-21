@@ -65,6 +65,64 @@ canvasLayer.CallDeferred("add_child", crosshair);
         UpdateChunks();
     }
 }
+
+private string SaveDirectory => "user://saves/world1/";
+
+public void SaveModifiedChunks()
+{
+    var dir = DirAccess.Open("user://");
+    if (!dir.DirExists("saves/world1"))
+        dir.MakeDirRecursive("saves/world1");
+
+    int savedCount = 0;
+    foreach (var kvp in _chunks)
+    {
+        var mods = kvp.Value.GetModifications();
+        if (mods.Count == 0) continue;
+
+        string fileName = $"{SaveDirectory}chunk_{kvp.Key.X}_{kvp.Key.Y}_{kvp.Key.Z}.json";
+        var saveData = new Godot.Collections.Dictionary();
+
+        foreach (var mod in mods)
+        {
+            string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
+            saveData[key] = mod.Value.BlockId;
+        }
+
+        var json = Json.Stringify(saveData);
+        using var file = FileAccess.Open(fileName, FileAccess.ModeFlags.Write);
+        file.StoreString(json);
+        savedCount++;
+    }
+
+    GD.Print($"Saved {savedCount} modified chunks");
+}
+
+public void LoadChunkModifications(Chunk chunk, Vector3I chunkPos)
+{
+    string fileName = $"{SaveDirectory}chunk_{chunkPos.X}_{chunkPos.Y}_{chunkPos.Z}.json";
+    if (!FileAccess.FileExists(fileName)) return;
+
+    using var file = FileAccess.Open(fileName, FileAccess.ModeFlags.Read);
+    string json = file.GetAsText();
+
+    var parsed = Json.ParseString(json).AsGodotDictionary();
+    var mods = new Dictionary<Vector3I, BlockState>();
+
+    foreach (var key in parsed.Keys)
+    {
+        string[] parts = ((string)key).Split(',');
+        int x = int.Parse(parts[0]);
+        int y = int.Parse(parts[1]);
+        int z = int.Parse(parts[2]);
+
+        string blockId = (string)parsed[key];
+        mods[new Vector3I(x, y, z)] = new BlockState { BlockId = blockId, BitMask = 0xFF };
+    }
+
+    chunk.ApplyModifications(mods);
+}
+
     public Chunk GetChunk(Vector3I chunkPos)
 {
     _chunks.TryGetValue(chunkPos, out Chunk chunk);
@@ -121,7 +179,7 @@ canvasLayer.CallDeferred("add_child", crosshair);
         GD.Print($"Total chunks: {_chunks.Count}");
     }
 
-    private void LoadChunk(Vector3I chunkPos)
+private void LoadChunk(Vector3I chunkPos)
 {
     if (_chunks.ContainsKey(chunkPos)) return;
 
@@ -129,6 +187,7 @@ canvasLayer.CallDeferred("add_child", crosshair);
     AddChild(chunk);
     chunk.Initialize(chunkPos);
     GenerateChunk(chunk, chunkPos);
+    LoadChunkModifications(chunk, chunkPos);
     chunk.BuildMesh();
     _chunks[chunkPos] = chunk;
 }
@@ -172,7 +231,8 @@ private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
                     block = BlockState.Air;
                 }
 
-                chunk.SetBlock(x, y, z, block);
+                chunk.SetBlockInternal(x, y, z, block);
+                chunk.MarkDirty();
             }
         }
     }

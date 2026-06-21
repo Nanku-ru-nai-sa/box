@@ -235,6 +235,8 @@ private void UpdateBlockOutline()
             }
         }
     }
+    
+    
     if (@event is InputEventKey keyEvent && keyEvent.Pressed)
 {
     if (keyEvent.Keycode == Key.Key1)
@@ -251,6 +253,12 @@ private void UpdateBlockOutline()
 {
     _selectedBlockId = "sand";
     GD.Print("Selected: sand");
+}
+if (keyEvent.Keycode == Key.F5)
+{
+    var chunkManager = GetTree().Root.GetNode<ChunkManager>("TestWorld/ChunkManager");
+    chunkManager.Call("SaveModifiedChunks");
+    GD.Print("World saved!");
 }
 else if (keyEvent.Keycode == Key.Key4)
 {

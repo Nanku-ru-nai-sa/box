@@ -15,6 +15,7 @@ public partial class Chunk : Node3D
     public Vector3I ChunkPosition { get; private set; }
     public bool IsGenerated { get; private set; } = false;
     private bool _isDirty = false;
+    private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
 
     private enum FaceDirection
     {
@@ -47,9 +48,33 @@ public void Initialize(Vector3I chunkPosition)
         return _blocks[x, y, z];
     }
 
-    public void SetBlock(int x, int y, int z, BlockState block)
+  public void SetBlock(int x, int y, int z, BlockState block)
 {
     _blocks[x, y, z] = block;
+    _isDirty = true;
+    _modifiedBlocks[new Vector3I(x, y, z)] = block;
+}
+
+// Used during initial world generation - does NOT mark as modified
+public void SetBlockInternal(int x, int y, int z, BlockState block)
+{
+    _blocks[x, y, z] = block;
+}
+
+public Dictionary<Vector3I, BlockState> GetModifications()
+{
+    return _modifiedBlocks;
+}
+
+
+
+public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
+{
+    foreach (var kvp in mods)
+    {
+        _blocks[kvp.Key.X, kvp.Key.Y, kvp.Key.Z] = kvp.Value;
+    }
+    _modifiedBlocks = mods;
     _isDirty = true;
 }
 
@@ -176,8 +201,6 @@ private void BuildCollision(ArrayMesh mesh)
         _collisionBody.QueueFree();
 
     _collisionBody = newCollisionBody;
-
-    GD.Print($"Mesh collision rebuilt for chunk {ChunkPosition} - {faces.Length} face vertices");
 }
 
 private bool HasExposedFace(int x, int y, int z)
