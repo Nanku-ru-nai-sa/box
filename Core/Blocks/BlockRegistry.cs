@@ -19,6 +19,10 @@ public partial class BlockRegistry : Node
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
         var grassSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
+        var sandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/sand.png");
+        var logTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log_top.png");
+        var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
+        var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
 
         var air = new BlockResource();
         air.BlockId = "air";
@@ -51,6 +55,42 @@ public partial class BlockRegistry : Node
         stone.TextureSide = stoneTex;
         stone.TextureBottom = stoneTex;
         Register(stone);
+
+        var sand = new BlockResource();
+        sand.BlockId = "sand";
+        sand.DisplayName = "Sand";
+        sand.IsSolid = true;
+        sand.CanChisel = true;
+        sand.GrassCanGrow = false;
+        sand.Hardness = 0.5f;
+        sand.TextureTop = sandTex;
+        sand.TextureSide = sandTex;
+        sand.TextureBottom = sandTex;
+        Register(sand);
+
+        var log = new BlockResource();
+        log.BlockId = "log";
+        log.DisplayName = "Log";
+        log.IsSolid = true;
+        log.CanChisel = true;
+        log.GrassCanGrow = false;
+        log.Hardness = 1.0f;
+        log.TextureTop = logTopTex;
+        log.TextureSide = logSideTex;
+        log.TextureBottom = logTopTex;
+        Register(log);
+
+        var leaves = new BlockResource();
+        leaves.BlockId = "leaves";
+        leaves.DisplayName = "Leaves";
+        leaves.IsSolid = true;
+        leaves.CanChisel = true;
+        leaves.GrassCanGrow = false;
+        leaves.Hardness = 0.2f;
+        leaves.TextureTop = leavesTex;
+        leaves.TextureSide = leavesTex;
+        leaves.TextureBottom = leavesTex;
+        Register(leaves);
 
         GD.Print("Blocks registered.");
     }

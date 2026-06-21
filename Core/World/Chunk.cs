@@ -76,7 +76,6 @@ public void Initialize(Vector3I chunkPosition)
 
  public void BuildMesh()
 {
-    GD.Print($"BuildMesh called for chunk {ChunkPosition}");
 
         var solidSurfaces = new Dictionary<Texture2D, SurfaceTool>();
         var transparentSurfaces = new Dictionary<Texture2D, SurfaceTool>();
@@ -152,18 +151,14 @@ public void Initialize(Vector3I chunkPosition)
     }
 private void BuildCollision(ArrayMesh mesh)
 {
-    if (_collisionBody != null && IsInstanceValid(_collisionBody))
-        _collisionBody.QueueFree();
-
-    _collisionBody = new StaticBody3D();
-    _collisionBody.CollisionLayer = 1;
-    _collisionBody.CollisionMask = 1;
-    GetParent().AddChild(_collisionBody);
-    _collisionBody.GlobalPosition = GlobalPosition;
-    _collisionBody.SetMeta("chunk", this);
-
     var faces = mesh.GetFaces();
     if (faces.Length < 3) return;
+
+    // Build the NEW collision body first
+    var newCollisionBody = new StaticBody3D();
+    newCollisionBody.CollisionLayer = 1;
+    newCollisionBody.CollisionMask = 1;
+    newCollisionBody.SetMeta("chunk", this);
 
     var concave = new ConcavePolygonShape3D();
     concave.BackfaceCollision = true;
@@ -171,9 +166,18 @@ private void BuildCollision(ArrayMesh mesh)
 
     var shape = new CollisionShape3D();
     shape.Shape = concave;
-    _collisionBody.AddChild(shape);
+    newCollisionBody.AddChild(shape);
 
-    GD.Print($"Mesh collision built for chunk {ChunkPosition} - {faces.Length} face vertices");
+    GetParent().AddChild(newCollisionBody);
+    newCollisionBody.GlobalPosition = GlobalPosition;
+
+    // NOW remove the old one, after the new one is already active
+    if (_collisionBody != null && IsInstanceValid(_collisionBody))
+        _collisionBody.QueueFree();
+
+    _collisionBody = newCollisionBody;
+
+    GD.Print($"Mesh collision rebuilt for chunk {ChunkPosition} - {faces.Length} face vertices");
 }
 
 private bool HasExposedFace(int x, int y, int z)

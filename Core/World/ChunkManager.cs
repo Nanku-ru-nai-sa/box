@@ -12,12 +12,30 @@ public partial class ChunkManager : Node3D
 
     public override void _Ready()
     {
-        GD.Print("ChunkManager ready.");
         _noise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _noise.Seed = 12345;
         _noise.Frequency = 0.02f;
-
         _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
+        
+        var canvasLayer = new CanvasLayer();
+GetTree().Root.CallDeferred("add_child", canvasLayer);
+
+var crosshair = new ColorRect();
+crosshair.Color = new Color(1, 1, 1);
+crosshair.Size = new Vector2(2, 2);
+crosshair.PivotOffset = new Vector2(1, 1);
+crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
+
+crosshair.AnchorLeft = 0.5f;
+crosshair.AnchorRight = 0.5f;
+crosshair.AnchorTop = 0.5f;
+crosshair.AnchorBottom = 0.5f;
+crosshair.OffsetLeft = -1;
+crosshair.OffsetTop = -1;
+crosshair.OffsetRight = 1;
+crosshair.OffsetBottom = 1;
+
+canvasLayer.CallDeferred("add_child", crosshair);
 
         if (_player == null)
             GD.Print("ChunkManager: No player found");

@@ -21,8 +21,10 @@ public partial class Player : CharacterBody3D
     private float _placeTimer = 0f;
     private const float PlaceInterval = 0.15f; // seconds between placements while held
     private bool _isBreaking = false;
-private float _breakTimer = 0f;
-private const float BreakInterval = 0.15f;
+    private float _breakTimer = 0f;
+    private const float BreakInterval = 0.15f;
+    private string _selectedBlockId = "stone";
+    private MeshInstance3D _blockOutline;
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
@@ -34,6 +36,41 @@ private const float BreakInterval = 0.15f;
         _stats = GetNodeOrNull<PlayerStats>("PlayerStats");
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
         _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");_rayCast.AddException(this);
+        _blockOutline = new MeshInstance3D();
+var outlineMesh = new ArrayMesh();
+
+var st = new SurfaceTool();
+st.Begin(Mesh.PrimitiveType.Lines);
+
+Vector3[] corners = new Vector3[]
+{
+    new Vector3(0,0,0), new Vector3(1,0,0), new Vector3(1,0,1), new Vector3(0,0,1),
+    new Vector3(0,1,0), new Vector3(1,1,0), new Vector3(1,1,1), new Vector3(0,1,1)
+};
+
+int[][] edges = new int[][]
+{
+    new int[]{0,1}, new int[]{1,2}, new int[]{2,3}, new int[]{3,0}, // bottom
+    new int[]{4,5}, new int[]{5,6}, new int[]{6,7}, new int[]{7,4}, // top
+    new int[]{0,4}, new int[]{1,5}, new int[]{2,6}, new int[]{3,7}  // verticals
+};
+
+foreach (var edge in edges)
+{
+    st.AddVertex(corners[edge[0]]);
+    st.AddVertex(corners[edge[1]]);
+}
+
+outlineMesh = st.Commit();
+_blockOutline.Mesh = outlineMesh;
+
+var mat = new StandardMaterial3D();
+mat.AlbedoColor = new Color(0, 0, 0);
+mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+_blockOutline.MaterialOverride = mat;
+
+_blockOutline.Visible = false;
+GetTree().Root.CallDeferred("add_child", _blockOutline);
 
         if (_stats == null)
         {
@@ -53,7 +90,8 @@ private const float BreakInterval = 0.15f;
     }
 
     public override void _PhysicsProcess(double delta)
-{
+    {
+    UpdateBlockOutline();    
     if (_stats == null || _stats.IsDead) return;
 
     float dt = (float)delta;
@@ -69,9 +107,17 @@ private const float BreakInterval = 0.15f;
         _isGliding = false;
     }
 
-    if (Input.IsActionJustPressed("jump") && IsOnFloor())
+    if (Input.IsActionPressed("jump") && IsOnFloor())
     {
-            velocity.Y = JumpVelocity;
+        velocity.Y = JumpVelocity;
+    }
+
+    if (Input.IsActionJustReleased("ui_cancel"))
+    {
+        if(Input.MouseMode == Input.MouseModeEnum.Captured)
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+        else
+            Input.MouseMode = Input.MouseModeEnum.Captured;
     }
 
     _isCrouching = Input.IsActionPressed("crouch");
@@ -94,25 +140,29 @@ private const float BreakInterval = 0.15f;
     Vector3 direction = (
         Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)
     ).Normalized();
-if (_isBreaking)
-{
-    _breakTimer += dt;
-    if (_breakTimer >= BreakInterval)
-    {
-        TryBreakBlock();
-        _breakTimer = 0f;
-    }
-}
 
-if (_isPlacing)
-{
-    _placeTimer += dt;
-    if (_placeTimer >= PlaceInterval)
+    if (_isBreaking)
     {
-        TryPlaceBlock();
-        _placeTimer = 0f;
+        _breakTimer += dt;
+        if (_breakTimer >= BreakInterval)
+        {
+            TryBreakBlock();
+            _breakTimer = 0f;
+        }
     }
-}
+
+    if (_isPlacing)
+    {
+        _placeTimer += dt;
+        if (_placeTimer >= PlaceInterval)
+        {
+            TryPlaceBlock();
+            _placeTimer = 0f;
+        }
+    }
+    
+    
+
     float speed = _isCrouching ? CrouchSpeed
         : _isSprinting ? SprintSpeed
         : WalkSpeed;
@@ -130,6 +180,35 @@ if (_isPlacing)
 
     Velocity = velocity;
     MoveAndSlide();
+}
+
+private void UpdateBlockOutline()
+{
+    if (!_rayCast.IsColliding())
+    {
+        _blockOutline.Visible = false;
+        return;
+    }
+
+    var collider = _rayCast.GetCollider() as Node;
+    if (collider == null || !collider.HasMeta("chunk"))
+    {
+        _blockOutline.Visible = false;
+        return;
+    }
+
+    Vector3 hitPoint = _rayCast.GetCollisionPoint();
+    Vector3 hitNormal = _rayCast.GetCollisionNormal();
+    Vector3 insidePos = hitPoint - hitNormal * 0.5f;
+
+    Vector3 blockOrigin = new Vector3(
+        Mathf.Floor(insidePos.X),
+        Mathf.Floor(insidePos.Y),
+        Mathf.Floor(insidePos.Z)
+    );
+
+    _blockOutline.GlobalPosition = blockOrigin;
+    _blockOutline.Visible = true;
 }
 
    public override void _UnhandledInput(InputEvent @event)
@@ -156,6 +235,35 @@ if (_isPlacing)
             }
         }
     }
+    if (@event is InputEventKey keyEvent && keyEvent.Pressed)
+{
+    if (keyEvent.Keycode == Key.Key1)
+    {
+        _selectedBlockId = "dirt";
+        GD.Print("Selected: dirt");
+    }
+    else if (keyEvent.Keycode == Key.Key2)
+    {
+        _selectedBlockId = "stone";
+        GD.Print("Selected: stone");
+    }
+    else if (keyEvent.Keycode == Key.Key3)
+{
+    _selectedBlockId = "sand";
+    GD.Print("Selected: sand");
+}
+else if (keyEvent.Keycode == Key.Key4)
+{
+    _selectedBlockId = "log";
+    GD.Print("Selected: log");
+}
+else if (keyEvent.Keycode == Key.Key5)
+{
+    _selectedBlockId = "leaves";
+    GD.Print("Selected: leaves");
+}
+
+}
 }
     private void TryBreakBlock()
 {
@@ -175,8 +283,6 @@ if (_isPlacing)
     int bx = Mathf.FloorToInt(localPos.X);
     int by = Mathf.FloorToInt(localPos.Y);
     int bz = Mathf.FloorToInt(localPos.Z);
-
-    GD.Print($"Breaking block at local ({bx},{by},{bz}) in chunk {chunk.ChunkPosition}");
 
     chunk.SetBlock(bx, by, bz, BlockState.Air);
 }
@@ -220,7 +326,7 @@ private void TryPlaceBlock()
     int by = Mathf.FloorToInt(localPos.Y);
     int bz = Mathf.FloorToInt(localPos.Z);
 
-    var newBlock = new BlockState { BlockId = "stone", BitMask = 0xFF };
+    var newBlock = new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF };
     targetChunk.SetBlock(bx, by, bz, newBlock);
 }
 
