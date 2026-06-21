@@ -101,79 +101,78 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
 
  public void BuildMesh()
 {
+    var solidSurfaces = new Dictionary<Texture2D, SurfaceTool>();
+    var transparentSurfaces = new Dictionary<Texture2D, SurfaceTool>();
 
-        var solidSurfaces = new Dictionary<Texture2D, SurfaceTool>();
-        var transparentSurfaces = new Dictionary<Texture2D, SurfaceTool>();
-
-        for (int x = 0; x < SIZE; x++)
+    for (int x = 0; x < SIZE; x++)
+    {
+        for (int y = 0; y < HEIGHT; y++)
         {
-            for (int y = 0; y < HEIGHT; y++)
+            for (int z = 0; z < SIZE; z++)
             {
-                for (int z = 0; z < SIZE; z++)
-                {
-                    BlockState block = _blocks[x, y, z];
-                    if (block.IsAir()) continue;
+                BlockState block = _blocks[x, y, z];
+                if (block.IsAir()) continue;
 
-                    BlockResource resource =
-                        BlockRegistry.Instance.GetBlock(block.BlockId);
-                    if (resource == null) continue;
+                BlockResource resource =
+                    BlockRegistry.Instance.GetBlock(block.BlockId);
+                if (resource == null) continue;
 
-                    var surfaces = resource.IsTransparent
-                        ? transparentSurfaces
-                        : solidSurfaces;
+                var surfaces = resource.IsTransparent
+                    ? transparentSurfaces
+                    : solidSurfaces;
 
-                    if (block.IsFullBlock())
-                        AddFullBlockFaces(surfaces, block, resource, x, y, z);
-                    else
-                        AddChiseledBlockFaces(surfaces, block, resource, x, y, z);
-                }
+                if (block.IsFullBlock())
+                    AddFullBlockFaces(surfaces, block, resource, x, y, z);
+                else
+                    AddChiseledBlockFaces(surfaces, block, resource, x, y, z);
             }
         }
-
-        var arrayMesh = new ArrayMesh();
-
-        foreach (var kvp in solidSurfaces)
-        {
-            kvp.Value.GenerateNormals();
-            kvp.Value.Commit(arrayMesh);
-            int surfIdx = arrayMesh.GetSurfaceCount() - 1;
-            if (surfIdx >= 0)
-            {
-                var mat = new StandardMaterial3D();
-                mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
-                if (kvp.Key != null)
-                    mat.AlbedoTexture = kvp.Key;
-                arrayMesh.SurfaceSetMaterial(surfIdx, mat);
-            }
-        }
-
-        foreach (var kvp in transparentSurfaces)
-        {
-            kvp.Value.GenerateNormals();
-            kvp.Value.Commit(arrayMesh);
-            int surfIdx = arrayMesh.GetSurfaceCount() - 1;
-            if (surfIdx >= 0)
-            {
-                var mat = new StandardMaterial3D();
-                mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
-                mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                if (kvp.Key != null)
-                    mat.AlbedoTexture = kvp.Key;
-                arrayMesh.SurfaceSetMaterial(surfIdx, mat);
-            }
-        }
-
-        if (arrayMesh.GetSurfaceCount() > 0)
-        {
-            _meshInstance.Mesh = arrayMesh;
-
-            // Defer collision building to next frame
-            // so physics engine registers it properly
-            CallDeferred("BuildCollision", arrayMesh);
-        }
-
-        IsGenerated = true;
     }
+
+    var arrayMesh = new ArrayMesh();
+    var solidOnlyMesh = new ArrayMesh();
+
+    foreach (var kvp in solidSurfaces)
+    {
+        kvp.Value.GenerateNormals();
+        kvp.Value.Commit(arrayMesh);
+        kvp.Value.Commit(solidOnlyMesh);
+
+        int surfIdx = arrayMesh.GetSurfaceCount() - 1;
+        if (surfIdx >= 0)
+        {
+            var mat = new StandardMaterial3D();
+            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+            if (kvp.Key != null)
+                mat.AlbedoTexture = kvp.Key;
+            arrayMesh.SurfaceSetMaterial(surfIdx, mat);
+        }
+    }
+
+    foreach (var kvp in transparentSurfaces)
+    {
+        kvp.Value.GenerateNormals();
+        kvp.Value.Commit(arrayMesh);
+        int surfIdx = arrayMesh.GetSurfaceCount() - 1;
+        if (surfIdx >= 0)
+        {
+            var mat = new StandardMaterial3D();
+            mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+            mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+            if (kvp.Key != null)
+                mat.AlbedoTexture = kvp.Key;
+            arrayMesh.SurfaceSetMaterial(surfIdx, mat);
+        }
+    }
+
+    if (arrayMesh.GetSurfaceCount() > 0)
+    {
+        _meshInstance.Mesh = arrayMesh;
+        CallDeferred("BuildCollision", solidOnlyMesh);
+    }
+
+    IsGenerated = true;
+}
 private void BuildCollision(ArrayMesh mesh)
 {
     var faces = mesh.GetFaces();

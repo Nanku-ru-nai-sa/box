@@ -23,6 +23,7 @@ public partial class BlockRegistry : Node
         var logTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log_top.png");
         var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
+        var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
 
         var air = new BlockResource();
         air.BlockId = "air";
@@ -92,7 +93,18 @@ public partial class BlockRegistry : Node
         leaves.TextureBottom = leavesTex;
         Register(leaves);
 
-        GD.Print("Blocks registered.");
+        var water = new BlockResource();
+        water.BlockId = "water";
+        water.DisplayName = "Water";
+        water.IsSolid = false;
+        water.CanChisel = false;
+        water.GrassCanGrow = false;
+        water.Hardness = 0f;
+        water.IsTransparent = true;
+        water.TextureTop = waterTex;
+        water.TextureSide = waterTex;
+        water.TextureBottom = waterTex;
+        Register(water);
     }
 
     private void Register(BlockResource block)

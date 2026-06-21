@@ -9,6 +9,7 @@ public partial class ChunkManager : Node3D
     private Dictionary<Vector3I, Chunk> _chunks = new();
     private Vector3I _lastPlayerChunk = new Vector3I(999, 999, 999);
     private Node3D _player;
+    private FastNoiseLite _outcropNoise = new FastNoiseLite();
 
     public override void _Ready()
     {
@@ -16,26 +17,29 @@ public partial class ChunkManager : Node3D
         _noise.Seed = 12345;
         _noise.Frequency = 0.02f;
         _player = GetNodeOrNull<Node3D>("/root/TestWorld/Player");
+        _outcropNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _outcropNoise.Seed = 54321;
+        _outcropNoise.Frequency = 0.08f;
         
         var canvasLayer = new CanvasLayer();
-GetTree().Root.CallDeferred("add_child", canvasLayer);
+        GetTree().Root.CallDeferred("add_child", canvasLayer);
 
-var crosshair = new ColorRect();
-crosshair.Color = new Color(1, 1, 1);
-crosshair.Size = new Vector2(2, 2);
-crosshair.PivotOffset = new Vector2(1, 1);
-crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
+        var crosshair = new ColorRect();
+        crosshair.Color = new Color(1, 1, 1);
+        crosshair.Size = new Vector2(2, 2);
+        crosshair.PivotOffset = new Vector2(1, 1);
+        crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
 
-crosshair.AnchorLeft = 0.5f;
-crosshair.AnchorRight = 0.5f;
-crosshair.AnchorTop = 0.5f;
-crosshair.AnchorBottom = 0.5f;
-crosshair.OffsetLeft = -1;
-crosshair.OffsetTop = -1;
-crosshair.OffsetRight = 1;
-crosshair.OffsetBottom = 1;
+        crosshair.AnchorLeft = 0.5f;
+        crosshair.AnchorRight = 0.5f;
+        crosshair.AnchorTop = 0.5f;
+        crosshair.AnchorBottom = 0.5f;
+        crosshair.OffsetLeft = -1;
+        crosshair.OffsetTop = -1;
+        crosshair.OffsetRight = 1;
+        crosshair.OffsetBottom = 1;
 
-canvasLayer.CallDeferred("add_child", crosshair);
+        canvasLayer.CallDeferred("add_child", crosshair);
 
         if (_player == null)
             GD.Print("ChunkManager: No player found");
@@ -213,18 +217,46 @@ private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
             float noiseValue = _noise.GetNoise2D(worldX, worldZ);
             int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
 
+            float outcropValue = _outcropNoise.GetNoise2D(worldX, worldZ);
+            int outcropBonus = 0;
+
+            if (outcropValue > 0.35f)
+            {
+                float strength = (outcropValue - 0.35f) / 0.65f;
+                outcropBonus = 1 + (int)(strength * 3f);
+            }
+
+            int adjustedTerrainHeight = terrainHeight + outcropBonus;
+
             for (int y = 0; y < Chunk.HEIGHT; y++)
             {
                 int worldY = chunkPos.Y * Chunk.HEIGHT + y;
 
+                const int waterLevel = 30;
+
                 BlockState block;
-                if (worldY == terrainHeight)
+                if (worldY == adjustedTerrainHeight)
                 {
-                    block = new BlockState { BlockId = "dirt", BitMask = 0xFF, Features = new[] { "grass" } };
+                    if (outcropBonus > 0)
+                    {
+                        block = new BlockState { BlockId = "stone", BitMask = 0xFF };
+                    }
+                    else if (terrainHeight < waterLevel)
+                    {
+                        block = new BlockState { BlockId = "sand", BitMask = 0xFF };
+                    }
+                    else
+                    {
+                        block = new BlockState { BlockId = "dirt", BitMask = 0xFF, Features = new[] { "grass" } };
+                    }
                 }
-                else if (worldY < terrainHeight)
+                else if (worldY < adjustedTerrainHeight)
                 {
                     block = new BlockState { BlockId = "stone", BitMask = 0xFF };
+                }
+                else if (worldY <= waterLevel && worldY > terrainHeight)
+                {
+                    block = new BlockState { BlockId = "water", BitMask = 0xFF };
                 }
                 else
                 {
@@ -232,13 +264,13 @@ private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
                 }
 
                 chunk.SetBlockInternal(x, y, z, block);
-                GenerateTrees(chunk, chunkPos);
-                chunk.MarkDirty();
             }
         }
     }
-}
 
+    GenerateTrees(chunk, chunkPos);
+    chunk.MarkDirty();
+}
 private RandomNumberGenerator _treeRng = new RandomNumberGenerator();
 
 private void GenerateTrees(Chunk chunk, Vector3I chunkPos)
@@ -256,6 +288,21 @@ private void GenerateTrees(Chunk chunk, Vector3I chunkPos)
 
             float noiseValue = _noise.GetNoise2D(worldX, worldZ);
             int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
+            float outcropValue = _outcropNoise.GetNoise2D(worldX, worldZ);
+int outcropBonus = 0;
+
+if (outcropValue > 0.35f)
+{
+    // Scale bonus height based on how strong the outcrop signal is
+    float strength = (outcropValue - 0.35f) / 0.65f; // normalize 0.35-1.0 to 0-1
+    outcropBonus = 1 + (int)(strength * 3f); // 1 to 3 extra blocks
+}
+
+int adjustedTerrainHeight = terrainHeight + outcropBonus;
+
+            if (worldX == 0 && worldZ == 0)
+    GD.Print($"Sample terrainHeight at origin: {terrainHeight}");
+    
 
             int localSurfaceY = terrainHeight - (chunkPos.Y * Chunk.HEIGHT);
 

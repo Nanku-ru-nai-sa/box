@@ -18,6 +18,7 @@ public partial class Player : CharacterBody3D
     private bool _hasDoubleJumped = false;
     private bool _isGliding = false;
     private bool _isPlacing = false;
+    private bool _isInWater = false;
     private float _placeTimer = 0f;
     private const float PlaceInterval = 0.15f;
     private bool _isBreaking = false;
@@ -137,28 +138,45 @@ public partial class Player : CharacterBody3D
         GD.Print("Player ready.");
     }
 
+
     public override void _PhysicsProcess(double delta)
     {
         UpdateBlockOutline();
         if (_stats == null || _stats.IsDead) return;
 
+CheckWaterStatus();
+
         float dt = (float)delta;
         Vector3 velocity = Velocity;
 
-        if (!IsOnFloor())
-        {
-            velocity.Y -= _gravity * dt;
-        }
+        if (_isInWater)
+{
+    // Gentle buoyancy - much weaker gravity, slight upward drift
+    velocity.Y -= (_gravity * 0.2f) * dt;
+    velocity.Y = Mathf.Clamp(velocity.Y, -2f, 8f);
+}
+else if (!IsOnFloor())
+{
+    velocity.Y -= _gravity * dt;
+}
+
         else
         {
             _hasDoubleJumped = false;
             _isGliding = false;
         }
 
-        if (Input.IsActionPressed("jump") && IsOnFloor())
-        {
-            velocity.Y = JumpVelocity;
-        }
+      if (_isInWater)
+{
+    if (Input.IsActionPressed("jump"))
+    {
+        velocity.Y = Mathf.MoveToward(velocity.Y, 6f, 12f * dt);
+    }
+}
+else if (Input.IsActionPressed("jump") && IsOnFloor())
+{
+    velocity.Y = JumpVelocity;
+}
 
         if (Input.IsActionJustReleased("ui_cancel"))
         {
@@ -210,8 +228,11 @@ public partial class Player : CharacterBody3D
         }
 
         float speed = _isCrouching ? CrouchSpeed
-            : _isSprinting ? SprintSpeed
-            : WalkSpeed;
+    : _isSprinting ? SprintSpeed
+    : WalkSpeed;
+
+if (_isInWater)
+    speed *= 0.5f;
 
         if (direction != Vector3.Zero)
         {
@@ -227,6 +248,37 @@ public partial class Player : CharacterBody3D
         Velocity = velocity;
         MoveAndSlide();
     }
+
+    private bool _isNearWaterSurface = false;
+
+private void CheckWaterStatus()
+{
+    var chunkManager = GetTree().Root.GetNodeOrNull<ChunkManager>("TestWorld/ChunkManager");
+    if (chunkManager == null)
+    {
+        _isInWater = false;
+        return;
+    }
+
+    // Check at feet position - if feet are clear, player is "out"
+    Vector3 feetPos = GlobalPosition + new Vector3(0, -0.9f, 0);
+    _isInWater = IsBlockWaterAt(chunkManager, feetPos);
+}
+
+private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
+{
+    Vector3I chunkPos = chunkManager.WorldToChunk(worldPos);
+    Chunk chunk = chunkManager.GetChunk(chunkPos);
+    if (chunk == null) return false;
+
+    Vector3 localPos = worldPos - chunk.GlobalPosition;
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    BlockState block = chunk.GetBlock(bx, by, bz);
+    return block.BlockId == "water";
+}
 
     private void UpdateBlockOutline()
     {
