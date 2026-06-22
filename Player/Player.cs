@@ -31,6 +31,9 @@ public partial class Player : CharacterBody3D
     private int _selectedSlot = 1;
     private Inventory _inventory;
     private Label[] _hotbarLabels = new Label[5];
+    private Control _inventoryScreen;
+    private Label[] _inventorySlotLabels = new Label[20];
+    private bool _inventoryOpen = false;
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
@@ -126,6 +129,80 @@ _hotbarLabels[i] = label;
         }
 
         hotbarLayer.CallDeferred("add_child", hotbarContainer);
+
+        // Inventory Screen
+var inventoryLayer = new CanvasLayer();
+inventoryLayer.Layer = 10;
+GetTree().Root.CallDeferred("add_child", inventoryLayer);
+
+_inventoryScreen = new Panel();
+_inventoryScreen.AnchorLeft = 0.5f;
+_inventoryScreen.AnchorRight = 0.5f;
+_inventoryScreen.AnchorTop = 0.5f;
+_inventoryScreen.AnchorBottom = 0.5f;
+_inventoryScreen.OffsetLeft = -200;
+_inventoryScreen.OffsetRight = 200;
+_inventoryScreen.OffsetTop = -250;
+_inventoryScreen.OffsetBottom = 250;
+
+var invStyle = new StyleBoxFlat();
+invStyle.BgColor = new Color(0.1f, 0.1f, 0.1f, 0.85f);
+invStyle.BorderColor = new Color(0.5f, 0.5f, 0.5f);
+invStyle.BorderWidthTop = 2;
+invStyle.BorderWidthBottom = 2;
+invStyle.BorderWidthLeft = 2;
+invStyle.BorderWidthRight = 2;
+_inventoryScreen.AddThemeStyleboxOverride("panel", invStyle);
+
+var invTitle = new Label();
+invTitle.Text = "Inventory";
+invTitle.HorizontalAlignment = HorizontalAlignment.Center;
+invTitle.AnchorRight = 1.0f;
+invTitle.OffsetTop = 8;
+invTitle.OffsetBottom = 30;
+_inventoryScreen.AddChild(invTitle);
+
+var grid = new GridContainer();
+grid.Columns = 5;
+grid.AnchorRight = 1.0f;
+grid.AnchorBottom = 1.0f;
+grid.OffsetTop = 40;
+grid.OffsetLeft = 10;
+grid.OffsetRight = -10;
+grid.OffsetBottom = -10;
+grid.AddThemeConstantOverride("h_separation", 6);
+grid.AddThemeConstantOverride("v_separation", 6);
+
+for (int i = 0; i < 20; i++)
+{
+    var slot = new Panel();
+    slot.CustomMinimumSize = new Vector2(68, 68);
+
+    var slotStyle = new StyleBoxFlat();
+    slotStyle.BgColor = new Color(0.15f, 0.15f, 0.15f, 0.8f);
+    slotStyle.BorderColor = new Color(0.4f, 0.4f, 0.4f);
+    slotStyle.BorderWidthTop = 2;
+    slotStyle.BorderWidthBottom = 2;
+    slotStyle.BorderWidthLeft = 2;
+    slotStyle.BorderWidthRight = 2;
+    slot.AddThemeStyleboxOverride("panel", slotStyle);
+
+    var slotLabel = new Label();
+    slotLabel.HorizontalAlignment = HorizontalAlignment.Center;
+    slotLabel.VerticalAlignment = VerticalAlignment.Center;
+    slotLabel.AnchorRight = 1.0f;
+    slotLabel.AnchorBottom = 1.0f;
+    slotLabel.AddThemeFontSizeOverride("font_size", 10);
+    slotLabel.AutowrapMode = TextServer.AutowrapMode.Word;
+    slot.AddChild(slotLabel);
+
+    _inventorySlotLabels[i] = slotLabel;
+    grid.AddChild(slot);
+}
+
+_inventoryScreen.AddChild(grid);
+_inventoryScreen.Visible = false;
+inventoryLayer.CallDeferred("add_child", _inventoryScreen);
 
         if (_stats == null)
         {
@@ -266,6 +343,8 @@ private void UpdateHotbarLabels()
         int count = _inventory.GetItemCount(_hotbarBlocks[i]);
         _hotbarLabels[i].Text = $"{_hotbarBlocks[i]}\n{count}";
     }
+
+    UpdateInventoryScreen();
 }
 
 
@@ -360,6 +439,11 @@ private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
                 SelectHotbarSlot(slot);
             }
 
+            if (keyEvent.Keycode == Key.Tab)
+{
+    ToggleInventory();
+}
+
             if (keyEvent.Keycode == Key.F5)
             {
                 var chunkManager = GetTree().Root.GetNode<ChunkManager>("TestWorld/ChunkManager");
@@ -368,6 +452,36 @@ private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
             }
         }
     }
+    private void ToggleInventory()
+{
+    _inventoryOpen = !_inventoryOpen;
+    _inventoryScreen.Visible = _inventoryOpen;
+
+    if (_inventoryOpen)
+    {
+        UpdateInventoryScreen();
+        Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+    else
+    {
+        Input.MouseMode = Input.MouseModeEnum.Captured;
+    }
+}
+private void UpdateInventoryScreen()
+{
+    if (_inventorySlotLabels == null) return;
+
+    for (int i = 0; i < _inventory.Slots.Length; i++)
+    {
+        var slot = _inventory.Slots[i];
+        if (slot.IsEmpty)
+            _inventorySlotLabels[i].Text = "";
+        else
+            _inventorySlotLabels[i].Text = $"{slot.ItemId}\n{slot.Count}";
+    }
+}
+
+
 
     private void SelectHotbarSlot(int slot)
     {

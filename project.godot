@@ -10,7 +10,7 @@ config_version=5
 
 [application]
 
-config/name="unbox"
+config/name="Box"
 run/main_scene="uid://dutb4nvr876nw"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
