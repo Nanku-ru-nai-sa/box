@@ -16,6 +16,11 @@ public partial class Chunk : Node3D
     public bool IsGenerated { get; private set; } = false;
     private bool _isDirty = false;
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
+    private static Texture2D _grassTopTexCache;
+private static Texture2D _grassSideTexCache;
+private float _randomTickTimer = 0f;
+private const float RandomTickInterval = 0.05f; // 20 ticks per second
+private const int RandomTicksPerInterval = 3;
 
     private enum FaceDirection
     {
@@ -89,13 +94,77 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
     {
         _isDirty = true;
     }
+    public void RequestRebuild()
+{
+    _isDirty = true;
+}
 
- public override void _Process(double delta)
+public override void _Process(double delta)
 {
     if (_isDirty && IsGenerated)
     {
         BuildMesh();
         _isDirty = false;
+    }
+
+    if (!IsGenerated) return;
+
+    _randomTickTimer += (float)delta;
+    if (_randomTickTimer >= RandomTickInterval)
+    {
+        _randomTickTimer = 0f;
+        RandomTick();
+    }
+}
+
+private void RandomTick()
+{
+    for (int i = 0; i < RandomTicksPerInterval; i++)
+    {
+        int rx = GD.RandRange(0, SIZE - 1);
+        int ry = GD.RandRange(0, HEIGHT - 1);
+        int rz = GD.RandRange(0, SIZE - 1);
+
+        BlockState block = _blocks[rx, ry, rz];
+        if (!block.HasFeature("grass")) continue;
+
+        // Must have air above
+        if (ry + 1 < HEIGHT && !_blocks[rx, ry + 1, rz].IsAir()) continue;
+
+        // Search in a 3x3x3 area for eligible dirt
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    int nx = rx + dx;
+                    int ny = ry + dy;
+                    int nz = rz + dz;
+
+                    if (nx < 0 || nx >= SIZE || ny < 0 || ny >= HEIGHT || nz < 0 || nz >= SIZE)
+                        continue;
+
+                    BlockState neighbor = _blocks[nx, ny, nz];
+                    if (neighbor.BlockId != "dirt" || neighbor.HasFeature("grass"))
+                        continue;
+
+                    // Must have air above
+                    if (ny + 1 >= HEIGHT) continue;
+                    if (!_blocks[nx, ny + 1, nz].IsAir()) continue;
+
+                    // Spread grass!
+                    _blocks[nx, ny, nz] = new BlockState 
+                    { 
+                        BlockId = "dirt", 
+                        BitMask = 0xFF, 
+                        Features = new[] { "grass" } 
+                    };
+                    _isDirty = true;
+                    return; // one spread per tick
+                }
+            }
+        }
     }
 }
 
@@ -103,6 +172,7 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
 {
     var solidSurfaces = new Dictionary<Texture2D, SurfaceTool>();
     var transparentSurfaces = new Dictionary<Texture2D, SurfaceTool>();
+    
 
     for (int x = 0; x < SIZE; x++)
     {
@@ -128,6 +198,7 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
             }
         }
     }
+    
 
     var arrayMesh = new ArrayMesh();
     var solidOnlyMesh = new ArrayMesh();
@@ -148,7 +219,124 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
             arrayMesh.SurfaceSetMaterial(surfIdx, mat);
         }
     }
+    
+// Grass overlay pass
+if (_grassTopTexCache == null)
+    _grassTopTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
+if (_grassSideTexCache == null)
+    _grassSideTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
 
+var grassTopTex = _grassTopTexCache;
+var grassSideTex = _grassSideTexCache;
+var grassTopST = new SurfaceTool();
+var grassSideST = new SurfaceTool();
+grassTopST.Begin(Mesh.PrimitiveType.Triangles);
+grassSideST.Begin(Mesh.PrimitiveType.Triangles);
+
+float o = 0.002f; // z-fight offset
+
+for (int x = 0; x < SIZE; x++)
+{
+    for (int y = 0; y < HEIGHT; y++)
+    {
+        for (int z = 0; z < SIZE; z++)
+        {
+            BlockState block = _blocks[x, y, z];
+            if (!block.HasFeature("grass")) continue;
+
+            BlockResource resource = BlockRegistry.Instance.GetBlock(block.BlockId);
+            if (resource == null) continue;
+
+            // Top face
+            if (ShouldDrawFace(x, y + 1, z, false))
+            {
+                grassTopST.SetUV(new Vector2(0, 0)); grassTopST.AddVertex(new Vector3(x,     y + 1, z));
+                grassTopST.SetUV(new Vector2(1, 0)); grassTopST.AddVertex(new Vector3(x + 1, y + 1, z));
+                grassTopST.SetUV(new Vector2(1, 1)); grassTopST.AddVertex(new Vector3(x + 1, y + 1, z + 1));
+                grassTopST.SetUV(new Vector2(0, 0)); grassTopST.AddVertex(new Vector3(x,     y + 1, z));
+                grassTopST.SetUV(new Vector2(1, 1)); grassTopST.AddVertex(new Vector3(x + 1, y + 1, z + 1));
+                grassTopST.SetUV(new Vector2(0, 1)); grassTopST.AddVertex(new Vector3(x,     y + 1, z + 1));
+            }
+
+            // North face (z-) — fixed winding
+if (ShouldDrawFace(x, y, z - 1, false))
+{
+    grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x + 1, y + 1, z - o));
+    grassSideST.SetUV(new Vector2(1, 0)); grassSideST.AddVertex(new Vector3(x,     y + 1, z - o));
+    grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x,     y,     z - o));
+    grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x + 1, y + 1, z - o));
+    grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x,     y,     z - o));
+    grassSideST.SetUV(new Vector2(0, 1)); grassSideST.AddVertex(new Vector3(x + 1, y,     z - o));
+}
+
+            // South face (z+) — faces toward +Z, normal points +Z
+            if (ShouldDrawFace(x, y, z + 1, false))
+            {
+                grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x,     y + 1, z + 1 + o));
+                grassSideST.SetUV(new Vector2(1, 0)); grassSideST.AddVertex(new Vector3(x + 1, y + 1, z + 1 + o));
+                grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x + 1, y,     z + 1 + o));
+                grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x,     y + 1, z + 1 + o));
+                grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x + 1, y,     z + 1 + o));
+                grassSideST.SetUV(new Vector2(0, 1)); grassSideST.AddVertex(new Vector3(x,     y,     z + 1 + o));
+            }
+
+            // West face (x-) — faces toward -X, normal points -X
+            if (ShouldDrawFace(x - 1, y, z, false))
+            {
+                grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x - o, y + 1, z));
+                grassSideST.SetUV(new Vector2(1, 0)); grassSideST.AddVertex(new Vector3(x - o, y + 1, z + 1));
+                grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x - o, y,     z + 1));
+                grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x - o, y + 1, z));
+                grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x - o, y,     z + 1));
+                grassSideST.SetUV(new Vector2(0, 1)); grassSideST.AddVertex(new Vector3(x - o, y,     z));
+            }
+
+            // East face (x+) — fixed winding
+if (ShouldDrawFace(x + 1, y, z, false))
+{
+    grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x + 1 + o, y + 1, z + 1));
+    grassSideST.SetUV(new Vector2(1, 0)); grassSideST.AddVertex(new Vector3(x + 1 + o, y + 1, z));
+    grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x + 1 + o, y,     z));
+    grassSideST.SetUV(new Vector2(0, 0)); grassSideST.AddVertex(new Vector3(x + 1 + o, y + 1, z + 1));
+    grassSideST.SetUV(new Vector2(1, 1)); grassSideST.AddVertex(new Vector3(x + 1 + o, y,     z));
+    grassSideST.SetUV(new Vector2(0, 1)); grassSideST.AddVertex(new Vector3(x + 1 + o, y,     z + 1));
+}
+        }
+    }
+}
+
+// Commit grass overlays to mesh
+if (grassTopST != null)
+{
+    grassTopST.GenerateNormals();
+    grassTopST.Commit(arrayMesh);
+    int surfIdx = arrayMesh.GetSurfaceCount() - 1;
+    if (surfIdx >= 0)
+    {
+        var mat = new StandardMaterial3D();
+        mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+        mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+        mat.AlbedoTexture = grassTopTex;
+        arrayMesh.SurfaceSetMaterial(surfIdx, mat);
+    }
+}
+
+if (grassSideST != null)
+{
+    grassSideST.GenerateNormals();
+    grassSideST.Commit(arrayMesh);
+    int surfIdx = arrayMesh.GetSurfaceCount() - 1;
+    if (surfIdx >= 0)
+    {
+        var mat = new StandardMaterial3D();
+        mat.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+        mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+        mat.AlphaScissorThreshold = 0.1f;
+        mat.AlbedoTexture = grassSideTex;
+        mat.RenderPriority = 1;
+        arrayMesh.SurfaceSetMaterial(surfIdx, mat);
+    }
+}
     foreach (var kvp in transparentSurfaces)
     {
         kvp.Value.GenerateNormals();
@@ -172,6 +360,7 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
     }
 
     IsGenerated = true;
+    
 }
 private void BuildCollision(ArrayMesh mesh)
 {

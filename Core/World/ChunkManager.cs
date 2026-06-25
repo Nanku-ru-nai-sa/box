@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 public partial class ChunkManager : Node3D
 {
-    [Export] public int RenderDistance { get; set; } = 4;
+    [Export] public int RenderDistance { get; set; } = 3;
     [Export] public int Seed { get; set; } = 12345;
-
     private Dictionary<Vector3I, Chunk> _chunks = new();
     private Vector3I _lastPlayerChunk = new Vector3I(999, 999, 999);
     private Node3D _player;
     private FastNoiseLite _outcropNoise = new FastNoiseLite();
-
+    private Queue<Vector3I> _chunksToLoad = new Queue<Vector3I>();
+    private const int ChunksPerFrame = 2;
     public override void _Ready()
     {
         _noise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
@@ -51,25 +51,27 @@ public partial class ChunkManager : Node3D
 
         if (_player != null)
     _player.GlobalPosition = new Vector3(8, 60, 8);
+    SetProcess(true);
     }
 
    public override void _Process(double delta)
 {
-    if (_player == null) return;
-
-    Vector3I currentChunk = WorldToChunk(_player.GlobalPosition);
-    
-    // Only trigger on X/Z change, ignore Y (player falling changes Y constantly)
-    Vector3I currentChunkXZ = new Vector3I(currentChunk.X, 0, currentChunk.Z);
-    Vector3I lastChunkXZ = new Vector3I(_lastPlayerChunk.X, 0, _lastPlayerChunk.Z);
-    
-    if (currentChunkXZ != lastChunkXZ)
+    if (_player == null)
     {
-        _lastPlayerChunk = currentChunk;
-        UpdateChunks();
+        var found = GetTree().Root.FindChild("player", true, false);
+        _player = found as Node3D;
+        if (_player == null) return;
     }
-}
 
+    // Load queued chunks gradually
+int loaded = 0;
+while (_chunksToLoad.Count > 0 && loaded < ChunksPerFrame)
+{
+    Vector3I chunkPos = _chunksToLoad.Dequeue();
+if (!_chunks.ContainsKey(chunkPos))
+    LoadChunk(chunkPos);
+}
+}
 private string SaveDirectory => "user://saves/world1/";
 
 public void SaveModifiedChunks()
@@ -150,23 +152,23 @@ public void LoadChunkModifications(Chunk chunk, Vector3I chunkPos)
 
         GD.Print($"UpdateChunks - player chunk: {playerChunk}");
 
-        for (int x = -RenderDistance; x <= RenderDistance; x++)
+       for (int x = -RenderDistance; x <= RenderDistance; x++)
+{
+    for (int z = -RenderDistance; z <= RenderDistance; z++)
+    {
+        for (int y = 0; y < 4; y++)
         {
-            for (int z = -RenderDistance; z <= RenderDistance; z++)
-            {
-                for (int y = 0; y < 6; y++)
-                {
-                    Vector3I chunkPos = new Vector3I(
-                        playerChunk.X + x,
-                        y,
-                        playerChunk.Z + z
-                    );
+            Vector3I chunkPos = new Vector3I(
+                playerChunk.X + x,
+                y,
+                playerChunk.Z + z
+            );
 
-                    if (!_chunks.ContainsKey(chunkPos))
-                        LoadChunk(chunkPos);
-                }
-            }
+            if (!_chunks.ContainsKey(chunkPos))
+                _chunksToLoad.Enqueue(chunkPos);
         }
+    }
+}
 
         var toUnload = new List<Vector3I>();
         foreach (var pos in _chunks.Keys)
@@ -250,10 +252,14 @@ private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
                         block = new BlockState { BlockId = "dirt", BitMask = 0xFF, Features = new[] { "grass" } };
                     }
                 }
-                else if (worldY < adjustedTerrainHeight)
-                {
-                    block = new BlockState { BlockId = "stone", BitMask = 0xFF };
-                }
+                else if (worldY < adjustedTerrainHeight && worldY >= adjustedTerrainHeight - 3)
+{
+    block = new BlockState { BlockId = "dirt", BitMask = 0xFF };
+}
+else if (worldY < adjustedTerrainHeight - 3)
+{
+    block = new BlockState { BlockId = "stone", BitMask = 0xFF };
+}
                 else if (worldY <= waterLevel && worldY > terrainHeight)
                 {
                     block = new BlockState { BlockId = "water", BitMask = 0xFF };
