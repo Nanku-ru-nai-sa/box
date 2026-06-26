@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://haag104fi7d5"
-path="res://.godot/imported/diamond block.png-557313e9bd7bcb4f7ff6bb24d2ac6e1f.ctex"
+uid="uid://dh5pdsr3rx7ca"
+path="res://.godot/imported/dandilion.png-cd469edb53c8bc61adc5bd6d87e10218.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/diamond block.png"
-dest_files=["res://.godot/imported/diamond block.png-557313e9bd7bcb4f7ff6bb24d2ac6e1f.ctex"]
+source_file="res://Assets/Textures/Blocks/dandilion.png"
+dest_files=["res://.godot/imported/dandilion.png-cd469edb53c8bc61adc5bd6d87e10218.ctex"]
 
 [params]
 

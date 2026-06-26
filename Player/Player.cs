@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 public partial class Player : CharacterBody3D
 {
@@ -34,11 +35,18 @@ public partial class Player : CharacterBody3D
     private Control _inventoryScreen;
     private Label[] _inventorySlotLabels = new Label[20];
     private bool _inventoryOpen = false;
+    private bool _showChunkBorders = false;
+    private bool _hudVisible = true;
+    private CanvasLayer _hotbarLayer;
+    private CanvasLayer _crosshairLayer;
+    private readonly List<MeshInstance3D> _chunkBorderMeshes = new();
 
     public bool CanDoubleJump { get; set; } = false;
     public bool CanWallClimb { get; set; } = false;
     public bool CanGlide { get; set; } = false;
     public bool CanGrapple { get; set; } = false;
+
+    
 
     public override void _Ready()
     {
@@ -49,6 +57,24 @@ public partial class Player : CharacterBody3D
         _inventory = new Inventory();
         AddChild(_inventory);
         
+        _crosshairLayer = new CanvasLayer();
+        GetTree().Root.CallDeferred("add_child", _crosshairLayer);
+
+        var crosshair = new ColorRect();
+        crosshair.Color = new Color(1, 1, 1);
+        crosshair.Size = new Vector2(2, 2);
+        crosshair.PivotOffset = new Vector2(1, 1);
+        crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
+        crosshair.AnchorLeft = 0.5f;
+        crosshair.AnchorRight = 0.5f;
+        crosshair.AnchorTop = 0.5f;
+        crosshair.AnchorBottom = 0.5f;
+        crosshair.OffsetLeft = -1;
+        crosshair.OffsetTop = -1;
+        crosshair.OffsetRight = 1;
+        crosshair.OffsetBottom = 1;
+        _crosshairLayer.CallDeferred("add_child", crosshair);
+
 
         _blockOutline = new MeshInstance3D();
         var outlineMesh = new ArrayMesh();
@@ -86,8 +112,9 @@ public partial class Player : CharacterBody3D
         _blockOutline.Visible = false;
         GetTree().Root.CallDeferred("add_child", _blockOutline);
 
-        var hotbarLayer = new CanvasLayer();
-        GetTree().Root.CallDeferred("add_child", hotbarLayer);
+        _hotbarLayer = new CanvasLayer();
+        GetTree().Root.CallDeferred("add_child", _hotbarLayer);
+        
 
         var hotbarContainer = new HBoxContainer();
         hotbarContainer.AnchorLeft = 0.5f;
@@ -128,7 +155,7 @@ _hotbarLabels[i] = label;
             _hotbarSlots[i] = slot;
         }
 
-        hotbarLayer.CallDeferred("add_child", hotbarContainer);
+        _hotbarLayer.CallDeferred("add_child", hotbarContainer);
 
         // Inventory Screen
 var inventoryLayer = new CanvasLayer();
@@ -440,9 +467,27 @@ private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
             }
 
             if (keyEvent.Keycode == Key.Tab)
-{
-    ToggleInventory();
-}
+            {
+                ToggleInventory();
+            }
+            if (keyEvent.Keycode == Key.F1)
+            {
+                _hudVisible = !_hudVisible;
+                if (_hotbarLayer != null) _hotbarLayer.Visible = _hudVisible;
+                if (_crosshairLayer != null) _crosshairLayer.Visible = _hudVisible;
+            }
+            if (keyEvent.Keycode == Key.F2)
+            {
+                var image = GetViewport().GetTexture().GetImage();
+                string path = $"user://screenshot_{Time.GetDatetimeStringFromSystem().Replace(":", "-")}.png";
+                image.SavePng(path);
+                GD.Print($"Screenshot saved: {path}");
+            }
+            if (keyEvent.Keycode == Key.F3)
+            {
+                _showChunkBorders = !_showChunkBorders;
+                ToggleChunkBorders();
+            }
 
             if (keyEvent.Keycode == Key.F5)
             {
@@ -452,6 +497,62 @@ private bool IsBlockWaterAt(ChunkManager chunkManager, Vector3 worldPos)
             }
         }
     }
+
+private void ToggleChunkBorders()
+{
+    foreach (var mesh in _chunkBorderMeshes)
+        mesh.QueueFree();
+    _chunkBorderMeshes.Clear();
+
+    if (!_showChunkBorders) return;
+
+    var chunkManager = GetTree().Root.GetNodeOrNull<ChunkManager>("TestWorld/ChunkManager");
+    if (chunkManager == null) return;
+
+    var mat = new StandardMaterial3D();
+    mat.AlbedoColor = new Color(1, 1, 0);
+    mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
+
+    foreach (var chunkPos in chunkManager.GetLoadedChunkPositions())
+    {
+        float x0 = chunkPos.X * Chunk.SIZE;
+        float x1 = x0 + Chunk.SIZE;
+        float y0 = chunkPos.Y * Chunk.HEIGHT;
+        float y1 = y0 + Chunk.HEIGHT;
+        float z0 = chunkPos.Z * Chunk.SIZE;
+        float z1 = z0 + Chunk.SIZE;
+
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Lines);
+
+        // Bottom face
+        st.AddVertex(new Vector3(x0, y0, z0)); st.AddVertex(new Vector3(x1, y0, z0));
+        st.AddVertex(new Vector3(x1, y0, z0)); st.AddVertex(new Vector3(x1, y0, z1));
+        st.AddVertex(new Vector3(x1, y0, z1)); st.AddVertex(new Vector3(x0, y0, z1));
+        st.AddVertex(new Vector3(x0, y0, z1)); st.AddVertex(new Vector3(x0, y0, z0));
+
+        // Top face
+        st.AddVertex(new Vector3(x0, y1, z0)); st.AddVertex(new Vector3(x1, y1, z0));
+        st.AddVertex(new Vector3(x1, y1, z0)); st.AddVertex(new Vector3(x1, y1, z1));
+        st.AddVertex(new Vector3(x1, y1, z1)); st.AddVertex(new Vector3(x0, y1, z1));
+        st.AddVertex(new Vector3(x0, y1, z1)); st.AddVertex(new Vector3(x0, y1, z0));
+
+        // Vertical edges
+        st.AddVertex(new Vector3(x0, y0, z0)); st.AddVertex(new Vector3(x0, y1, z0));
+        st.AddVertex(new Vector3(x1, y0, z0)); st.AddVertex(new Vector3(x1, y1, z0));
+        st.AddVertex(new Vector3(x1, y0, z1)); st.AddVertex(new Vector3(x1, y1, z1));
+        st.AddVertex(new Vector3(x0, y0, z1)); st.AddVertex(new Vector3(x0, y1, z1));
+
+        var arrayMesh = st.Commit();
+
+        var border = new MeshInstance3D();
+        border.Mesh = arrayMesh;
+        border.MaterialOverride = mat;
+
+        GetTree().Root.AddChild(border);
+        _chunkBorderMeshes.Add(border);
+    }
+}
     private void ToggleInventory()
 {
     _inventoryOpen = !_inventoryOpen;
@@ -500,12 +601,17 @@ private void UpdateInventoryScreen()
     if (!_rayCast.IsColliding()) return;
 
     var collider = _rayCast.GetCollider() as Node;
+    // Check if we hit a melon
+    if (collider is Melon melon)
+    {
+        melon.Break(_inventory);
+        return;
+    }
     if (collider == null || !collider.HasMeta("chunk")) return;
 
     Chunk chunk = (Chunk)collider.GetMeta("chunk").AsGodotObject();
     Vector3 hitPoint = _rayCast.GetCollisionPoint();
     Vector3 hitNormal = _rayCast.GetCollisionNormal();
-
     Vector3 targetPos = hitPoint - hitNormal * 0.5f;
 
     Vector3 localPos = targetPos - chunk.GlobalPosition;
@@ -513,9 +619,21 @@ private void UpdateInventoryScreen()
     int by = Mathf.FloorToInt(localPos.Y);
     int bz = Mathf.FloorToInt(localPos.Z);
 
+// Check one block above first - might be a non-solid decoration
+BlockState blockAbove = chunk.GetBlock(bx, by + 1, bz);
+if (blockAbove.BlockId == "rose" || blockAbove.BlockId == "clover")
+{
+    if (blockAbove.BlockId == "rose")
+        _inventory.AddItem("rose", 1);
+    chunk.SetBlock(bx, by + 1, bz, BlockState.Air);
+    return;
+}
+
     BlockState brokenBlock = chunk.GetBlock(bx, by, bz);
     if (!brokenBlock.IsAir())
     {
+           // Rose drops item, clover just breaks
+        if (brokenBlock.BlockId != "air" && brokenBlock.BlockId != "clover")
         _inventory.AddItem(brokenBlock.BlockId, 1);
         GD.Print($"Picked up: {brokenBlock.BlockId}, total now: {_inventory.GetItemCount(brokenBlock.BlockId)}");
     }

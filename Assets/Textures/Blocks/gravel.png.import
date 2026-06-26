@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dp1uymf5w6awx"
-path="res://.godot/imported/flower_allium_17.png-0f6a54ffc4b0d8de5cce102e1004e089.ctex"
+uid="uid://xitvscsy0cwn"
+path="res://.godot/imported/gravel.png-5bae44bef3686600b1f9b1ddd8665f96.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/flower_allium_17.png"
-dest_files=["res://.godot/imported/flower_allium_17.png-0f6a54ffc4b0d8de5cce102e1004e089.ctex"]
+source_file="res://Assets/Textures/Blocks/gravel.png"
+dest_files=["res://.godot/imported/gravel.png-5bae44bef3686600b1f9b1ddd8665f96.ctex"]
 
 [params]
 

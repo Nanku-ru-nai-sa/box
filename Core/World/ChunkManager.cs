@@ -24,23 +24,6 @@ public partial class ChunkManager : Node3D
         var canvasLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", canvasLayer);
 
-        var crosshair = new ColorRect();
-        crosshair.Color = new Color(1, 1, 1);
-        crosshair.Size = new Vector2(2, 2);
-        crosshair.PivotOffset = new Vector2(1, 1);
-        crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
-
-        crosshair.AnchorLeft = 0.5f;
-        crosshair.AnchorRight = 0.5f;
-        crosshair.AnchorTop = 0.5f;
-        crosshair.AnchorBottom = 0.5f;
-        crosshair.OffsetLeft = -1;
-        crosshair.OffsetTop = -1;
-        crosshair.OffsetRight = 1;
-        crosshair.OffsetBottom = 1;
-
-        canvasLayer.CallDeferred("add_child", crosshair);
-
         if (_player == null)
             GD.Print("ChunkManager: No player found");
         else
@@ -73,7 +56,10 @@ if (!_chunks.ContainsKey(chunkPos))
 }
 }
 private string SaveDirectory => "user://saves/world1/";
-
+public IEnumerable<Vector3I> GetLoadedChunkPositions()
+{
+    return _chunks.Keys;
+}
 public void SaveModifiedChunks()
 {
     var dir = DirAccess.Open("user://");
@@ -275,10 +261,105 @@ else if (worldY < adjustedTerrainHeight - 3)
     }
 
     GenerateTrees(chunk, chunkPos);
+    SpawnMelons(chunk, chunkPos);
+    SpawnDecorations(chunk, chunkPos);
     chunk.MarkDirty();
 }
-private RandomNumberGenerator _treeRng = new RandomNumberGenerator();
+private void SpawnMelons(Chunk chunk, Vector3I chunkPos)
+{
+    _melonRng.Seed = (ulong)(chunkPos.X * 23456789 ^ chunkPos.Z * 98765432 ^ chunkPos.Y * 11111111);
 
+    for (int x = 1; x < Chunk.SIZE - 1; x++)
+    {
+        for (int z = 1; z < Chunk.SIZE - 1; z++)
+        {
+            if (_melonRng.Randf() > 0.004f) continue; // 1% chance per column
+
+            int worldX = chunkPos.X * Chunk.SIZE + x;
+            int worldZ = chunkPos.Z * Chunk.SIZE + z;
+
+            float noiseValue = _noise.GetNoise2D(worldX, worldZ);
+            int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
+
+            float outcropValue = _outcropNoise.GetNoise2D(worldX, worldZ);
+            int outcropBonus = 0;
+            if (outcropValue > 0.35f)
+            {
+                float strength = (outcropValue - 0.35f) / 0.65f;
+                outcropBonus = 1 + (int)(strength * 3f);
+            }
+
+            int surfaceY = terrainHeight + outcropBonus;
+
+            // Only spawn on dirt surface (not stone outcrops, not underwater)
+            int localSurfaceY = surfaceY - (chunkPos.Y * Chunk.HEIGHT);
+            if (localSurfaceY < 0 || localSurfaceY >= Chunk.HEIGHT) continue;
+
+            BlockState surfaceBlock = chunk.GetBlock(x, localSurfaceY, z);
+            if (surfaceBlock.BlockId != "dirt") continue;
+
+            // Spawn melon just above surface
+            float worldSurfaceY = chunkPos.Y * Chunk.HEIGHT + localSurfaceY + 1.5f;
+
+            var melon = new Melon();
+            GetParent().CallDeferred("add_child", melon);
+            melon.SetDeferred("global_position", new Vector3(worldX + 0.5f, worldSurfaceY, worldZ + 0.5f));
+        }
+    }
+}
+private RandomNumberGenerator _treeRng = new RandomNumberGenerator();
+private RandomNumberGenerator _melonRng = new RandomNumberGenerator();
+private RandomNumberGenerator _decorRng = new RandomNumberGenerator();
+
+private void SpawnDecorations(Chunk chunk, Vector3I chunkPos)
+{
+    _decorRng.Seed = (ulong)(chunkPos.X * 11111111 ^ chunkPos.Z * 77777777 ^ chunkPos.Y * 33333333);
+
+    for (int x = 0; x < Chunk.SIZE; x++)
+    {
+        for (int z = 0; z < Chunk.SIZE; z++)
+        {
+            float roll = _decorRng.Randf();
+            if (roll > 0.05f) continue; // 5% chance per column
+
+            int worldX = chunkPos.X * Chunk.SIZE + x;
+            int worldZ = chunkPos.Z * Chunk.SIZE + z;
+
+            float noiseValue = _noise.GetNoise2D(worldX, worldZ);
+            int terrainHeight = (int)((noiseValue + 1f) * 0.5f * 32f + 16f);
+
+            float outcropValue = _outcropNoise.GetNoise2D(worldX, worldZ);
+            int outcropBonus = 0;
+            if (outcropValue > 0.35f)
+            {
+                float strength = (outcropValue - 0.35f) / 0.65f;
+                outcropBonus = 1 + (int)(strength * 3f);
+            }
+
+            int surfaceY = terrainHeight + outcropBonus;
+            int localSurfaceY = surfaceY - (chunkPos.Y * Chunk.HEIGHT);
+
+            if (localSurfaceY < 0 || localSurfaceY >= Chunk.HEIGHT - 1) continue;
+
+            // Must be above water
+            if (terrainHeight < 30) continue;
+
+            // Check surface block exists
+            BlockState surfaceBlock = chunk.GetBlock(x, localSurfaceY, z);
+            if (surfaceBlock.IsAir()) continue;
+
+            // Check space above is empty
+            BlockState above = chunk.GetBlock(x, localSurfaceY + 1, z);
+            if (!above.IsAir()) continue;
+
+            // Pick decoration type
+            string decorId = _decorRng.Randf() < 0.4f ? "rose" : "clover";
+
+            chunk.SetBlockInternal(x, localSurfaceY + 1, z,
+                new BlockState { BlockId = decorId, BitMask = 0xFF });
+        }
+    }
+}
 private void GenerateTrees(Chunk chunk, Vector3I chunkPos)
 {
     _treeRng.Seed = (ulong)(chunkPos.X * 73856093 ^ chunkPos.Z * 19349663 ^ chunkPos.Y * 83492791);

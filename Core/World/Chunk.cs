@@ -191,10 +191,14 @@ private void RandomTick()
                     ? transparentSurfaces
                     : solidSurfaces;
 
-                if (block.IsFullBlock())
-                    AddFullBlockFaces(surfaces, block, resource, x, y, z);
-                else
-                    AddChiseledBlockFaces(surfaces, block, resource, x, y, z);
+                if (resource.IsCross)
+    AddCrossFaces(surfaces, resource, x, y, z);
+else if (resource.IsFlatGround)
+    AddFlatGroundFace(surfaces, resource, x, y, z);
+else if (block.IsFullBlock())
+    AddFullBlockFaces(surfaces, block, resource, x, y, z);
+else
+    AddChiseledBlockFaces(surfaces, block, resource, x, y, z);
             }
         }
     }
@@ -220,23 +224,23 @@ private void RandomTick()
         }
     }
     
-// Grass overlay pass
-if (_grassTopTexCache == null)
-    _grassTopTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
-if (_grassSideTexCache == null)
-    _grassSideTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
+    // Grass overlay pass
+    if (_grassTopTexCache == null)
+        _grassTopTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
+    if (_grassSideTexCache == null)
+        _grassSideTexCache = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
 
-var grassTopTex = _grassTopTexCache;
-var grassSideTex = _grassSideTexCache;
-var grassTopST = new SurfaceTool();
-var grassSideST = new SurfaceTool();
-grassTopST.Begin(Mesh.PrimitiveType.Triangles);
-grassSideST.Begin(Mesh.PrimitiveType.Triangles);
+    var grassTopTex = _grassTopTexCache;
+    var grassSideTex = _grassSideTexCache;
+    var grassTopST = new SurfaceTool();
+    var grassSideST = new SurfaceTool();
+    grassTopST.Begin(Mesh.PrimitiveType.Triangles);
+    grassSideST.Begin(Mesh.PrimitiveType.Triangles);
 
-float o = 0.002f; // z-fight offset
+    float o = 0.002f; // z-fight offset
 
-for (int x = 0; x < SIZE; x++)
-{
+    for (int x = 0; x < SIZE; x++)
+    {
     for (int y = 0; y < HEIGHT; y++)
     {
         for (int z = 0; z < SIZE; z++)
@@ -361,6 +365,85 @@ if (grassSideST != null)
 
     IsGenerated = true;
     
+}
+
+private void AddCrossFaces(Dictionary<Texture2D, SurfaceTool> surfaces,
+    BlockResource resource, int x, int y, int z)
+{
+    Texture2D tex = resource.TextureSide ?? resource.TextureTop;
+    if (tex == null) return;
+
+    if (!surfaces.TryGetValue(tex, out SurfaceTool st))
+    {
+        st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        surfaces[tex] = st;
+    }
+
+    // Two diagonal planes crossing in the middle
+    // Diagonal 1: (-0.5, 0, -0.5) to (0.5, 0, 0.5)
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,       y + 1, z));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1,   y,     z + 1));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,       y + 1, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1,   y,     z + 1));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x,       y,     z));
+
+    // Back side of diagonal 1
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z + 1));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x,       y + 1, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x,       y,     z));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x,       y,     z));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x + 1,   y,     z + 1));
+
+    // Diagonal 2: (0.5, 0, -0.5) to (-0.5, 0, 0.5)
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x,       y + 1, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x,       y,     z + 1));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x,       y,     z + 1));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x + 1,   y,     z));
+
+    // Back side of diagonal 2
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,       y + 1, z + 1));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x + 1,   y + 1, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1,   y,     z));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,       y + 1, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1,   y,     z));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x,       y,     z + 1));
+}
+
+private void AddFlatGroundFace(Dictionary<Texture2D, SurfaceTool> surfaces,
+    BlockResource resource, int x, int y, int z)
+{
+    Texture2D tex = resource.TextureTop;
+    if (tex == null) return;
+
+    if (!surfaces.TryGetValue(tex, out SurfaceTool st))
+    {
+        st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        surfaces[tex] = st;
+    }
+
+    float flatY = y + 0.0625f; // 1/16 of a block high
+
+    // Top face
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,     flatY, z));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x + 1, flatY, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1, flatY, z + 1));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,     flatY, z));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1, flatY, z + 1));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x,     flatY, z + 1));
+
+    // Bottom face (so visible from below too)
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,     flatY, z + 1));
+    st.SetUV(new Vector2(1, 0)); st.AddVertex(new Vector3(x + 1, flatY, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1, flatY, z));
+    st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,     flatY, z + 1));
+    st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1, flatY, z));
+    st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x,     flatY, z));
 }
 private void BuildCollision(ArrayMesh mesh)
 {

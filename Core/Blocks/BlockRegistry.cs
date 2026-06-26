@@ -24,6 +24,10 @@ public partial class BlockRegistry : Node
         var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
+        var melon_topTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_top.png");
+        var melon_sideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_side.png");
+        var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rose.png");
+        var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
 
         var air = new BlockResource();
         air.BlockId = "air";
@@ -105,6 +109,47 @@ public partial class BlockRegistry : Node
         water.TextureSide = waterTex;
         water.TextureBottom = waterTex;
         Register(water);
+
+        var melon = new BlockResource();
+        melon.BlockId = "melon";
+        melon.DisplayName = "Melon";
+        melon.IsSolid = false;
+        melon.CanChisel = false;
+        melon.GrassCanGrow = false;
+        melon.Hardness = 0.5f;
+        melon.TextureTop = melon_topTex;
+        melon.TextureSide = melon_sideTex;
+        melon.TextureBottom = melon_topTex;
+        Register(melon);
+
+        var rose = new BlockResource();
+        rose.BlockId = "rose";
+        rose.DisplayName = "Rose";
+        rose.IsSolid = false;
+        rose.CanChisel = false;
+        rose.GrassCanGrow = false;
+        rose.Hardness = 0f;
+        rose.IsTransparent = true;
+        rose.TextureTop = roseTex;
+        rose.TextureSide = roseTex;
+        rose.TextureBottom = roseTex;
+        rose.IsCross = true;
+        Register(rose);
+
+        var clover = new BlockResource();
+        clover.BlockId = "clover";
+        clover.DisplayName = "Clover";
+        clover.IsSolid = false;
+        clover.CanChisel = false;
+        clover.GrassCanGrow = false;
+        clover.Hardness = 0f;
+        clover.IsTransparent = true;
+        clover.TextureTop = cloverTex;
+        clover.TextureSide = cloverTex;
+        clover.TextureBottom = cloverTex;
+        clover.IsFlatGround = true;
+        Register(clover);
+
     }
 
     private void Register(BlockResource block)
