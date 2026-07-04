@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="Box"
-run/main_scene="uid://dutb4nvr876nw"
+run/main_scene="uid://btclwkvxvyrcq"
 config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 
 [autoload]
@@ -19,6 +19,8 @@ config/features=PackedStringArray("4.6", "C#", "Forward Plus")
 ItemRegistry="*uid://bydal6mir581d"
 AudioManager="*uid://bmys8t32u05v1"
 BlockRegistry="*uid://hxvef2suqv2e"
+SettingsManager="*uid://bhfhvq3abtd8q"
+GameModeManager="*uid://yy85qxxs4go8"
 
 [display]
 
@@ -73,4 +75,5 @@ move_right={
 
 [rendering]
 
+rendering_device/d3d12/max_resource_descriptors=131072
 rendering_device/driver.windows="d3d12"

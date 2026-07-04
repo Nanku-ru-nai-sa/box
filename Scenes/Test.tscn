@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://r7p76d2t111s" path="res://Core/World/DayNightCycle.cs" id="1_0dy5s"]
 [ext_resource type="Script" uid="uid://dhfrwx04yvws0" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
 [ext_resource type="PackedScene" uid="uid://cwo0b48pnm0pr" path="res://Player/player.tscn" id="2_gxb1y"]
+[ext_resource type="Script" uid="uid://d2km18kovq21" path="res://Scenes/LoadingScreen.cs" id="3_f2nln"]
 
 [node name="TestWorld" type="Node3D" unique_id=1392221281]
 
@@ -19,5 +20,8 @@ sky_mode = 1
 [node name="ChunkManager" type="Node3D" parent="." unique_id=1617427409]
 script = ExtResource("1_ko2s7")
 
+[node name="LoadingScreen" type="Node" parent="." unique_id=969570765]
+script = ExtResource("3_f2nln")
+
 [node name="player" parent="." unique_id=189951435 instance=ExtResource("2_gxb1y")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 60, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 500, 8)

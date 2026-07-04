@@ -3,12 +3,12 @@ using System;
 
 public partial class Inventory : Node
 {
-    [Export] public int SlotCount { get; set; } = 20;
-    [Export] public int MaxStackSize { get; set; } = 64;
+    [Export] public int SlotCount { get; set; } = 40;
+    [Export] public int MaxStackSize { get; set; } = 1024;
 
     public InventorySlot[] Slots { get; private set; }
 
-    public event Action OnInventoryChanged;
+    public Action OnInventoryChanged;
 
     public override void _Ready()
     {

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dnxln503q8t6e"
-path="res://.godot/imported/coal block.png-8d4ed24a7ca3e79413a8255f025d1a3a.ctex"
+uid="uid://dtnpa5cl5yju8"
+path="res://.godot/imported/obsidian.png-6554d046bf632898d2b7c09a08016164.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/coal block.png"
-dest_files=["res://.godot/imported/coal block.png-8d4ed24a7ca3e79413a8255f025d1a3a.ctex"]
+source_file="res://Assets/Textures/Items/obsidian.png"
+dest_files=["res://.godot/imported/obsidian.png-6554d046bf632898d2b7c09a08016164.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dh5pdsr3rx7ca"
-path="res://.godot/imported/dandilion.png-cd469edb53c8bc61adc5bd6d87e10218.ctex"
+uid="uid://c1uhw8d6mhlcx"
+path="res://.godot/imported/bedrock.png-44dbc3ed5e46f6d48ae70ad3b09ab1ae.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/dandilion.png"
-dest_files=["res://.godot/imported/dandilion.png-cd469edb53c8bc61adc5bd6d87e10218.ctex"]
+source_file="res://Assets/Textures/Blocks/bedrock.png"
+dest_files=["res://.godot/imported/bedrock.png-44dbc3ed5e46f6d48ae70ad3b09ab1ae.ctex"]
 
 [params]
 

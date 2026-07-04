@@ -15,8 +15,10 @@ public partial class BlockRegistry : Node
 
     private void RegisterBlocks()
     {
+        // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
+        var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
         var grassSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
         var sandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/sand.png");
@@ -24,132 +26,154 @@ public partial class BlockRegistry : Node
         var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
-        var melon_topTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_top.png");
-        var melon_sideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_side.png");
+        var gravelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gravel.png");
+        var clayTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clay.png");
+        var bedrockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bedrock.png");
+        var coalOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/coal_ore.png");
+        var ironOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/iron_ore.png");
+        var goldOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gold_ore.png");
+        var diamondOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/diamond_ore.png");
+        var obsidianTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/obsidian.png");
+        var snowTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/snow.png");
+        var melonTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_top.png");
+        var melonSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_side.png");
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
+        var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
 
         var air = new BlockResource();
-        air.BlockId = "air";
-        air.DisplayName = "Air";
-        air.IsSolid = false;
-        air.CanChisel = false;
-        air.IsTransparent = true;
+        air.BlockId = "air"; air.DisplayName = "Air";
+        air.IsSolid = false; air.CanChisel = false; air.IsTransparent = true;
         Register(air);
 
         var dirt = new BlockResource();
-        dirt.BlockId = "dirt";
-        dirt.DisplayName = "Dirt";
-        dirt.IsSolid = true;
-        dirt.CanChisel = true;
-        dirt.GrassCanGrow = true;
-        dirt.Hardness = 0.5f;
-        dirt.TextureTop = dirtTex;
-        dirt.TextureSide = dirtTex;
-        dirt.TextureBottom = dirtTex;
+        dirt.BlockId = "dirt"; dirt.DisplayName = "Dirt";
+        dirt.IsSolid = true; dirt.CanChisel = true; dirt.GrassCanGrow = true; dirt.Hardness = 0.5f;
+        dirt.TextureTop = dirtTex; dirt.TextureSide = dirtTex; dirt.TextureBottom = dirtTex;
         Register(dirt);
 
+        // Grass Block (full block, no overlay needed)
+        var grassBlock = new BlockResource();
+        grassBlock.BlockId = "grass_block"; grassBlock.DisplayName = "Grass";
+        grassBlock.IsSolid = true; grassBlock.CanChisel = true; grassBlock.GrassCanGrow = false; grassBlock.Hardness = 0.5f;
+        grassBlock.TextureTop = grassTopTex; grassBlock.TextureSide = grassSideTex; grassBlock.TextureBottom = dirtTex;
+        Register(grassBlock);
+
         var stone = new BlockResource();
-        stone.BlockId = "stone";
-        stone.DisplayName = "Stone";
-        stone.IsSolid = true;
-        stone.CanChisel = true;
-        stone.GrassCanGrow = false;
-        stone.Hardness = 1.5f;
-        stone.TextureTop = stoneTex;
-        stone.TextureSide = stoneTex;
-        stone.TextureBottom = stoneTex;
+        stone.BlockId = "stone"; stone.DisplayName = "Stone";
+        stone.IsSolid = true; stone.CanChisel = true; stone.Hardness = 1.5f;
+        stone.TextureTop = stoneTex; stone.TextureSide = stoneTex; stone.TextureBottom = stoneTex;
         Register(stone);
 
+        var rock = new BlockResource();
+        rock.BlockId = "rock"; rock.DisplayName = "Rock";
+        rock.IsSolid = true; rock.CanChisel = true; rock.Hardness = 1.5f;
+        rock.TextureTop = rockTex; rock.TextureSide = rockTex; rock.TextureBottom = rockTex;
+        Register(rock);
+
         var sand = new BlockResource();
-        sand.BlockId = "sand";
-        sand.DisplayName = "Sand";
-        sand.IsSolid = true;
-        sand.CanChisel = true;
-        sand.GrassCanGrow = false;
-        sand.Hardness = 0.5f;
-        sand.TextureTop = sandTex;
-        sand.TextureSide = sandTex;
-        sand.TextureBottom = sandTex;
+        sand.BlockId = "sand"; sand.DisplayName = "Sand";
+        sand.IsSolid = true; sand.CanChisel = true; sand.Hardness = 0.5f;
+        sand.TextureTop = sandTex; sand.TextureSide = sandTex; sand.TextureBottom = sandTex;
         Register(sand);
 
+        var gravel = new BlockResource();
+        gravel.BlockId = "gravel"; gravel.DisplayName = "Gravel";
+        gravel.IsSolid = true; gravel.CanChisel = true; gravel.Hardness = 0.6f;
+        gravel.TextureTop = gravelTex; gravel.TextureSide = gravelTex; gravel.TextureBottom = gravelTex;
+        Register(gravel);
+
+        var clay = new BlockResource();
+        clay.BlockId = "clay"; clay.DisplayName = "Clay";
+        clay.IsSolid = true; clay.CanChisel = true; clay.Hardness = 0.6f;
+        clay.TextureTop = clayTex; clay.TextureSide = clayTex; clay.TextureBottom = clayTex;
+        Register(clay);
+
         var log = new BlockResource();
-        log.BlockId = "log";
-        log.DisplayName = "Log";
-        log.IsSolid = true;
-        log.CanChisel = true;
-        log.GrassCanGrow = false;
-        log.Hardness = 1.0f;
-        log.TextureTop = logTopTex;
-        log.TextureSide = logSideTex;
-        log.TextureBottom = logTopTex;
+        log.BlockId = "log"; log.DisplayName = "Log";
+        log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f;
+        log.TextureTop = logTopTex; log.TextureSide = logSideTex; log.TextureBottom = logTopTex;
         Register(log);
 
         var leaves = new BlockResource();
-        leaves.BlockId = "leaves";
-        leaves.DisplayName = "Leaves";
-        leaves.IsSolid = true;
-        leaves.CanChisel = true;
-        leaves.GrassCanGrow = false;
-        leaves.Hardness = 0.2f;
-        leaves.TextureTop = leavesTex;
-        leaves.TextureSide = leavesTex;
-        leaves.TextureBottom = leavesTex;
+        leaves.BlockId = "leaves"; leaves.DisplayName = "Leaves";
+        leaves.IsSolid = true; leaves.CanChisel = true; leaves.Hardness = 0.2f; leaves.IsTransparent = true;
+        leaves.TextureTop = leavesTex; leaves.TextureSide = leavesTex; leaves.TextureBottom = leavesTex;
         Register(leaves);
 
         var water = new BlockResource();
-        water.BlockId = "water";
-        water.DisplayName = "Water";
-        water.IsSolid = false;
-        water.CanChisel = false;
-        water.GrassCanGrow = false;
-        water.Hardness = 0f;
-        water.IsTransparent = true;
-        water.TextureTop = waterTex;
-        water.TextureSide = waterTex;
-        water.TextureBottom = waterTex;
+        water.BlockId = "water"; water.DisplayName = "Water";
+        water.IsSolid = false; water.CanChisel = false; water.IsTransparent = true;
+        water.TextureTop = waterTex; water.TextureSide = waterTex; water.TextureBottom = waterTex;
         Register(water);
 
+        var bedrock = new BlockResource();
+        bedrock.BlockId = "bedrock"; bedrock.DisplayName = "Bedrock";
+        bedrock.IsSolid = true; bedrock.CanChisel = false; bedrock.Hardness = float.MaxValue;
+        bedrock.TextureTop = bedrockTex; bedrock.TextureSide = bedrockTex; bedrock.TextureBottom = bedrockTex;
+        Register(bedrock);
+
+        var coalOre = new BlockResource();
+        coalOre.BlockId = "coal_ore"; coalOre.DisplayName = "Coal Ore";
+        coalOre.IsSolid = true; coalOre.CanChisel = true; coalOre.Hardness = 3.0f;
+        coalOre.TextureTop = coalOreTex; coalOre.TextureSide = coalOreTex; coalOre.TextureBottom = coalOreTex;
+        Register(coalOre);
+
+        var ironOre = new BlockResource();
+        ironOre.BlockId = "iron_ore"; ironOre.DisplayName = "Iron Ore";
+        ironOre.IsSolid = true; ironOre.CanChisel = true; ironOre.Hardness = 3.0f;
+        ironOre.TextureTop = ironOreTex; ironOre.TextureSide = ironOreTex; ironOre.TextureBottom = ironOreTex;
+        Register(ironOre);
+
+        var goldOre = new BlockResource();
+        goldOre.BlockId = "gold_ore"; goldOre.DisplayName = "Gold Ore";
+        goldOre.IsSolid = true; goldOre.CanChisel = true; goldOre.Hardness = 3.0f;
+        goldOre.TextureTop = goldOreTex; goldOre.TextureSide = goldOreTex; goldOre.TextureBottom = goldOreTex;
+        Register(goldOre);
+
+        var diamondOre = new BlockResource();
+        diamondOre.BlockId = "diamond_ore"; diamondOre.DisplayName = "Diamond Ore";
+        diamondOre.IsSolid = true; diamondOre.CanChisel = true; diamondOre.Hardness = 3.0f;
+        diamondOre.TextureTop = diamondOreTex; diamondOre.TextureSide = diamondOreTex; diamondOre.TextureBottom = diamondOreTex;
+        Register(diamondOre);
+
+        var obsidian = new BlockResource();
+        obsidian.BlockId = "obsidian"; obsidian.DisplayName = "Obsidian";
+        obsidian.IsSolid = true; obsidian.CanChisel = true; obsidian.Hardness = 50f;
+        obsidian.TextureTop = obsidianTex; obsidian.TextureSide = obsidianTex; obsidian.TextureBottom = obsidianTex;
+        Register(obsidian);
+
+        var snow = new BlockResource();
+        snow.BlockId = "snow"; snow.DisplayName = "Snow";
+        snow.IsSolid = true; snow.CanChisel = true; snow.Hardness = 0.2f;
+        snow.TextureTop = snowTex; snow.TextureSide = snowTex; snow.TextureBottom = snowTex;
+        Register(snow);
+
         var melon = new BlockResource();
-        melon.BlockId = "melon";
-        melon.DisplayName = "Melon";
-        melon.IsSolid = false;
-        melon.CanChisel = false;
-        melon.GrassCanGrow = false;
-        melon.Hardness = 0.5f;
-        melon.TextureTop = melon_topTex;
-        melon.TextureSide = melon_sideTex;
-        melon.TextureBottom = melon_topTex;
+        melon.BlockId = "melon"; melon.DisplayName = "Melon";
+        melon.IsSolid = false; melon.CanChisel = false; melon.Hardness = 0f;
+        melon.TextureTop = melonTopTex; melon.TextureSide = melonSideTex; melon.TextureBottom = melonSideTex;
         Register(melon);
 
         var rose = new BlockResource();
-        rose.BlockId = "rose";
-        rose.DisplayName = "Rose";
-        rose.IsSolid = false;
-        rose.CanChisel = false;
-        rose.GrassCanGrow = false;
-        rose.Hardness = 0f;
-        rose.IsTransparent = true;
-        rose.TextureTop = roseTex;
-        rose.TextureSide = roseTex;
-        rose.TextureBottom = roseTex;
-        rose.IsCross = true;
+        rose.BlockId = "rose"; rose.DisplayName = "Rose";
+        rose.IsSolid = false; rose.CanChisel = false; rose.IsTransparent = true; rose.IsCross = true; rose.Hardness = 0f;
+        rose.TextureTop = roseTex; rose.TextureSide = roseTex; rose.TextureBottom = roseTex;
         Register(rose);
 
+        var dandelion = new BlockResource();
+        dandelion.BlockId = "dandelion"; dandelion.DisplayName = "Dandelion";
+        dandelion.IsSolid = false; dandelion.CanChisel = false; dandelion.IsTransparent = true; dandelion.IsCross = true; dandelion.Hardness = 0f;
+        dandelion.TextureTop = dandelionTex; dandelion.TextureSide = dandelionTex; dandelion.TextureBottom = dandelionTex;
+        Register(dandelion);
+
         var clover = new BlockResource();
-        clover.BlockId = "clover";
-        clover.DisplayName = "Clover";
-        clover.IsSolid = false;
-        clover.CanChisel = false;
-        clover.GrassCanGrow = false;
-        clover.Hardness = 0f;
-        clover.IsTransparent = true;
-        clover.TextureTop = cloverTex;
-        clover.TextureSide = cloverTex;
-        clover.TextureBottom = cloverTex;
-        clover.IsFlatGround = true;
+        clover.BlockId = "clover"; clover.DisplayName = "Clover";
+        clover.IsSolid = false; clover.CanChisel = false; clover.IsTransparent = true; clover.IsFlatGround = true; clover.Hardness = 0f;
+        clover.TextureTop = cloverTex; clover.TextureSide = cloverTex; clover.TextureBottom = cloverTex;
         Register(clover);
 
+        GD.Print("Blocks registered.");
     }
 
     private void Register(BlockResource block)

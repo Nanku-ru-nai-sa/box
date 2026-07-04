@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://1au6vacm38ak"
-path="res://.godot/imported/cobble.png-df336908fd46acb95b018162a3e44e22.ctex"
+uid="uid://duinqamu33sis"
+path="res://.godot/imported/grass.png-44f408fd30a830115e1da5cac8b6579f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/cobble.png"
-dest_files=["res://.godot/imported/cobble.png-df336908fd46acb95b018162a3e44e22.ctex"]
+source_file="res://Assets/Textures/Items/grass.png"
+dest_files=["res://.godot/imported/grass.png-44f408fd30a830115e1da5cac8b6579f.ctex"]
 
 [params]
 
