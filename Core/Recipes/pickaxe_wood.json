@@ -1,0 +1,5 @@
+{
+  "id": "pickaxe_wood", "result": "pickaxe", "count": 1, "shaped": true,
+  "pattern": ["PPP", " S ", " S "],
+  "key": { "P": "planks", "S": "stick" }
+}

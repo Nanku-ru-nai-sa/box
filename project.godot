@@ -21,6 +21,8 @@ AudioManager="*uid://bmys8t32u05v1"
 BlockRegistry="*uid://hxvef2suqv2e"
 SettingsManager="*uid://bhfhvq3abtd8q"
 GameModeManager="*uid://yy85qxxs4go8"
+RecipeManager="*uid://c8lukl8n5wfft"
+SaveManager="*uid://i7knv8bhtfli"
 
 [display]
 

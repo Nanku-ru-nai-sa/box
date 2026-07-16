@@ -1,0 +1,5 @@
+{
+  "id": "axe_stone", "result": "stone_axe", "count": 1, "shaped": true,
+  "pattern": ["TT ", "TS ", " S "],
+  "key": { "T": "stone", "S": "stick" }
+}

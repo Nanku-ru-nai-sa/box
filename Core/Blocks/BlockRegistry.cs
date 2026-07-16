@@ -22,8 +22,12 @@ public partial class BlockRegistry : Node
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
         var grassSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass_side.png");
         var sandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/sand.png");
+        var wet_sand1Tex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/wet_sand1.png");
+        var wet_sand2Tex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/wet_sand2.png");
         var logTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log_top.png");
         var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
+        var planksTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/planks.png");
+        var crafterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crafter.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
         var gravelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gravel.png");
@@ -77,6 +81,18 @@ public partial class BlockRegistry : Node
         sand.TextureTop = sandTex; sand.TextureSide = sandTex; sand.TextureBottom = sandTex;
         Register(sand);
 
+        var wet_sand1 = new BlockResource();
+        wet_sand1.BlockId = "wet_sand1"; wet_sand1.DisplayName = "Wet Sand";
+        wet_sand1.IsSolid = true; wet_sand1.CanChisel = true; wet_sand1.Hardness = 0.5f;
+        wet_sand1.TextureTop = wet_sand1Tex; wet_sand1.TextureSide = wet_sand1Tex; wet_sand1.TextureBottom = wet_sand1Tex;
+        Register(wet_sand1);
+
+        var wet_sand2 = new BlockResource();
+        wet_sand2.BlockId = "wet_sand2"; wet_sand2.DisplayName = "Wet Sand";
+        wet_sand2.IsSolid = true; wet_sand2.CanChisel = true; wet_sand2.Hardness = 0.5f;
+        wet_sand2.TextureTop = wet_sand2Tex; wet_sand2.TextureSide = wet_sand2Tex; wet_sand2.TextureBottom = wet_sand2Tex;
+        Register(wet_sand2);
+
         var gravel = new BlockResource();
         gravel.BlockId = "gravel"; gravel.DisplayName = "Gravel";
         gravel.IsSolid = true; gravel.CanChisel = true; gravel.Hardness = 0.6f;
@@ -95,9 +111,21 @@ public partial class BlockRegistry : Node
         log.TextureTop = logTopTex; log.TextureSide = logSideTex; log.TextureBottom = logTopTex;
         Register(log);
 
+        var planks = new BlockResource();
+        planks.BlockId = "planks"; planks.DisplayName = "Planks";
+        planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f;
+        planks.TextureTop = planksTex; planks.TextureSide = planksTex; planks.TextureBottom = planksTex;
+        Register(planks);
+
+        var crafter = new BlockResource();
+        crafter.BlockId = "crafter"; crafter.DisplayName = "Crafter";
+        crafter.IsSolid = true; crafter.CanChisel = false; crafter.Hardness = 1.0f;
+        crafter.TextureTop = crafterTex; crafter.TextureSide = crafterTex; crafter.TextureBottom = crafterTex;
+        Register(crafter);
+
         var leaves = new BlockResource();
         leaves.BlockId = "leaves"; leaves.DisplayName = "Leaves";
-        leaves.IsSolid = true; leaves.CanChisel = true; leaves.Hardness = 0.2f; leaves.IsTransparent = true;
+        leaves.IsSolid = true; leaves.CanChisel = true; leaves.Hardness = 0.2f; leaves.IsTransparent = false;
         leaves.TextureTop = leavesTex; leaves.TextureSide = leavesTex; leaves.TextureBottom = leavesTex;
         Register(leaves);
 

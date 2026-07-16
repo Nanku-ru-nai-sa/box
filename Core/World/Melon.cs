@@ -13,7 +13,7 @@ public partial class Melon : RigidBody3D
         Mass = 2f;
         LinearDamp = 1.5f;
         AngularDamp = 1.5f;
-        CollisionLayer = 2;
+        CollisionLayer = 1;
         CollisionMask = 1;
 
         // Sphere collision so it rolls

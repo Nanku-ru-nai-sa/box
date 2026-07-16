@@ -1,0 +1,5 @@
+{
+  "id": "shovel_stone", "result": "stone_shovel", "count": 1, "shaped": true,
+  "pattern": [" T ", " S ", " S "],
+  "key": { "T": "stone", "S": "stick" }
+}

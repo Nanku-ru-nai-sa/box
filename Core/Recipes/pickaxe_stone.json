@@ -1,0 +1,5 @@
+{
+  "id": "pickaxe_stone", "result": "stone_pickaxe", "count": 1, "shaped": true,
+  "pattern": ["TTT", " S ", " S "],
+  "key": { "T": "stone", "S": "stick" }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "unique_recipe_id",
+  "result": "output_item_id",
+  "count": 1,
+  "shaped": false,
+  "ingredients": ["item_a", "item_b"]
+}

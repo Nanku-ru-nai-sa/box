@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 public partial class ChunkManager : Node3D
@@ -270,7 +271,6 @@ if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
 }
 
     }
-
     private string SaveDirectory => "user://saves/world1/";
 
     public IEnumerable<Vector3I> GetLoadedChunkPositions()
@@ -1095,5 +1095,25 @@ public Vector3? LoadPlayerPosition()
         int localZ = worldPos.Z - chunkPos.Z * Chunk.SIZE;
 
         chunk.SetBlock(localX, localY, localZ, state);
+    }
+
+    // Used for organic/natural block changes (e.g. grass spreading across
+    // a chunk boundary) that should NOT be persisted as a save
+    // modification - consistent with how grass spreading within a single
+    // chunk already behaves (natural growth regenerates on its own rather
+    // than bloating save files with every spread event). If no chunk is
+    // currently loaded at the target world position (e.g. right at the
+    // edge of the loaded world), this silently does nothing.
+    public void SetBlockAtWorldNaturalGrowth(Vector3I worldPos, BlockState state)
+    {
+        Vector3I chunkPos = WorldToChunk(worldPos);
+        if (!_chunks.TryGetValue(chunkPos, out Chunk chunk))
+            return;
+
+        int localX = worldPos.X - chunkPos.X * Chunk.SIZE;
+        int localY = worldPos.Y - chunkPos.Y * Chunk.HEIGHT;
+        int localZ = worldPos.Z - chunkPos.Z * Chunk.SIZE;
+
+        chunk.SetBlockNaturalGrowth(localX, localY, localZ, state);
     }
 }

@@ -22,5 +22,5 @@ public partial class BlockResource : Resource
     [Export] public int LightLevel { get; set; } = 0;
     [Export] public bool IsFlammable { get; set; } = false;
     [Export] public bool IsCross { get; set; } = false; // renders as X cross (flowers)
-[Export] public bool IsFlatGround { get; set; } = false; // renders as flat 1px slab (clover)
+    [Export] public bool IsFlatGround { get; set; } = false; // renders as flat 1px slab (clover)
 }

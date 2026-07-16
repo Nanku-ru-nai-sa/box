@@ -1,0 +1,8 @@
+{
+  "id": "unique_recipe_id",
+  "result": "output_item_id",
+  "count": 1,
+  "shaped": true,
+  "pattern": ["LL", "LL"],
+  "key": { "L": "log" }
+}

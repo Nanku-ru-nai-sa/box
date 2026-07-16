@@ -1,0 +1,5 @@
+{
+  "id": "axe_wood", "result": "axe", "count": 1, "shaped": true,
+  "pattern": ["PP ", "PS ", " S "],
+  "key": { "P": "planks", "S": "stick" }
+}

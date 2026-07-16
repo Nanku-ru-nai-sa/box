@@ -4,109 +4,105 @@ using System.Collections.Generic;
 
 public partial class Player : CharacterBody3D
 {
-    [Export] public float WalkSpeed      { get; set; } = 5f;
-    [Export] public float SprintSpeed    { get; set; } = 8f;
-    [Export] public float CrouchSpeed    { get; set; } = 2.5f;
-    [Export] public float JumpVelocity   { get; set; } = 6f;
+    [Export] public float WalkSpeed         { get; set; } = 5f;
+    [Export] public float SprintSpeed       { get; set; } = 8f;
+    [Export] public float CrouchSpeed       { get; set; } = 2.5f;
+    [Export] public float JumpVelocity      { get; set; } = 6f;
     [Export] public float SprintStaminaCost { get; set; } = 10f;
     [Export] public float JumpStaminaCost   { get; set; } = 10f;
 
     private float _gravity = 20f;
-    private PlayerStats   _stats;
-    private PlayerCamera  _playerCamera;
-    private RayCast3D     _rayCast;
-    private bool _isSprinting = false;
-    private bool _isCrouching = false;
-    private bool _hasDoubleJumped = false;
-    private bool _isGliding  = false;
-    private bool _isPlacing  = false;
-    private bool _isInWater  = false;
-    private float _placeTimer = 0f;
+    private PlayerStats  _stats;
+    private PlayerCamera _playerCamera;
+    private RayCast3D    _rayCast;
+    private bool  _isSprinting = false;
+    private bool  _isCrouching = false;
+    private bool  _hasDoubleJumped = false;
+    private bool  _isGliding   = false;
+    private bool  _isPlacing   = false;
+    private bool  _isInWater   = false;
+    private float _placeTimer  = 0f;
     private const float PlaceInterval = 0.15f;
-    private bool _isBreaking  = false;
-    private float _breakTimer = 0f;
-    private const float BreakInterval = 0.15f;
-    private string _selectedBlockId = "";
+    private bool  _isBreaking  = false;
+    private float _breakTimer  = 0f;
+    private const float BreakInterval = 0.4f;
+    private string         _selectedBlockId    = "";
     private MeshInstance3D _blockOutline;
 
-    // ── Hotbar ──────────────────────────────────────────────────────────────
-    private const int HotbarSize = 12;
-    private Panel[] _hotbarSlots     = new Panel[HotbarSize];
-    private Panel[] _invHotbarSlots  = new Panel[HotbarSize];
-    private Label[] _hotbarLabels    = new Label[HotbarSize];
-    private Label[] _invHotbarLabels = new Label[HotbarSize];
-    private int _selectedSlot = 0;
+    // ── Break overlay ─────────────────────────────────────────────────────────
+    private BlockBreakOverlay _breakOverlay;
+    private int               _breakHitCount      = 0;
+    private int               _breakHitsNeeded    = 6;
+    private Vector3I          _breakTargetBlock   = new Vector3I(int.MinValue, 0, 0);
+    private string            _breakTargetBlockId = "";
 
-    // ── Inventory ────────────────────────────────────────────────────────────
-    // Slots  0-35  = main inventory (3 rows × 12)
-    // Slots 36-47  = hotbar         (1 row  × 12)
-    private const int MainInvSize = 36;
+    // ── Hotbar ───────────────────────────────────────────────────────────────
+    private const int HotbarSize = 12;
+    private Panel[]       _hotbarSlots     = new Panel[HotbarSize];
+    private Panel[]       _invHotbarSlots  = new Panel[HotbarSize];
+    private Label[]       _hotbarLabels    = new Label[HotbarSize];
+    private Label[]       _invHotbarLabels = new Label[HotbarSize];
+    private int           _selectedSlot    = 0;
+
+    // ── Inventory ─────────────────────────────────────────────────────────────
+    // Slots 0-35  = main inventory (3×12)
+    // Slots 36-47 = hotbar (1×12)
+    private const int MainInvSize = 48;
     private const int TotalSlots  = MainInvSize + HotbarSize; // 48
     private Inventory _inventory;
+    private Panel[]       _invSlotPanels = new Panel[MainInvSize];
+    private Label[]       _invSlotLabels = new Label[MainInvSize];
 
-    private Panel[] _invSlotPanels = new Panel[MainInvSize];
-    private Label[] _invSlotLabels = new Label[MainInvSize];
-
-    // ── Held / cursor item ───────────────────────────────────────────────────
+    // ── Held / cursor ─────────────────────────────────────────────────────────
     private InventorySlot _heldSlot     = new InventorySlot();
     private int           _heldFromSlot = -1;
     private Panel         _cursorPanel;
     private Label         _cursorLabel;
     private TextureRect   _cursorTex;
 
-    // ── Drag state ───────────────────────────────────────────────────────────
-    //
-    //  LMB WITH ITEM (even-split drag)
-    //   • Pick up a stack → start dragging.
-    //   • Every NEW slot the cursor enters gets a share of the original stack.
-    //   • Share = floor(originalCount / numSlotsVisited).
-    //   • The source slot is slot[0] in the visited list; it gets redistributed
-    //     just like all others so the visual is consistent.
-    //   • Remainder stays on cursor until mouse is released.
-    //   • On release the redistribution is finalised.
-    //
-    //  RMB DRAG (place-one-per-slot)
-    //   • Split stack → start dragging.
-    //   • Each NEW slot the cursor enters receives exactly 1 item from cursor.
-    //   • Re-entering a slot that was already visited does NOT place another.
-    //   • On release nothing extra happens.
-    //
-    //  LMB NO ITEM (collect same type)
-    //   • Hold LMB on empty space / begin moving over slots with nothing held.
-    //   • Every slot visited of the same item type is picked up.
-    //
-    //  SHIFT-LMB NO ITEM
-    //   • Shift + drag over slots → each visited slot is shift-clicked.
-
+    // ── Drag ─────────────────────────────────────────────────────────────────
     private enum DragMode { None, LmbWithItem, LmbNoItem, RmbDrag, ShiftLmbNoItem }
-    private DragMode     _dragMode      = DragMode.None;
-    private List<int>    _dragVisited   = new List<int>(); // ordered list of unique slots entered
-    private int          _dragOrigCount = 0;               // count at the moment drag started
-    private int          _dragLastSlot  = -1;              // last slot seen (any mode)
+    private DragMode  _dragMode      = DragMode.None;
+    private List<int> _dragVisited   = new List<int>();
+    private int       _dragOrigCount = 0;
+    private int       _dragLastSlot  = -1;
 
-    // ── UI layers ────────────────────────────────────────────────────────────
+    // ── UI layers ─────────────────────────────────────────────────────────────
     private Control     _inventoryScreen;
-    private bool        _inventoryOpen = false;
+    private bool        _inventoryOpen    = false;
     private bool        _showChunkBorders = false;
     private bool        _hudVisible       = true;
     private CanvasLayer _hotbarLayer;
     private CanvasLayer _crosshairLayer;
     private CanvasLayer _inventoryLayer;
     private CanvasLayer _cursorLayer;
-    private PauseMenu    _pauseMenu;
+    private PauseMenu   _pauseMenu;
 
-    // ── Gamemode / fly / chat ────────────────────────────────────────────────
-    private bool         _isFlying        = false;
-    private float        _flySpeed        = 12f;
-    private float        _flyVertSpeed    = 8f;
-    private bool         _chatOpen        = false;
-    private CanvasLayer  _chatLayer;
-    private LineEdit     _chatInput;
-    private Label        _chatFeedback;
-    private float        _feedbackTimer   = 0f;
-    private const float  FeedbackDuration = 3f;
-    private double       _lastJumpTime    = 0.0;
+    // ── Crafting ──────────────────────────────────────────────────────────────
+    private CraftingPanel _craftingPanel;
+    private CanvasLayer   _craftingLayer;
+    private const float   CraftingTableRange = 5f;
+    // ── Equipment ─────────────────────────────────────────────────────────────
+    private EquipmentPanel _equipmentPanel;
+    private CanvasLayer    _equipmentLayer;
+
+    // ── Stats HUD ─────────────────────────────────────────────────────────────
+    private StatsHud    _statsHud;
+    private CanvasLayer _statsHudLayer;
+
+    // ── Gamemode / fly / chat ─────────────────────────────────────────────────
+    private bool        _isFlying      = false;
+    private float       _flySpeed      = 12f;
+    private float       _flyVertSpeed  = 8f;
+    private bool        _chatOpen      = false;
+    private CanvasLayer _chatLayer;
+    private LineEdit    _chatInput;
+    private Label       _chatFeedback;
+    private float       _feedbackTimer  = 0f;
+    private const float FeedbackDuration = 3f;
+    private double      _lastJumpTime   = 0.0;
     private const double DoubleJumpWindow = 0.35;
+
     private readonly List<MeshInstance3D> _chunkBorderMeshes = new();
 
     public bool CanDoubleJump { get; set; } = false;
@@ -114,10 +110,9 @@ public partial class Player : CharacterBody3D
     public bool CanGlide      { get; set; } = false;
     public bool CanGrapple    { get; set; } = false;
 
-    private const int SlotSize = 64;
+    private const int SlotSize = 56;
     private const int SlotGap  = 5;
 
-    // Icon texture cache  (res://items/<blockId>.png)
     private Dictionary<string, Texture2D> _iconCache = new();
 
     // =========================================================================
@@ -169,9 +164,15 @@ public partial class Player : CharacterBody3D
         _blockOutline.Visible = false;
         GetTree().Root.CallDeferred("add_child", _blockOutline);
 
+        // Break overlay
+        _breakOverlay = new BlockBreakOverlay();
+        GetTree().Root.CallDeferred("add_child", _breakOverlay);
+
         BuildHotbarHUD();
         BuildInventoryScreen();
         BuildCursorPanel();
+        BuildCraftingPanel();
+        BuildEquipmentPanel();
 
         if (_stats == null) { _stats = new PlayerStats(); AddChild(_stats); }
         if (_playerCamera == null)
@@ -181,21 +182,24 @@ public partial class Player : CharacterBody3D
             AddChild(_playerCamera);
         }
 
+        BuildStatsHud();
+        _equipmentPanel.Init(_stats);
+
         Input.MouseMode = Input.MouseModeEnum.Captured;
         _inventory.OnInventoryChanged += RefreshAllSlotVisuals;
         RefreshAllSlotVisuals();
         SelectHotbarSlot(0);
 
-        // Pause menu
         _pauseMenu = new PauseMenu();
         _pauseMenu.Init(this);
         AddChild(_pauseMenu);
 
         BuildChatBar();
 
-        // Hook gamemode changes
         if (GameModeManager.Instance != null)
             GameModeManager.Instance.OnGameModeChanged += OnGameModeChanged;
+        else
+            GD.PrintErr("GameModeManager not found — add to Autoload.");
 
         GD.Print("Player ready.");
     }
@@ -204,19 +208,13 @@ public partial class Player : CharacterBody3D
     // TEXTURE LOADING
     // =========================================================================
 
-    // Place item textures at:  res://items/<blockId>.png
-    // If missing, the slot TextureRect stays empty (no texture shown).
     private Texture2D GetItemIcon(string itemId)
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-
         string path = $"res://Assets/Textures/Items/{itemId}.png";
-        Texture2D tex = null;
-        if (ResourceLoader.Exists(path))
-            tex = ResourceLoader.Load<Texture2D>(path);
-
-        _iconCache[itemId] = tex; // cache even if null so we don't retry every frame
+        Texture2D tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        _iconCache[itemId] = tex;
         return tex;
     }
 
@@ -259,35 +257,26 @@ public partial class Player : CharacterBody3D
         GetTree().Root.CallDeferred("add_child", _inventoryLayer);
 
         float gridW      = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
-        float mainH      = 3 * SlotSize + 2 * SlotGap;
+        float mainH      = 4 * SlotSize + 3 * SlotGap;
         float sectionGap = 14f;
-        float titleH     = 30f;
+        float topPad     = 14f;  // matches CraftingPanel/EquipmentPanel so slot rows align
         float pad        = 16f;
         float totalW     = gridW + pad * 2f;
-        float totalH     = titleH + mainH + sectionGap + SlotSize + pad * 2f;
+        float totalH     = topPad + mainH + sectionGap + SlotSize + pad;
 
         _inventoryScreen              = new Panel();
         _inventoryScreen.AnchorLeft   = 0.5f; _inventoryScreen.AnchorRight  = 0.5f;
         _inventoryScreen.AnchorTop    = 0.5f; _inventoryScreen.AnchorBottom = 0.5f;
         _inventoryScreen.OffsetLeft   = -totalW / 2f;
         _inventoryScreen.OffsetRight  =  totalW / 2f;
-        _inventoryScreen.OffsetTop    = -totalH / 2f;
-        _inventoryScreen.OffsetBottom =  totalH / 2f;
+        _inventoryScreen.OffsetTop    = -180f;
+        _inventoryScreen.OffsetBottom = -180f + totalH;
         _inventoryScreen.AddThemeStyleboxOverride("panel",
             MakePanelStyle(new Color(0.08f, 0.08f, 0.08f, 0.95f), new Color(0.5f, 0.5f, 0.5f)));
 
-        var title = new Label();
-        title.Text                = "Inventory";
-        title.HorizontalAlignment = HorizontalAlignment.Center;
-        title.AnchorRight         = 1.0f;
-        title.OffsetTop           = pad / 2f;
-        title.OffsetBottom        = pad / 2f + titleH;
-        _inventoryScreen.AddChild(title);
-
-        // Main 3×10 grid — slots 0..29
         var mainGrid = new GridContainer();
         mainGrid.Columns  = HotbarSize;
-        mainGrid.Position = new Vector2(pad, titleH + pad);
+        mainGrid.Position = new Vector2(pad, topPad);
         mainGrid.AddThemeConstantOverride("h_separation", SlotGap);
         mainGrid.AddThemeConstantOverride("v_separation", SlotGap);
 
@@ -302,20 +291,20 @@ public partial class Player : CharacterBody3D
             slot.GuiInput    += (InputEvent ev) => OnInvSlotInput(ev, idx);
             slot.MouseEntered += ()             => OnSlotMouseEntered(idx);
             slot.MouseFilter   = Control.MouseFilterEnum.Stop;
+            slot.MouseEntered += () => slot.AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), new Color(0.75f,0.75f,0.75f)));
+            slot.MouseExited  += () => slot.AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), new Color(0.4f,0.4f,0.4f)));
             mainGrid.AddChild(slot);
         }
         _inventoryScreen.AddChild(mainGrid);
 
-        // Divider
         var divider = new ColorRect();
         divider.Color    = new Color(0.35f, 0.35f, 0.35f);
-        divider.Position = new Vector2(pad, titleH + pad + mainH + sectionGap / 2f - 1f);
+        divider.Position = new Vector2(pad, topPad + mainH + sectionGap / 2f - 1f);
         divider.Size     = new Vector2(gridW, 2f);
         _inventoryScreen.AddChild(divider);
 
-        // Hotbar row — slots 30..39
         var hotbarRow = new HBoxContainer();
-        hotbarRow.Position = new Vector2(pad, titleH + pad + mainH + sectionGap);
+        hotbarRow.Position = new Vector2(pad, topPad + mainH + sectionGap);
         hotbarRow.AddThemeConstantOverride("separation", SlotGap);
 
         for (int i = 0; i < HotbarSize; i++)
@@ -354,11 +343,85 @@ public partial class Player : CharacterBody3D
         _cursorLabel = MakeCountLabel(11);
         _cursorPanel.AddChild(_cursorTex);
         _cursorPanel.AddChild(_cursorLabel);
-
         _cursorLayer.CallDeferred("add_child", _cursorPanel);
     }
 
-    // ── Slot factory helpers ─────────────────────────────────────────────────
+    private void BuildCraftingPanel()
+    {
+        _craftingLayer       = new CanvasLayer();
+        _craftingLayer.Layer = 11;
+        GetTree().Root.CallDeferred("add_child", _craftingLayer);
+
+        _craftingPanel = new CraftingPanel();
+        _craftingPanel.Init(_inventory);
+        _craftingPanel.OnSlotClicked += HandleCraftSlotClicked;
+        _craftingPanel.OnOutputClicked += HandleOutputClicked;
+        _craftingPanel.OnLearnedCraftClicked += HandleLearnedCraftClicked;
+
+        float gridW    = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float pad      = 16f;
+        float totalW   = gridW + pad * 2f;
+        float invHalfW = totalW / 2f;
+
+        _craftingPanel.AnchorLeft   = 0.5f;
+        _craftingPanel.AnchorRight  = 0.5f;
+        _craftingPanel.AnchorTop    = 0.5f;
+        _craftingPanel.AnchorBottom = 0.5f;
+        _craftingPanel.OffsetLeft   = -invHalfW - 10f - 300f;
+        _craftingPanel.OffsetRight  = -invHalfW - 10f;
+        _craftingPanel.OffsetTop    = -180f;
+        _craftingPanel.OffsetBottom =  159f;
+        _craftingPanel.Visible      = false;
+
+        _craftingLayer.CallDeferred("add_child", _craftingPanel);
+    }
+
+    private void BuildEquipmentPanel()
+    {
+        _equipmentLayer       = new CanvasLayer();
+        _equipmentLayer.Layer = 11;
+        GetTree().Root.CallDeferred("add_child", _equipmentLayer);
+
+        _equipmentPanel = new EquipmentPanel();
+
+        float gridW    = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float pad      = 16f;
+        float totalW   = gridW + pad * 2f;
+        float invHalfW = totalW / 2f;
+
+        // Mirrors the crafting panel, but on the right (crafting is on the left).
+        _equipmentPanel.AnchorLeft   = 0.5f;
+        _equipmentPanel.AnchorRight  = 0.5f;
+        _equipmentPanel.AnchorTop    = 0.5f;
+        _equipmentPanel.AnchorBottom = 0.5f;
+        _equipmentPanel.OffsetLeft   = invHalfW + 10f;
+        _equipmentPanel.OffsetRight  = invHalfW + 10f + 300f;
+        _equipmentPanel.OffsetTop    = -180f;
+        _equipmentPanel.OffsetBottom =  159f;
+        _equipmentPanel.Visible      = false;
+
+        _equipmentLayer.CallDeferred("add_child", _equipmentPanel);
+    }
+
+    private void BuildStatsHud()
+    {
+        _statsHudLayer = new CanvasLayer();
+        GetTree().Root.CallDeferred("add_child", _statsHudLayer);
+
+        _statsHud = new StatsHud();
+        _statsHud.AnchorLeft     = 0.5f; _statsHud.AnchorRight  = 0.5f;
+        _statsHud.AnchorTop      = 1f;   _statsHud.AnchorBottom = 1f;
+        _statsHud.OffsetLeft     = 0f;   _statsHud.OffsetRight  = 0f;
+        _statsHud.OffsetTop      = -74f; _statsHud.OffsetBottom = -74f;
+        _statsHud.GrowHorizontal = Control.GrowDirection.Both;
+        _statsHud.GrowVertical   = Control.GrowDirection.Begin;
+        _statsHud.MouseFilter    = Control.MouseFilterEnum.Ignore;
+        _statsHud.Init(_stats);
+
+        _statsHudLayer.CallDeferred("add_child", _statsHud);
+    }
+
+    // ── Slot factory ─────────────────────────────────────────────────────────
 
     private Panel MakeSlotPanel(int size)
     {
@@ -369,7 +432,6 @@ public partial class Player : CharacterBody3D
         return slot;
     }
 
-    // Child index 0 in every slot panel: the item icon TextureRect
     private TextureRect MakeSlotTexRect()
     {
         var tex = new TextureRect();
@@ -383,7 +445,6 @@ public partial class Player : CharacterBody3D
         return tex;
     }
 
-    // Child index 1 in every slot panel: the stack-count label (bottom-right)
     private Label MakeCountLabel(int fontSize)
     {
         var lbl = new Label();
@@ -399,11 +460,10 @@ public partial class Player : CharacterBody3D
         return lbl;
     }
 
-    // Key hint — top-right corner (only used in hotbar slots)
-    private Label MakeKeyHintLabel(int hotbarIndex)
+    private Label MakeKeyHintLabel(int i)
     {
         var lbl = new Label();
-        lbl.Text = hotbarIndex < 9 ? (hotbarIndex + 1).ToString() : hotbarIndex == 9 ? "0" : hotbarIndex == 10 ? "-" : "+";
+        lbl.Text = i < 9 ? (i + 1).ToString() : i == 9 ? "0" : i == 10 ? "-" : "+";
         lbl.HorizontalAlignment = HorizontalAlignment.Right;
         lbl.AnchorRight         = 1.0f;
         lbl.OffsetRight         = -3f;
@@ -417,11 +477,57 @@ public partial class Player : CharacterBody3D
     private StyleBoxFlat MakePanelStyle(Color bg, Color border, int bw = 2)
     {
         var s = new StyleBoxFlat();
-        s.BgColor           = bg;
-        s.BorderColor       = border;
-        s.BorderWidthTop    = bw; s.BorderWidthBottom = bw;
-        s.BorderWidthLeft   = bw; s.BorderWidthRight  = bw;
+        s.BgColor        = bg;      s.BorderColor      = border;
+        s.BorderWidthTop = bw;      s.BorderWidthBottom = bw;
+        s.BorderWidthLeft = bw;     s.BorderWidthRight  = bw;
+        s.CornerRadiusTopLeft     = 3; s.CornerRadiusTopRight    = 3;
+        s.CornerRadiusBottomLeft  = 3; s.CornerRadiusBottomRight = 3;
         return s;
+    }
+
+    // =========================================================================
+    // CRAFTING PROXIMITY
+    // =========================================================================
+
+    private void UpdateCraftingProximity()
+    {
+        if (!_inventoryOpen || RecipeManager.Instance == null) return;
+        bool nearTable = false;
+        var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
+        if (cm != null)
+        {
+            Vector3 pos = GlobalPosition;
+            for (int dx = -5; dx <= 5 && !nearTable; dx++)
+            for (int dy = -3; dy <= 3 && !nearTable; dy++)
+            for (int dz = -5; dz <= 5 && !nearTable; dz++)
+            {
+                if (new Vector3(dx, dy, dz).Length() > CraftingTableRange) continue;
+                var block = cm.GetBlockAtWorld(new Vector3I(
+                    Mathf.FloorToInt(pos.X) + dx,
+                    Mathf.FloorToInt(pos.Y) + dy,
+                    Mathf.FloorToInt(pos.Z) + dz));
+                if (block.BlockId == "crafter") nearTable = true;
+            }
+        }
+        _craftingPanel?.SetGridSize(nearTable ? 3 : 2, nearTable);
+    }
+
+    private bool TryOpenCraftingTable()
+    {
+        if (!_rayCast.IsColliding()) return false;
+        var col = _rayCast.GetCollider() as Node;
+        if (col == null || !col.HasMeta("chunk")) return false;
+        Chunk chunk  = (Chunk)col.GetMeta("chunk").AsGodotObject();
+        Vector3 tPos = _rayCast.GetCollisionPoint() - _rayCast.GetCollisionNormal() * 0.5f;
+        Vector3 lPos = tPos - chunk.GlobalPosition;
+        var b = chunk.GetBlock(Mathf.FloorToInt(lPos.X), Mathf.FloorToInt(lPos.Y), Mathf.FloorToInt(lPos.Z));
+        if (b.BlockId != "crafter") return false;
+        if (!_inventoryOpen) ToggleInventory();
+        _craftingPanel?.SetGridSize(3, true);
+        _hotbarLayer.Visible = false;
+            if (_craftingPanel != null) { _craftingPanel.Visible = true; UpdateCraftingProximity(); }
+            if (_equipmentPanel != null) _equipmentPanel.Visible = true;
+        return true;
     }
 
     // =========================================================================
@@ -445,33 +551,20 @@ public partial class Player : CharacterBody3D
         if (ev is InputEventMouseButton mb && mb.Pressed)
         {
             bool shift = Input.IsKeyPressed(Key.Shift);
-
             switch (mb.ButtonIndex)
             {
-                case MouseButton.Left when shift:
-                    ShiftClick(slotIndex);
-                    break;
-                case MouseButton.Left when mb.DoubleClick:
-                    DoubleClickCollect(slotIndex);
-                    break;
-                case MouseButton.Left:
-                    HandleLeftClick(slotIndex);
-                    break;
-                case MouseButton.Right:
-                    HandleRightClick(slotIndex);
-                    break;
-                case MouseButton.WheelUp:
-                    ScrollSlot(slotIndex, up: true);
-                    break;
-                case MouseButton.WheelDown:
-                    ScrollSlot(slotIndex, up: false);
-                    break;
+                case MouseButton.Left when shift:           ShiftClick(slotIndex); break;
+                case MouseButton.Left when mb.DoubleClick:  DoubleClickCollect(slotIndex); break;
+                case MouseButton.Left:                      HandleLeftClick(slotIndex); break;
+                case MouseButton.Right:                     HandleRightClick(slotIndex); break;
+                case MouseButton.WheelUp:                   ScrollSlot(slotIndex, up: true); break;
+                case MouseButton.WheelDown:                 ScrollSlot(slotIndex, up: false); break;
             }
         }
     }
 
     // =========================================================================
-    // LEFT CLICK  (pick up / place / swap)
+    // LEFT CLICK
     // =========================================================================
 
     private void HandleLeftClick(int slotIndex)
@@ -481,22 +574,18 @@ public partial class Player : CharacterBody3D
         if (_heldSlot.IsEmpty)
         {
             if (slot.IsEmpty) return;
-
-            // Pick up the whole stack and start an LmbWithItem drag
             _heldFromSlot    = slotIndex;
             _heldSlot.ItemId = slot.ItemId;
             _heldSlot.Count  = slot.Count;
             _dragOrigCount   = slot.Count;
             slot.Clear();
-
             _dragMode = DragMode.LmbWithItem;
             _dragVisited.Clear();
-            _dragVisited.Add(slotIndex);   // source slot is visit[0]
+            _dragVisited.Add(slotIndex);
             _dragLastSlot = slotIndex;
         }
         else
         {
-            // Placing / merging / swapping
             if (slot.IsEmpty)
             {
                 slot.ItemId = _heldSlot.ItemId;
@@ -513,61 +602,45 @@ public partial class Player : CharacterBody3D
             }
             else
             {
-                // Swap
                 (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
                 (slot.Count,  _heldSlot.Count)  = (_heldSlot.Count,  slot.Count);
             }
-
             EndDrag();
         }
-
         FireChanged();
     }
 
     // =========================================================================
-    // RIGHT CLICK  (split / place-one)
+    // RIGHT CLICK
     // =========================================================================
 
     private void HandleRightClick(int slotIndex)
     {
         var slot = _inventory.Slots[slotIndex];
-
         if (_heldSlot.IsEmpty)
         {
             if (slot.IsEmpty) return;
-
-            // Pick up the ceiling half and start an RmbDrag
             int half         = Mathf.CeilToInt(slot.Count / 2f);
             _heldSlot.ItemId = slot.ItemId;
             _heldSlot.Count  = half;
             _heldFromSlot    = slotIndex;
             slot.Count      -= half;
             if (slot.Count <= 0) slot.Clear();
-
             _dragMode = DragMode.RmbDrag;
             _dragVisited.Clear();
-            _dragVisited.Add(slotIndex); // mark source so we don't place back immediately
+            _dragVisited.Add(slotIndex);
             _dragLastSlot = slotIndex;
         }
-        else
-        {
-            // Place exactly one item into this slot
-            PlaceOneIntoSlot(slotIndex);
-        }
-
+        else PlaceOneIntoSlot(slotIndex);
         FireChanged();
     }
 
-    // Places one item from _heldSlot into the given inventory slot.
-    // Returns true if an item was placed.
     private bool PlaceOneIntoSlot(int slotIndex)
     {
         if (_heldSlot.IsEmpty) return false;
         var slot = _inventory.Slots[slotIndex];
-
         if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return false;
         if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return false;
-
         if (slot.IsEmpty) slot.ItemId = _heldSlot.ItemId;
         slot.Count++;
         _heldSlot.Count--;
@@ -576,88 +649,75 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
-    // DRAG — driven from _Input via mouse-motion
+    // DRAG
     // =========================================================================
 
-    // Called whenever the cursor moves into a new slot during a drag.
     private void OnDragEnterSlot(int slotIndex)
     {
+        // Check if dragging over a crafting panel slot
+        if (_craftingPanel != null && _inventoryOpen)
+        {
+            int count = _craftingPanel.GetActiveSlotCount();
+            for (int i = 0; i < count; i++)
+            {
+                var panel = _craftingPanel.GetSlotPanel(i);
+                if (panel == null) continue;
+                var mouse = GetViewport().GetMousePosition();
+                if (new Rect2(panel.GlobalPosition, panel.Size).HasPoint(mouse))
+                {
+                    OnDragEnterCraftSlot(i);
+                    return;
+                }
+            }
+        }
+
         switch (_dragMode)
         {
-            // ── LMB WITH ITEM: even-split across all visited slots ────────────
             case DragMode.LmbWithItem:
             {
                 if (_heldSlot.IsEmpty) return;
                 var slot = _inventory.Slots[slotIndex];
-
-                // Only accept empty slots or matching-item slots that aren't full
                 if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
                 if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return;
-
-                if (!_dragVisited.Contains(slotIndex))
-                    _dragVisited.Add(slotIndex);
-
-                // Redistribute the original count evenly across all visited slots.
-                // Each slot gets floor(total / numSlots); the first slot absorbs any remainder.
-                int n       = _dragVisited.Count;
-                int perSlot = _dragOrigCount / n;          // floor division
+                if (!_dragVisited.Contains(slotIndex)) _dragVisited.Add(slotIndex);
+                int n        = _dragVisited.Count;
+                int perSlot  = _dragOrigCount / n;
                 int leftover = _dragOrigCount - perSlot * n;
-
-                // First clear all visited slots so we can re-write cleanly
-                foreach (int idx in _dragVisited)
-                {
-                    var s = _inventory.Slots[idx];
-                    s.ItemId = _heldSlot.ItemId;
-                    s.Count  = 0;
-                }
-
+                foreach (int idx in _dragVisited) { var s = _inventory.Slots[idx]; s.ItemId = _heldSlot.ItemId; s.Count = 0; }
                 int remaining = _dragOrigCount;
                 for (int i = 0; i < _dragVisited.Count; i++)
                 {
                     int give = perSlot + (i == 0 ? leftover : 0);
-                    give     = Mathf.Min(give, _inventory.MaxStackSize);
+                    give = Mathf.Min(give, _inventory.MaxStackSize);
                     _inventory.Slots[_dragVisited[i]].Count = give;
                     remaining -= give;
                 }
-
-                // Whatever didn't fit stays on cursor
                 _heldSlot.Count = Mathf.Max(0, remaining);
                 if (_heldSlot.Count <= 0) _heldSlot.Clear();
                 break;
             }
-
-            // ── RMB DRAG: place exactly one item per NEW slot entered ─────────
             case DragMode.RmbDrag:
             {
                 if (_heldSlot.IsEmpty) return;
-                if (_dragVisited.Contains(slotIndex)) return; // already visited → skip
-
-                if (PlaceOneIntoSlot(slotIndex))
-                    _dragVisited.Add(slotIndex);
+                if (_dragVisited.Contains(slotIndex)) return;
+                if (PlaceOneIntoSlot(slotIndex)) _dragVisited.Add(slotIndex);
                 break;
             }
-
-            // ── LMB NO ITEM: collect same-type items ─────────────────────────
             case DragMode.LmbNoItem:
             {
                 if (_dragVisited.Contains(slotIndex)) return;
                 var slot = _inventory.Slots[slotIndex];
                 if (slot.IsEmpty) return;
                 if (!_heldSlot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
-
                 int space = _inventory.MaxStackSize - (_heldSlot.IsEmpty ? 0 : _heldSlot.Count);
                 if (space <= 0) return;
-
                 _dragVisited.Add(slotIndex);
                 if (_heldSlot.IsEmpty) _heldSlot.ItemId = slot.ItemId;
-                int take        = Mathf.Min(slot.Count, space);
-                _heldSlot.Count += take;
-                slot.Count      -= take;
+                int take = Mathf.Min(slot.Count, space);
+                _heldSlot.Count += take; slot.Count -= take;
                 if (slot.Count <= 0) slot.Clear();
                 break;
             }
-
-            // ── SHIFT-LMB NO ITEM: shift-click each slot entered ─────────────
             case DragMode.ShiftLmbNoItem:
             {
                 if (_dragVisited.Contains(slotIndex)) return;
@@ -665,6 +725,22 @@ public partial class Player : CharacterBody3D
                 ShiftMoveSlot(slotIndex);
                 break;
             }
+        }
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    // Drag held item into a crafting slot
+    // Drag held item into a crafting slot (stacks if same item, same as inventory drag)
+    private void OnDragEnterCraftSlot(int craftIdx)
+    {
+        if (_dragMode != DragMode.LmbWithItem && _dragMode != DragMode.RmbDrag) return;
+        if (_heldSlot.IsEmpty) return;
+
+        if (_craftingPanel.TryPlaceHeldItem(craftIdx, _heldSlot.ItemId))
+        {
+            _heldSlot.Count--;
+            if (_heldSlot.Count <= 0) _heldSlot.Clear();
         }
 
         FireChanged();
@@ -681,49 +757,36 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
-    // SHIFT CLICK  (move item to other section)
+    // SHIFT CLICK
     // =========================================================================
 
-    private void ShiftClick(int slotIndex)
-    {
-        ShiftMoveSlot(slotIndex);
-        FireChanged();
-    }
+    private void ShiftClick(int slotIndex) { ShiftMoveSlot(slotIndex); FireChanged(); }
 
     private void ShiftMoveSlot(int slotIndex)
     {
         var src = _inventory.Slots[slotIndex];
         if (src.IsEmpty) return;
-
-        bool isHotbar = slotIndex >= MainInvSize;
-        int  destStart = isHotbar ? 0          : MainInvSize;
+        bool isHotbar  = slotIndex >= MainInvSize;
+        int  destStart = isHotbar ? 0 : MainInvSize;
         int  destEnd   = isHotbar ? MainInvSize : TotalSlots;
-
-        // Stack onto existing stacks first
         for (int i = destStart; i < destEnd && src.Count > 0; i++)
         {
             var dst = _inventory.Slots[i];
             if (dst.IsEmpty || dst.ItemId != src.ItemId) continue;
-            int transfer = Mathf.Min(_inventory.MaxStackSize - dst.Count, src.Count);
-            dst.Count   += transfer;
-            src.Count   -= transfer;
+            int t = Mathf.Min(_inventory.MaxStackSize - dst.Count, src.Count);
+            dst.Count += t; src.Count -= t;
         }
-
-        // Then fill empty slots
         for (int i = destStart; i < destEnd && src.Count > 0; i++)
         {
             var dst = _inventory.Slots[i];
             if (!dst.IsEmpty) continue;
-            dst.ItemId = src.ItemId;
-            dst.Count  = src.Count;
-            src.Clear();
+            dst.ItemId = src.ItemId; dst.Count = src.Count; src.Clear();
         }
-
         if (src.Count <= 0) src.Clear();
     }
 
     // =========================================================================
-    // DOUBLE-CLICK  (collect all matching into cursor)
+    // DOUBLE CLICK
     // =========================================================================
 
     private void DoubleClickCollect(int slotIndex)
@@ -732,161 +795,113 @@ public partial class Player : CharacterBody3D
         {
             var s = _inventory.Slots[slotIndex];
             if (s.IsEmpty) return;
-            _heldSlot.ItemId = s.ItemId;
-            _heldSlot.Count  = s.Count;
-            s.Clear();
+            _heldSlot.ItemId = s.ItemId; _heldSlot.Count = s.Count; s.Clear();
         }
-
         if (_heldSlot.Count >= _inventory.MaxStackSize) { FireChanged(); UpdateCursorVisual(); return; }
         string id = _heldSlot.ItemId;
-
         for (int i = 0; i < TotalSlots && _heldSlot.Count < _inventory.MaxStackSize; i++)
         {
             if (i == slotIndex) continue;
             var s = _inventory.Slots[i];
             if (s.IsEmpty || s.ItemId != id) continue;
-            int take         = Mathf.Min(s.Count, _inventory.MaxStackSize - _heldSlot.Count);
-            _heldSlot.Count += take;
-            s.Count         -= take;
+            int take = Mathf.Min(s.Count, _inventory.MaxStackSize - _heldSlot.Count);
+            _heldSlot.Count += take; s.Count -= take;
             if (s.Count <= 0) s.Clear();
         }
-
-        FireChanged();
-        UpdateCursorVisual();
+        FireChanged(); UpdateCursorVisual();
     }
 
     // =========================================================================
-    // SCROLL WHEEL IN INVENTORY  (move one item between main ↔ hotbar)
+    // SCROLL WHEEL IN INVENTORY
     // =========================================================================
 
     private void ScrollSlot(int slotIndex, bool up)
     {
         bool isHotbar = slotIndex >= MainInvSize;
         var  src      = _inventory.Slots[slotIndex];
-
         if (up)
         {
-            // Pull one item from the OTHER section into this slot
             int fromStart = isHotbar ? 0 : MainInvSize;
             int fromEnd   = isHotbar ? MainInvSize : TotalSlots;
-
             for (int i = fromStart; i < fromEnd; i++)
             {
                 var other = _inventory.Slots[i];
-                if (other.IsEmpty) continue;
-                if (!src.IsEmpty && other.ItemId != src.ItemId) continue;
-                if (src.Count >= _inventory.MaxStackSize) continue;
-
+                if (other.IsEmpty || (!src.IsEmpty && other.ItemId != src.ItemId) || src.Count >= _inventory.MaxStackSize) continue;
                 if (src.IsEmpty) src.ItemId = other.ItemId;
-                src.Count++;
-                other.Count--;
+                src.Count++; other.Count--;
                 if (other.Count <= 0) other.Clear();
-                FireChanged();
-                return;
+                FireChanged(); return;
             }
         }
         else
         {
-            // Push one item from this slot to the OTHER section
             if (src.IsEmpty) return;
             int toStart = isHotbar ? 0 : MainInvSize;
             int toEnd   = isHotbar ? MainInvSize : TotalSlots;
-
-            // Stack first
             for (int i = toStart; i < toEnd; i++)
             {
                 var dst = _inventory.Slots[i];
                 if (dst.IsEmpty || dst.ItemId != src.ItemId || dst.Count >= _inventory.MaxStackSize) continue;
-                dst.Count++;
-                src.Count--;
+                dst.Count++; src.Count--;
                 if (src.Count <= 0) src.Clear();
-                FireChanged();
-                return;
+                FireChanged(); return;
             }
-            // Then empty slot
             for (int i = toStart; i < toEnd; i++)
             {
                 var dst = _inventory.Slots[i];
                 if (!dst.IsEmpty) continue;
-                dst.ItemId = src.ItemId;
-                dst.Count  = 1;
-                src.Count--;
+                dst.ItemId = src.ItemId; dst.Count = 1; src.Count--;
                 if (src.Count <= 0) src.Clear();
-                FireChanged();
-                return;
+                FireChanged(); return;
             }
         }
     }
 
     // =========================================================================
-    // ADD ITEM  (hotbar first, then main inv)
+    // ADD ITEM (hotbar first)
     // =========================================================================
 
-    private void AddItemToInventory(string itemId, int count)
+    private int AddItemToInventory(string itemId, int count)
     {
-        if (string.IsNullOrEmpty(itemId) || count <= 0) return;
+        if (string.IsNullOrEmpty(itemId) || count <= 0) return count;
         int rem = count;
-
         void TryAdd(int start, int end, bool stackOnly)
         {
             for (int i = start; i < end && rem > 0; i++)
             {
                 var s = _inventory.Slots[i];
-                if (stackOnly)
-                {
-                    if (s.IsEmpty || s.ItemId != itemId) continue;
-                    int add = Mathf.Min(_inventory.MaxStackSize - s.Count, rem);
-                    s.Count += add; rem -= add;
-                }
-                else
-                {
-                    if (!s.IsEmpty) continue;
-                    int add  = Mathf.Min(_inventory.MaxStackSize, rem);
-                    s.ItemId = itemId; s.Count = add; rem -= add;
-                }
+                if (stackOnly) { if (s.IsEmpty || s.ItemId != itemId) continue; int add = Mathf.Min(_inventory.MaxStackSize - s.Count, rem); s.Count += add; rem -= add; }
+                else           { if (!s.IsEmpty) continue; int add = Mathf.Min(_inventory.MaxStackSize, rem); s.ItemId = itemId; s.Count = add; rem -= add; }
             }
         }
-
-        TryAdd(MainInvSize, TotalSlots, true);   // stack onto hotbar
-        TryAdd(MainInvSize, TotalSlots, false);  // empty hotbar slots
-        TryAdd(0, MainInvSize, true);            // stack onto main inv
-        TryAdd(0, MainInvSize, false);           // empty main inv slots
-
+        TryAdd(MainInvSize, TotalSlots, true);
+        TryAdd(MainInvSize, TotalSlots, false);
+        TryAdd(0, MainInvSize, true);
+        TryAdd(0, MainInvSize, false);
         _inventory.OnInventoryChanged?.Invoke();
+        return rem;
     }
 
     // =========================================================================
-    // GLOBAL INPUT  (drag tracking + LmbNoItem start)
+    // GLOBAL INPUT
     // =========================================================================
 
-    // Unused — kept so MouseEntered wiring compiles; actual drag is polled in _Process
     private void OnSlotMouseEntered(int slotIndex) { }
 
     public override void _Input(InputEvent @event)
     {
         if (!_inventoryOpen) return;
-
-        // Mouse button released: end drag
         if (@event is InputEventMouseButton mb && !mb.Pressed)
         {
             if (mb.ButtonIndex == MouseButton.Left || mb.ButtonIndex == MouseButton.Right)
-            {
-                EndDrag();
-                FireChanged();
-                UpdateCursorVisual();
-            }
+            { EndDrag(); FireChanged(); UpdateCursorVisual(); }
         }
-
-        // Start LmbNoItem drag on mouse-down with nothing held
         if (@event is InputEventMouseButton startMb && startMb.Pressed
             && startMb.ButtonIndex == MouseButton.Left
             && _heldSlot.IsEmpty && _dragMode == DragMode.None)
         {
-            _dragMode = Input.IsKeyPressed(Key.Shift)
-                ? DragMode.ShiftLmbNoItem
-                : DragMode.LmbNoItem;
-            _dragVisited.Clear();
-            _dragLastSlot = -1;
+            _dragMode = Input.IsKeyPressed(Key.Shift) ? DragMode.ShiftLmbNoItem : DragMode.LmbNoItem;
+            _dragVisited.Clear(); _dragLastSlot = -1;
         }
     }
 
@@ -896,52 +911,194 @@ public partial class Player : CharacterBody3D
         for (int i = 0; i < MainInvSize; i++)
         {
             if (_invSlotPanels[i] == null) continue;
-            if (new Rect2(_invSlotPanels[i].GlobalPosition, _invSlotPanels[i].Size).HasPoint(mouse))
-                return i;
+            if (new Rect2(_invSlotPanels[i].GlobalPosition, _invSlotPanels[i].Size).HasPoint(mouse)) return i;
         }
         for (int i = 0; i < HotbarSize; i++)
         {
             if (_invHotbarSlots[i] == null) continue;
-            if (new Rect2(_invHotbarSlots[i].GlobalPosition, _invHotbarSlots[i].Size).HasPoint(mouse))
-                return MainInvSize + i;
+            if (new Rect2(_invHotbarSlots[i].GlobalPosition, _invHotbarSlots[i].Size).HasPoint(mouse)) return MainInvSize + i;
         }
         return -1;
     }
 
+    // =========================================================================
+    // CRAFTING SLOT CLICK (routed from CraftingPanel)
+    // =========================================================================
+
+    private void HandleCraftSlotClicked(int idx, MouseButton button, bool shift)
+    {
+        if (_craftingPanel == null) return;
+        var slot = _craftingPanel.GetSlot(idx);
+        if (slot == null) return;
+
+        if (shift && button == MouseButton.Left)
+        {
+            if (slot.IsEmpty) return;
+            int leftover = AddItemToInventory(slot.ItemId, slot.Count);
+            int moved    = slot.Count - leftover;
+            slot.Count -= moved;
+            if (slot.Count <= 0) slot.Clear();
+            _craftingPanel.NotifyGridChanged();
+            FireChanged();
+            UpdateCursorVisual();
+            return;
+        }
+
+        if (button == MouseButton.Left)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count  = slot.Count;
+                slot.Clear();
+            }
+            else
+            {
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count  = _heldSlot.Count;
+                    _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int space    = _inventory.MaxStackSize - slot.Count;
+                    int transfer = Mathf.Min(space, _heldSlot.Count);
+                    slot.Count      += transfer;
+                    _heldSlot.Count -= transfer;
+                    if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                }
+                else
+                {
+                    (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
+                    (slot.Count,  _heldSlot.Count)  = (_heldSlot.Count,  slot.Count);
+                }
+            }
+        }
+        else if (button == MouseButton.Right)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                int half         = Mathf.CeilToInt(slot.Count / 2f);
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count  = half;
+                slot.Count      -= half;
+                if (slot.Count <= 0) slot.Clear();
+            }
+            else
+            {
+                if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
+                if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return;
+                if (slot.IsEmpty) slot.ItemId = _heldSlot.ItemId;
+                slot.Count++;
+                _heldSlot.Count--;
+                if (_heldSlot.Count <= 0) _heldSlot.Clear();
+            }
+        }
+
+        _craftingPanel.NotifyGridChanged();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+private void HandleOutputClicked(MouseButton button, bool shift)
+    {
+        if (_craftingPanel == null) return;
+
+        if (shift && button == MouseButton.Left)
+        {
+            // Craft repeatedly straight into inventory until out of ingredients
+            // or the inventory has no room left.
+            int safety = 64;
+            while (safety-- > 0)
+            {
+                if (!_craftingPanel.TryConsumeOneCraft(out string rid, out int rcount)) break;
+                int leftover = AddItemToInventory(rid, rcount);
+                if (leftover > 0) break; // inventory full — stop here
+            }
+            FireChanged();
+            return;
+        }
+
+        if (button == MouseButton.Left)
+        {
+            if (!_craftingPanel.PeekResult(out string peekId, out int _)) return;
+
+            // If cursor already holds something, it must match the result
+            // and have room, same as picking items into a normal slot.
+            if (!_heldSlot.IsEmpty)
+            {
+                if (_heldSlot.ItemId != peekId) return;
+                if (_heldSlot.Count >= _inventory.MaxStackSize) return;
+            }
+
+            if (_craftingPanel.TryConsumeOneCraft(out string resultId, out int resultCount))
+            {
+                if (_heldSlot.IsEmpty)
+                {
+                    _heldSlot.ItemId = resultId;
+                    _heldSlot.Count  = resultCount;
+                }
+                else
+                {
+                    int space = _inventory.MaxStackSize - _heldSlot.Count;
+                    _heldSlot.Count += Mathf.Min(space, resultCount);
+                }
+                FireChanged();
+                UpdateCursorVisual();
+            }
+        }
+    }
+
+        private void HandleLearnedCraftClicked(string resultId, int resultCount)
+            {
+                if (!_heldSlot.IsEmpty)
+                {
+                    if (_heldSlot.ItemId != resultId || _heldSlot.Count >= _inventory.MaxStackSize)
+                    {
+                        // Cursor's holding something incompatible — send crafted item to inventory instead
+                        AddItemToInventory(resultId, resultCount);
+                    }
+                    else
+                    {
+                        int space = _inventory.MaxStackSize - _heldSlot.Count;
+                        _heldSlot.Count += Mathf.Min(space, resultCount);
+                    }
+                }
+                else
+                {
+                    _heldSlot.ItemId = resultId;
+                    _heldSlot.Count  = resultCount;
+                }
+                FireChanged();
+                UpdateCursorVisual();
+            }
     // =========================================================================
     // VISUALS
     // =========================================================================
 
     private void RefreshAllSlotVisuals()
     {
-        // Main inventory grid
         for (int i = 0; i < MainInvSize; i++)
         {
-            var s    = _inventory.Slots[i];
-            var tex  = _invSlotPanels[i].GetChild<TextureRect>(0);
-            var lbl  = _invSlotLabels[i];
-            tex.Texture = s.IsEmpty ? null : GetItemIcon(s.ItemId);
-            lbl.Text    = (!s.IsEmpty && s.Count > 1) ? s.Count.ToString() : "";
+            var s = _inventory.Slots[i];
+            _invSlotPanels[i].GetChild<TextureRect>(0).Texture = s.IsEmpty ? null : GetItemIcon(s.ItemId);
+            _invSlotLabels[i].Text = (!s.IsEmpty && s.Count > 1) ? s.Count.ToString() : "";
         }
-
-        // Hotbar — HUD and inventory-screen row
         for (int i = 0; i < HotbarSize; i++)
         {
             var s    = _inventory.Slots[MainInvSize + i];
-            var tex1 = _hotbarSlots[i].GetChild<TextureRect>(0);
-            var tex2 = _invHotbarSlots[i].GetChild<TextureRect>(0);
             var icon = s.IsEmpty ? null : GetItemIcon(s.ItemId);
-            tex1.Texture = icon;
-            tex2.Texture = icon;
-            string countTxt = (!s.IsEmpty && s.Count > 1) ? s.Count.ToString() : "";
-            _hotbarLabels[i].Text    = countTxt;
-            _invHotbarLabels[i].Text = countTxt;
+            _hotbarSlots[i].GetChild<TextureRect>(0).Texture    = icon;
+            _invHotbarSlots[i].GetChild<TextureRect>(0).Texture = icon;
+            string t = (!s.IsEmpty && s.Count > 1) ? s.Count.ToString() : "";
+            _hotbarLabels[i].Text    = t;
+            _invHotbarLabels[i].Text = t;
         }
-
-        // Sync selected block from hotbar
         var sel = _inventory.Slots[MainInvSize + _selectedSlot];
         _selectedBlockId = sel.IsEmpty ? "" : sel.ItemId;
-
         UpdateHotbarSelectionBorder();
         UpdateCursorVisual();
     }
@@ -953,20 +1110,14 @@ public partial class Player : CharacterBody3D
             bool sel    = i == _selectedSlot;
             var  border = sel ? new Color(1f, 1f, 1f) : new Color(0.3f, 0.3f, 0.3f);
             int  bw     = sel ? 3 : 2;
-            _hotbarSlots[i].AddThemeStyleboxOverride("panel",
-                MakePanelStyle(new Color(0.15f, 0.15f, 0.15f, 0.85f), border, bw));
-            _invHotbarSlots[i].AddThemeStyleboxOverride("panel",
-                MakePanelStyle(new Color(0.15f, 0.15f, 0.15f, 0.85f), border, bw));
+            _hotbarSlots[i].AddThemeStyleboxOverride("panel",   MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), border, bw));
+            _invHotbarSlots[i].AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), border, bw));
         }
     }
 
     private void UpdateCursorVisual()
     {
-        if (_heldSlot.IsEmpty)
-        {
-            _cursorPanel.Visible = false;
-            return;
-        }
+        if (_heldSlot.IsEmpty) { _cursorPanel.Visible = false; return; }
         _cursorTex.Texture   = GetItemIcon(_heldSlot.ItemId);
         _cursorLabel.Text    = _heldSlot.Count > 1 ? _heldSlot.Count.ToString() : "";
         _cursorPanel.Visible = _inventoryOpen;
@@ -975,39 +1126,45 @@ public partial class Player : CharacterBody3D
     private void FireChanged() => _inventory.OnInventoryChanged?.Invoke();
 
     // =========================================================================
-    // PROCESS  (cursor follows mouse)
+    // PROCESS
     // =========================================================================
 
     public override void _Process(double delta)
     {
-        // Feedback message timer
         if (_feedbackTimer > 0f)
         {
             _feedbackTimer -= (float)delta;
-            if (_feedbackTimer <= 0f && _chatFeedback != null)
-                _chatFeedback.Visible = false;
+            if (_feedbackTimer <= 0f && _chatFeedback != null) _chatFeedback.Visible = false;
         }
 
+        if (_inventoryOpen) UpdateCraftingProximity();
         if (!_inventoryOpen) return;
 
         var mouse = GetViewport().GetMousePosition();
-
-        // Move cursor panel
         if (!_heldSlot.IsEmpty && _cursorPanel != null)
             _cursorPanel.GlobalPosition = mouse - new Vector2(SlotSize / 2f, SlotSize / 2f);
 
-        // Poll slot under mouse every frame during a drag.
-        // We do this in _Process because Godot captures GuiInput and MouseEntered
-        // to the original pressed control during a mouse-button-held drag, so
-        // neither signal reaches other panels. Polling GlobalPosition rects is
-        // the only reliable cross-slot drag detection in Godot's UI system.
         if (_dragMode != DragMode.None)
         {
             int under = GetSlotUnderMouse();
             if (under >= 0 && under != _dragLastSlot)
+            { _dragLastSlot = under; OnDragEnterSlot(under); }
+            else if (under < 0 && _craftingPanel != null)
             {
-                _dragLastSlot = under;
-                OnDragEnterSlot(under);
+                // Check crafting panel slots separately since they're outside inventory slot range
+                int count = _craftingPanel.GetActiveSlotCount();
+                for (int i = 0; i < count; i++)
+                {
+                    var panel = _craftingPanel.GetSlotPanel(i);
+                    if (panel == null) continue;
+                    if (new Rect2(panel.GlobalPosition, panel.Size).HasPoint(mouse))
+                    {
+                        int craftId = -(i + 1); // negative = crafting slot
+                        if (craftId != _dragLastSlot)
+                        { _dragLastSlot = craftId; OnDragEnterCraftSlot(i); }
+                        break;
+                    }
+                }
             }
         }
     }
@@ -1022,7 +1179,6 @@ public partial class Player : CharacterBody3D
         if (cm == null) return;
         cm.LoadInventory(_inventory);
         RefreshAllSlotVisuals();
-
     }
 
     // =========================================================================
@@ -1032,14 +1188,14 @@ public partial class Player : CharacterBody3D
     public override void _PhysicsProcess(double delta)
     {
         UpdateBlockOutline();
+        if (_isBreaking) SyncBreakOverlayPosition();
         if (_stats == null || _stats.IsDead) return;
-        if (_chatOpen) return; // freeze all movement while chat is open
+        if (_chatOpen) return;
         CheckWaterStatus();
 
         float dt         = (float)delta;
         Vector3 velocity = Velocity;
 
-        // ── Fly mode (Creative only) ──────────────────────────────────────────
         if (_isFlying && GameModeManager.Instance?.IsCreate == true)
         {
             HandleFlyMovement(dt, ref velocity);
@@ -1049,10 +1205,7 @@ public partial class Player : CharacterBody3D
         }
 
         if (_isInWater)
-        {
-            velocity.Y -= (_gravity * 0.2f) * dt;
-            velocity.Y  = Mathf.Clamp(velocity.Y, -2f, 8f);
-        }
+        { velocity.Y -= (_gravity * 0.2f) * dt; velocity.Y = Mathf.Clamp(velocity.Y, -2f, 8f); }
         else if (!IsOnFloor()) velocity.Y -= _gravity * dt;
         else { _hasDoubleJumped = false; _isGliding = false; }
 
@@ -1062,12 +1215,9 @@ public partial class Player : CharacterBody3D
 
         if (Input.IsActionJustReleased("ui_cancel"))
         {
-            if (_inventoryOpen)
-                ToggleInventory();
-            else if (_pauseMenu.IsOpen)
-                _pauseMenu.Close();
-            else
-                _pauseMenu.Open();
+            if (_inventoryOpen)         ToggleInventory();
+            else if (_pauseMenu.IsOpen) _pauseMenu.Close();
+            else                        _pauseMenu.Open();
         }
 
         _isCrouching = Input.IsActionPressed("crouch");
@@ -1079,8 +1229,14 @@ public partial class Player : CharacterBody3D
         Vector2 inputDir  = Input.GetVector("move_left","move_right","move_forward","move_back");
         Vector3 direction = (Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)).Normalized();
 
-        if (_isBreaking) { _breakTimer += dt; if (_breakTimer >= BreakInterval) { TryBreakBlock(); _breakTimer = 0f; } }
-        if (_isPlacing)  { _placeTimer += dt; if (_placeTimer >= PlaceInterval) { TryPlaceBlock();  _placeTimer = 0f; } }
+        if (_isBreaking)
+        {
+            _breakTimer += dt;
+            if (_breakTimer >= BreakInterval) { TryBreakBlock(); _breakTimer = 0f; }
+        }
+        else if (_breakHitCount > 0) ResetBreak();
+
+        if (_isPlacing) { _placeTimer += dt; if (_placeTimer >= PlaceInterval) { TryPlaceBlock(); _placeTimer = 0f; } }
 
         float speed = _isCrouching ? CrouchSpeed : _isSprinting ? SprintSpeed : WalkSpeed;
         if (_isInWater) speed *= 0.5f;
@@ -1106,57 +1262,49 @@ public partial class Player : CharacterBody3D
             if (!_inventoryOpen && !_chatOpen)
             {
                 if (mb.ButtonIndex == MouseButton.Left)
-                { _isBreaking = mb.Pressed; if (mb.Pressed) { TryBreakBlock(); _breakTimer = 0f; } }
+                {
+                    _isBreaking = mb.Pressed;
+                    if (mb.Pressed) { TryBreakBlock(); _breakTimer = 0f; }
+                    else ResetBreak();
+                }
                 if (mb.ButtonIndex == MouseButton.Right)
-                { _isPlacing = mb.Pressed; if (mb.Pressed) { TryPlaceBlock(); _placeTimer = 0f; } }
-
-                // Scroll to cycle hotbar
-                if (mb.ButtonIndex == MouseButton.WheelDown)
-                    SelectHotbarSlot((_selectedSlot + 1) % HotbarSize);
-                else if (mb.ButtonIndex == MouseButton.WheelUp)
-                    SelectHotbarSlot((_selectedSlot - 1 + HotbarSize) % HotbarSize);
+                {
+                    _isPlacing = mb.Pressed;
+                    if (mb.Pressed)
+                    {
+                        if (TryOpenCraftingTable()) _isPlacing = false;
+                        else { TryPlaceBlock(); _placeTimer = 0f; }
+                    }
+                }
+                if (mb.ButtonIndex == MouseButton.WheelDown) SelectHotbarSlot((_selectedSlot + 1) % HotbarSize);
+                else if (mb.ButtonIndex == MouseButton.WheelUp)  SelectHotbarSlot((_selectedSlot - 1 + HotbarSize) % HotbarSize);
             }
         }
 
         if (@event is InputEventKey key && key.Pressed)
         {
-            // Escape closes chat first, nothing else fires
-            if (key.Keycode == Key.Escape && _chatOpen)
-            { CloseChat(); return; }
-
-            // Block all gameplay keys while chat is open (LineEdit handles typing)
+            if (key.Keycode == Key.Escape && _chatOpen) { CloseChat(); return; }
             if (_chatOpen) return;
 
-            if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key9)
-                SelectHotbarSlot((int)key.Keycode - (int)Key.Key1);
-            else if (key.Keycode == Key.Key0)
-                SelectHotbarSlot(9);
-            else if (key.Keycode == Key.Minus)
-                SelectHotbarSlot(10);
-            else if (key.Keycode == Key.Equal)
-                SelectHotbarSlot(11);
+            if (key.Keycode >= Key.Key1 && key.Keycode <= Key.Key9) SelectHotbarSlot((int)key.Keycode - (int)Key.Key1);
+            else if (key.Keycode == Key.Key0)  SelectHotbarSlot(9);
+            else if (key.Keycode == Key.Minus) SelectHotbarSlot(10);
+            else if (key.Keycode == Key.Equal) SelectHotbarSlot(11);
 
             if (key.Keycode == Key.Tab) ToggleInventory();
 
-            // F4 — cycle gamemode
             if (key.Keycode == Key.F4)
             {
-                GameModeManager.Instance?.CycleNext();
-                var mode = GameModeManager.Instance?.Current;
-                if (mode.HasValue)
-                    ShowFeedback($"Gamemode: {mode.Value}");
+                if (GameModeManager.Instance == null) ShowFeedback("GameModeManager not loaded.");
+                else { GameModeManager.Instance.CycleNext(); ShowFeedback($"Gamemode: {GameModeManager.Instance.Current}"); }
             }
 
-            // T — open chat/command bar
-            if (key.Keycode == Key.T && !_chatOpen && !_inventoryOpen && !_pauseMenu.IsOpen)
-                OpenChat();
+            if (key.Keycode == Key.T && !_chatOpen && !_inventoryOpen && !_pauseMenu.IsOpen) OpenChat();
 
-            // Double-jump to toggle fly in Create mode
             if (key.Keycode == Key.Space && GameModeManager.Instance?.IsCreate == true)
             {
                 double now = Time.GetTicksMsec() / 1000.0;
-                if (now - _lastJumpTime < DoubleJumpWindow)
-                    ToggleFly();
+                if (now - _lastJumpTime < DoubleJumpWindow) ToggleFly();
                 _lastJumpTime = now;
             }
 
@@ -1165,13 +1313,13 @@ public partial class Player : CharacterBody3D
                 _hudVisible = !_hudVisible;
                 if (_hotbarLayer    != null) _hotbarLayer.Visible    = _hudVisible && !_inventoryOpen;
                 if (_crosshairLayer != null) _crosshairLayer.Visible = _hudVisible;
+                if (_statsHudLayer  != null) _statsHudLayer.Visible  = _hudVisible && !_inventoryOpen;
             }
             if (key.Keycode == Key.F2)
             {
-                var img  = GetViewport().GetTexture().GetImage();
+                var img = GetViewport().GetTexture().GetImage();
                 string p = $"user://screenshot_{Time.GetDatetimeStringFromSystem().Replace(":","-")}.png";
-                img.SavePng(p);
-                GD.Print($"Screenshot saved: {p}");
+                img.SavePng(p); GD.Print($"Screenshot saved: {p}");
             }
             if (key.Keycode == Key.F3) { _showChunkBorders = !_showChunkBorders; ToggleChunkBorders(); }
             if (key.Keycode == Key.F5)
@@ -1202,41 +1350,36 @@ public partial class Player : CharacterBody3D
         if (_inventoryOpen)
         {
             _hotbarLayer.Visible = false;
+            if (_statsHudLayer != null) _statsHudLayer.Visible = false;
+            if (_craftingPanel != null) { _craftingPanel.Visible = true; UpdateCraftingProximity(); }
+            if (_equipmentPanel != null) _equipmentPanel.Visible = true;
             RefreshAllSlotVisuals();
             Input.MouseMode = Input.MouseModeEnum.Visible;
         }
         else
         {
-            // Return held item to original slot if possible, else any free slot
+            // Return held item
             if (!_heldSlot.IsEmpty)
             {
                 bool placed = false;
                 if (_heldFromSlot >= 0 && _heldFromSlot < TotalSlots)
                 {
                     var orig = _inventory.Slots[_heldFromSlot];
-                    if (orig.IsEmpty)
-                    {
-                        orig.ItemId = _heldSlot.ItemId;
-                        orig.Count  = _heldSlot.Count;
-                        placed      = true;
-                    }
+                    if (orig.IsEmpty) { orig.ItemId = _heldSlot.ItemId; orig.Count = _heldSlot.Count; placed = true; }
                     else if (orig.ItemId == _heldSlot.ItemId && orig.Count < _inventory.MaxStackSize)
-                    {
-                        int fit      = Mathf.Min(_inventory.MaxStackSize - orig.Count, _heldSlot.Count);
-                        orig.Count  += fit;
-                        _heldSlot.Count -= fit;
-                        placed = _heldSlot.Count <= 0;
-                    }
+                    { int fit = Mathf.Min(_inventory.MaxStackSize - orig.Count, _heldSlot.Count); orig.Count += fit; _heldSlot.Count -= fit; placed = _heldSlot.Count <= 0; }
                 }
-                if (!placed && _heldSlot.Count > 0)
-                    AddItemToInventory(_heldSlot.ItemId, _heldSlot.Count);
-
-                _heldSlot.Clear();
-                UpdateCursorVisual();
+                if (!placed && _heldSlot.Count > 0) AddItemToInventory(_heldSlot.ItemId, _heldSlot.Count);
+                _heldSlot.Clear(); UpdateCursorVisual();
             }
 
+            // 3x3 closes → return items to inventory, revert to 2x2
+            _craftingPanel?.OnInventoryClose();
+            if (_craftingPanel != null) _craftingPanel.Visible = false;
+            if (_equipmentPanel != null) _equipmentPanel.Visible = false;
             EndDrag();
             _hotbarLayer.Visible = _hudVisible;
+            if (_statsHudLayer != null) _statsHudLayer.Visible = _hudVisible;
             Input.MouseMode      = Input.MouseModeEnum.Captured;
         }
     }
@@ -1272,16 +1415,13 @@ public partial class Player : CharacterBody3D
 
     private void TryBreakBlock()
     {
-        if (!_rayCast.IsColliding()) return;
-
+        if (!_rayCast.IsColliding()) { ResetBreak(); return; }
         var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory) { ResetBreak(); return; }
 
-        // Story mode: only break if holding a story tool (item with "storytool" tag — future)
-        // For now, block breaking entirely in story mode
-        if (gm != null && gm.IsStory) return;
         var col = _rayCast.GetCollider() as Node;
-        if (col is Melon melon) { melon.Break(_inventory); return; }
-        if (col == null || !col.HasMeta("chunk")) return;
+        if (col is Melon melon) { melon.Break(_inventory); ResetBreak(); return; }
+        if (col == null || !col.HasMeta("chunk")) { ResetBreak(); return; }
 
         Chunk chunk  = (Chunk)col.GetMeta("chunk").AsGodotObject();
         Vector3 tPos = _rayCast.GetCollisionPoint() - _rayCast.GetCollisionNormal() * 0.5f;
@@ -1291,48 +1431,81 @@ public partial class Player : CharacterBody3D
         BlockState above = chunk.GetBlock(bx, by + 1, bz);
         if (above.BlockId is "rose" or "clover" or "dandelion")
         {
-            if (above.BlockId == "rose")       AddItemToInventory("rose", 1);
-            if (above.BlockId == "dandelion")  AddItemToInventory("dandelion", 1);
+            if (above.BlockId == "rose")      AddItemToInventory("rose", 1);
+            if (above.BlockId == "dandelion") AddItemToInventory("dandelion", 1);
             chunk.SetBlock(bx, by + 1, bz, BlockState.Air);
-            return;
+            ResetBreak(); return;
         }
 
         BlockState b = chunk.GetBlock(bx, by, bz);
-        if (!b.IsAir())
+        if (b.IsAir()) { ResetBreak(); return; }
+        if (b.BlockId == "bedrock" && gm != null && gm.IsSurvival) { ResetBreak(); return; }
+
+        if (gm != null && gm.IsCreate)
+        {
+            string dropC = b.BlockId == "grass_block" ? "dirt" : b.BlockId;
+            if (dropC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropC, 1);
+            chunk.SetBlock(bx, by, bz, BlockState.Air);
+            ResetBreak(); return;
+        }
+
+        var blockWorldPos = new Vector3I(Mathf.FloorToInt(tPos.X), Mathf.FloorToInt(tPos.Y), Mathf.FloorToInt(tPos.Z));
+        if (blockWorldPos != _breakTargetBlock || b.BlockId != _breakTargetBlockId)
+        {
+            _breakOverlay?.ResetTarget();
+            _breakHitCount      = 0;
+            _breakTargetBlock   = blockWorldPos;
+            _breakTargetBlockId = b.BlockId;
+            string heldItem = _inventory.Slots[MainInvSize + _selectedSlot].IsEmpty ? "" : _inventory.Slots[MainInvSize + _selectedSlot].ItemId;
+            _breakHitsNeeded = ToolDefinition.GetHitsToBreak(b.BlockId, heldItem);
+        }
+
+        _breakHitCount++;
+        bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakHitsNeeded) ?? (_breakHitCount >= _breakHitsNeeded);
+        if (shouldBreak)
         {
             string drop = b.BlockId == "grass_block" ? "dirt" : b.BlockId;
-            if (drop is not ("rose" or "dandelion" or "clover"))
-                AddItemToInventory(drop, 1);
+            if (drop is not ("rose" or "dandelion" or "clover")) AddItemToInventory(drop, 1);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
+            ResetBreak();
         }
+    }
+
+    private void ResetBreak()
+    {
+        _breakOverlay?.HideOverlay();
+        _breakHitCount      = 0;
+        _breakTargetBlock   = new Vector3I(int.MinValue, 0, 0);
+        _breakTargetBlockId = "";
+    }
+
+    private void SyncBreakOverlayPosition()
+    {
+        if (!_rayCast.IsColliding()) return;
+        var col = _rayCast.GetCollider() as Node;
+        if (col == null || !col.HasMeta("chunk")) return;
+        Vector3 tPos = _rayCast.GetCollisionPoint() - _rayCast.GetCollisionNormal() * 0.5f;
+        _breakOverlay?.SyncPosition(new Vector3I(Mathf.FloorToInt(tPos.X), Mathf.FloorToInt(tPos.Y), Mathf.FloorToInt(tPos.Z)));
     }
 
     private void TryPlaceBlock()
     {
         if (!_rayCast.IsColliding() || string.IsNullOrEmpty(_selectedBlockId)) return;
-
         var gm = GameModeManager.Instance;
-
-        // Story mode: no placing
         if (gm != null && gm.IsStory) return;
-
-        // Creative: don't consume inventory
         bool consume = gm == null || !gm.IsCreate;
-        if (consume && !_inventory.HasItem(_selectedBlockId, 1)) { GD.Print($"No {_selectedBlockId}"); return; }
+        if (consume && !_inventory.HasItem(_selectedBlockId, 1)) return;
 
         var col = _rayCast.GetCollider() as Node;
         if (col == null || !col.HasMeta("chunk")) return;
-
         Chunk hitChunk      = (Chunk)col.GetMeta("chunk").AsGodotObject();
         Vector3 worldTarget = _rayCast.GetCollisionPoint() + _rayCast.GetCollisionNormal() * 0.5f;
         Vector3 center      = new(Mathf.Floor(worldTarget.X)+0.5f, Mathf.Floor(worldTarget.Y)+0.5f, Mathf.Floor(worldTarget.Z)+0.5f);
         if (center.DistanceTo(GlobalPosition) < 0.9f) return;
-
         var cm = hitChunk.GetParent() as ChunkManager;
         if (cm == null) return;
         Chunk tc = cm.GetChunk(cm.WorldToChunk(worldTarget));
         if (tc == null) return;
-
         Vector3 lp = worldTarget - tc.GlobalPosition;
         tc.SetBlock(Mathf.FloorToInt(lp.X), Mathf.FloorToInt(lp.Y), Mathf.FloorToInt(lp.Z),
             new BlockState { BlockId = _selectedBlockId, BitMask = 0xFF });
@@ -1348,14 +1521,11 @@ public partial class Player : CharacterBody3D
         foreach (var m in _chunkBorderMeshes) m.QueueFree();
         _chunkBorderMeshes.Clear();
         if (!_showChunkBorders) return;
-
         var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
         if (cm == null) return;
-
         var mat = new StandardMaterial3D();
         mat.AlbedoColor = new Color(1, 1, 0);
         mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-
         foreach (var cp in cm.GetLoadedChunkPositions())
         {
             float x0=cp.X*Chunk.SIZE,x1=x0+Chunk.SIZE;
@@ -1382,29 +1552,27 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
-    // MISC
+    // EXIT TREE
     // =========================================================================
 
-
-    // Clean up all root-level nodes when player leaves the scene.
-    // These were added directly to GetTree().Root so they survive scene changes
-    // unless we manually free them here.
     public override void _ExitTree()
     {
         _hotbarLayer?.QueueFree();
         _chatLayer?.QueueFree();
+        _craftingLayer?.QueueFree();
+        _equipmentLayer?.QueueFree();
+        _statsHudLayer?.QueueFree();
+        _breakOverlay?.QueueFree();
         _crosshairLayer?.QueueFree();
         _inventoryLayer?.QueueFree();
         _cursorLayer?.QueueFree();
         _blockOutline?.QueueFree();
-
-        foreach (var m in _chunkBorderMeshes)
-            m?.QueueFree();
+        foreach (var m in _chunkBorderMeshes) m?.QueueFree();
         _chunkBorderMeshes.Clear();
     }
 
     // =========================================================================
-    // CHAT BAR + COMMAND SYSTEM
+    // CHAT BAR + COMMANDS
     // =========================================================================
 
     private void BuildChatBar()
@@ -1414,131 +1582,102 @@ public partial class Player : CharacterBody3D
         _chatLayer.ProcessMode = ProcessModeEnum.Always;
         GetTree().Root.CallDeferred("add_child", _chatLayer);
 
-        var bg       = new ColorRect();
-        bg.Color     = new Color(0f, 0f, 0f, 0.55f);
-        bg.AnchorLeft = 0f; bg.AnchorRight  = 0.6f;
-        bg.AnchorTop  = 1f; bg.AnchorBottom = 1f;
-        bg.OffsetTop  = -44f; bg.OffsetBottom = 0f;
-        bg.Visible    = false;
+        var bg = new ColorRect();
+        bg.Color = new Color(0f,0f,0f,0.55f);
+        bg.AnchorLeft=0f; bg.AnchorRight=0.6f; bg.AnchorTop=1f; bg.AnchorBottom=1f;
+        bg.OffsetTop=-44f; bg.OffsetBottom=0f; bg.Visible=false;
         _chatLayer.CallDeferred("add_child", bg);
 
         _chatInput = new LineEdit();
-        _chatInput.PlaceholderText = "Type a command... (e.g. /gamemode creative)";
-        _chatInput.AnchorLeft      = 0f; _chatInput.AnchorRight  = 0.6f;
-        _chatInput.AnchorTop       = 1f; _chatInput.AnchorBottom = 1f;
-        _chatInput.OffsetTop       = -40f; _chatInput.OffsetBottom = -4f;
-        _chatInput.OffsetLeft      = 8f;  _chatInput.OffsetRight  = -8f;
-        _chatInput.Visible         = false;
-        _chatInput.TextSubmitted   += OnChatSubmit;
+        _chatInput.PlaceholderText="Type a command... (e.g. /gamemode creative)";
+        _chatInput.AnchorLeft=0f; _chatInput.AnchorRight=0.6f;
+        _chatInput.AnchorTop=1f; _chatInput.AnchorBottom=1f;
+        _chatInput.OffsetTop=-40f; _chatInput.OffsetBottom=-4f;
+        _chatInput.OffsetLeft=8f; _chatInput.OffsetRight=-8f;
+        _chatInput.Visible=false;
+        _chatInput.TextSubmitted+=OnChatSubmit;
         _chatLayer.CallDeferred("add_child", _chatInput);
 
         _chatFeedback = new Label();
-        _chatFeedback.AnchorLeft   = 0f; _chatFeedback.AnchorRight  = 0.6f;
-        _chatFeedback.AnchorTop    = 1f; _chatFeedback.AnchorBottom = 1f;
-        _chatFeedback.OffsetTop    = -70f; _chatFeedback.OffsetBottom = -46f;
-        _chatFeedback.OffsetLeft   = 8f;
-        _chatFeedback.AddThemeColorOverride("font_color", new Color(1f, 1f, 0.6f));
+        _chatFeedback.AnchorLeft=0f; _chatFeedback.AnchorRight=0.6f;
+        _chatFeedback.AnchorTop=1f; _chatFeedback.AnchorBottom=1f;
+        _chatFeedback.OffsetTop=-70f; _chatFeedback.OffsetBottom=-46f;
+        _chatFeedback.OffsetLeft=8f;
+        _chatFeedback.AddThemeColorOverride("font_color", new Color(1f,1f,0.6f));
         _chatFeedback.AddThemeFontSizeOverride("font_size", 13);
-        _chatFeedback.Visible      = false;
+        _chatFeedback.Visible=false;
         _chatLayer.CallDeferred("add_child", _chatFeedback);
     }
 
     private void OpenChat()
     {
-        _chatOpen          = true;
-        _chatInput.Visible = true;
-        _chatInput.Clear();
-        _chatInput.GrabFocus();
-        Input.MouseMode = Input.MouseModeEnum.Visible;
+        _chatOpen=true; _chatInput.Visible=true; _chatInput.Clear();
+        _chatInput.GrabFocus(); Input.MouseMode=Input.MouseModeEnum.Visible;
     }
 
     private void CloseChat()
     {
-        _chatOpen          = false;
-        _chatInput.Visible = false;
-        _chatInput.ReleaseFocus();
-        if (!_inventoryOpen && !_pauseMenu.IsOpen)
-            Input.MouseMode = Input.MouseModeEnum.Captured;
+        _chatOpen=false; _chatInput.Visible=false; _chatInput.ReleaseFocus();
+        if (!_inventoryOpen && !_pauseMenu.IsOpen) Input.MouseMode=Input.MouseModeEnum.Captured;
     }
 
     private void OnChatSubmit(string text)
     {
-        CloseChat();
-        text = text.Trim();
+        CloseChat(); text=text.Trim();
         if (string.IsNullOrEmpty(text)) return;
         ParseCommand(text);
     }
 
     private void ShowFeedback(string msg)
     {
-        _chatFeedback.Text    = msg;
-        _chatFeedback.Visible = true;
-        _feedbackTimer        = FeedbackDuration;
+        _chatFeedback.Text=msg; _chatFeedback.Visible=true; _feedbackTimer=FeedbackDuration;
     }
 
     private void ParseCommand(string input)
     {
         if (!input.StartsWith("/")) return;
-        string[] parts = input.Substring(1).Split(' ');
-        string cmd = parts[0].ToLower();
-
+        string[] parts=input.Substring(1).Split(' ');
+        string cmd=parts[0].ToLower();
         switch (cmd)
         {
             case "admin":
-                if (parts.Length < 2) { ShowFeedback("Usage: /admin <password>"); return; }
-                if (SettingsManager.Instance.TryUnlockAdmin(parts[1]))
-                    ShowFeedback("Admin access granted.");
-                else
-                    ShowFeedback("Incorrect password.");
+                if (parts.Length<2){ShowFeedback("Usage: /admin <password>");return;}
+                if (SettingsManager.Instance.TryUnlockAdmin(parts[1])) ShowFeedback("Admin access granted.");
+                else ShowFeedback("Incorrect password.");
                 break;
-
-            case "gamemode":
-            case "gm":
-                if (!SettingsManager.Instance.IsAdmin)
-                { ShowFeedback("You need admin to use this command."); return; }
-                if (parts.Length < 2) { ShowFeedback("Usage: /gamemode <creative|survival|story>"); return; }
+            case "gamemode": case "gm":
+                if (GameModeManager.Instance==null){ShowFeedback("GameModeManager not loaded.");return;}
+                if (!SettingsManager.Instance.IsAdmin){ShowFeedback("You need admin to use this command.");return;}
+                if (parts.Length<2){ShowFeedback("Usage: /gamemode <create|survival|story>");return;}
                 switch (parts[1].ToLower())
                 {
                     case "create": case "creative": case "c": case "1":
-                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Create);
-                        ShowFeedback("Switched to Create mode."); break;
+                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Create); ShowFeedback("Switched to Create mode."); break;
                     case "survival": case "s": case "0":
-                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Survival);
-                        ShowFeedback("Switched to Survival mode."); break;
+                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Survival); ShowFeedback("Switched to Survival mode."); break;
                     case "story": case "st": case "2":
-                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Story);
-                        ShowFeedback("Switched to Story mode."); break;
-                    default:
-                        ShowFeedback($"Unknown gamemode: {parts[1]}"); break;
+                        GameModeManager.Instance.SetMode(GameModeManager.GameMode.Story); ShowFeedback("Switched to Story mode."); break;
+                    default: ShowFeedback($"Unknown gamemode: {parts[1]}"); break;
                 }
                 break;
-
             case "fly":
-                if (!SettingsManager.Instance.IsAdmin && !GameModeManager.Instance.IsCreate)
-                { ShowFeedback("Fly is only available in Create mode."); return; }
-                ToggleFly();
-                ShowFeedback(_isFlying ? "Flying: ON" : "Flying: OFF");
+                if (GameModeManager.Instance==null){ShowFeedback("GameModeManager not loaded.");return;}
+                if (!SettingsManager.Instance.IsAdmin&&!GameModeManager.Instance.IsCreate)
+                {ShowFeedback("Fly is only available in Create mode.");return;}
+                ToggleFly(); ShowFeedback(_isFlying?"Flying: ON":"Flying: OFF");
                 break;
-
-            default:
-                ShowFeedback($"Unknown command: /{cmd}");
-                break;
+            default: ShowFeedback($"Unknown command: /{cmd}"); break;
         }
     }
 
     // =========================================================================
-    // GAMEMODE CHANGED
+    // GAMEMODE + FLY
     // =========================================================================
 
     private void OnGameModeChanged(GameModeManager.GameMode mode)
     {
-        if (mode != GameModeManager.GameMode.Create && _isFlying)
-            SetFlying(false);
+        if (mode != GameModeManager.GameMode.Create && _isFlying) SetFlying(false);
     }
-
-    // =========================================================================
-    // FLY MODE
-    // =========================================================================
 
     private void ToggleFly() => SetFlying(!_isFlying);
 
@@ -1553,27 +1692,25 @@ public partial class Player : CharacterBody3D
         Vector2 inputDir  = Input.GetVector("move_left","move_right","move_forward","move_back");
         Vector3 direction = (Transform.Basis * new Vector3(inputDir.X, 0, inputDir.Y)).Normalized();
         float   speed     = _isSprinting ? _flySpeed * 2f : _flySpeed;
-
         velocity.X = direction.X * speed;
         velocity.Z = direction.Z * speed;
-
-        if (Input.IsActionPressed("jump"))
-            velocity.Y = _flyVertSpeed;
-        else if (Input.IsActionPressed("crouch"))
-            velocity.Y = -_flyVertSpeed;
-        else
-            velocity.Y = Mathf.MoveToward(velocity.Y, 0f, _flyVertSpeed * dt * 10f);
+        if (Input.IsActionPressed("jump"))        velocity.Y = _flyVertSpeed;
+        else if (Input.IsActionPressed("crouch")) velocity.Y = -_flyVertSpeed;
+        else velocity.Y = Mathf.MoveToward(velocity.Y, 0f, _flyVertSpeed * dt * 10f);
     }
 
-    public PlayerStats  GetStats()        => _stats;
+    // =========================================================================
+    // MISC
+    // =========================================================================
 
-    // Called by PauseMenu when saving before quitting to main menu
+    public PlayerStats  GetStats()        => _stats;
+    public PlayerCamera GetPlayerCamera() => _playerCamera;
+
     public void SaveInventoryFromPauseMenu(ChunkManager cm)
     {
         cm.SaveInventory(_inventory);
         cm.SavePlayerPosition(GlobalPosition);
     }
-    public PlayerCamera GetPlayerCamera() => _playerCamera;
 
     public void ApplyGearMovement(ItemResource gear)
     {

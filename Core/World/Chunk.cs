@@ -14,11 +14,12 @@ public partial class Chunk : Node3D
 
     public Vector3I ChunkPosition { get; private set; }
     public bool IsGenerated { get; private set; } = false;
+    private ChunkManager _chunkManager; // set in Initialize - used for cross-chunk grass spread
     private bool _isDirty = false;
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
     private float _randomTickTimer = 0f;
-    private const float RandomTickInterval = 0.05f; // 20 ticks per second
-    private const int RandomTicksPerInterval = 3;
+    private const float RandomTickInterval = 0.03f; // ~33 ticks per second (was 0.05f / 20 per second)
+    private const int RandomTicksPerInterval = 10; // samples per tick (was 3) - higher = faster grass spread, more CPU per chunk per tick
 
     private enum FaceDirection
     {
@@ -42,6 +43,17 @@ public void Initialize(Vector3I chunkPosition)
         chunkPosition.Y * HEIGHT,
         chunkPosition.Z * SIZE
     );
+
+    // Seed from chunk position (not fully random) so flower placement is
+    // deterministic per-chunk rather than shifting on every reload, while
+    // still varying naturally from one chunk to the next.
+    _grassRng.Seed = (ulong)(chunkPosition.X * 486187739 ^ chunkPosition.Z * 1300719893 ^ chunkPosition.Y * 668265263);
+
+    // Cached reference to the owning ChunkManager, used so grass spread
+    // can reach into neighboring chunks across a chunk boundary. Chunk is
+    // always added as a direct child of ChunkManager in LoadChunk, so the
+    // parent is already set by the time Initialize runs.
+    _chunkManager = GetParent() as ChunkManager;
 }
 
     public BlockState GetBlock(int x, int y, int z)
@@ -56,6 +68,147 @@ public void Initialize(Vector3I chunkPosition)
     _blocks[x, y, z] = block;
     _isDirty = true;
     _modifiedBlocks[new Vector3I(x, y, z)] = block;
+
+    // If a solid, opaque, full block was just placed directly above a
+    // grass block, that grass loses its light/air and reverts to dirt -
+    // mirrors how grass decays when covered in most voxel games.
+    TryDecayGrassBelow(x, y, z, block);
+
+    // Sand has gravity (like Minecraft) - wet_sand1/wet_sand2 deliberately
+    // do not, since they're meant to behave like packed/stable ground.
+    TryApplyGravity(x, y, z, block);
+}
+
+// Checks the block directly below (x, y-1, z). If it's grass and the
+// block just placed at (x, y, z) is solid/opaque/full, converts that
+// grass back to dirt. Only triggers from SetBlock (real player/gameplay
+// actions), never from SetBlockInternal (world generation), so it won't
+// interfere with normal terrain/tree/decoration placement during
+// GenerateChunk.
+private void TryDecayGrassBelow(int x, int y, int z, BlockState placedBlock)
+{
+    if (placedBlock.IsAir()) return; // breaking a block (placing air) can't cover anything
+
+    BlockResource resource = BlockRegistry.Instance.GetBlock(placedBlock.BlockId);
+    if (resource == null) return;
+    if (resource.IsTransparent) return;              // glass/water etc. still let light through
+    if (resource.IsCross || resource.IsFlatGround) return; // flowers/clovers/carpets don't block light
+    if (!placedBlock.IsFullBlock()) return;           // chiseled/partial shapes may not fully cover the top
+
+    int by = y - 1;
+    if (!IsInBounds(x, by, z)) return; // below this chunk's bottom slice - not handled cross-chunk
+
+    BlockState below = _blocks[x, by, z];
+    if (below.BlockId != "grass_block") return;
+
+    var dirtBlock = new BlockState { BlockId = "dirt", BitMask = 0xFF };
+    _blocks[x, by, z] = dirtBlock;
+    _modifiedBlocks[new Vector3I(x, by, z)] = dirtBlock;
+    _isDirty = true;
+}
+
+// Returns true if the given block would hold something up (i.e. counts
+// as solid ground for gravity purposes). Excludes air, transparent
+// blocks (water, glass), and cross/flat-ground decorations (flowers,
+// carpets) - none of those should support a falling sand block.
+private bool IsSolidSupport(BlockState block)
+{
+    if (block.IsAir()) return false;
+    if (!block.IsFullBlock()) return false;
+
+    BlockResource resource = BlockRegistry.Instance.GetBlock(block.BlockId);
+    if (resource == null) return false;
+    if (resource.IsTransparent) return false;
+    if (resource.IsCross || resource.IsFlatGround) return false;
+
+    return true;
+}
+
+// Sand has gravity, like Minecraft - wet_sand1/wet_sand2 deliberately do
+// not (they're meant to behave like stable, packed ground). This is
+// called from SetBlock for every real player-driven block change and
+// checks two cases:
+//   1. The block just placed IS sand, and whatever's below it doesn't
+//      support it (e.g. placed straight into open air) - falls right away.
+//   2. The block just placed makes THIS position unable to support
+//      anything (e.g. breaking the ground out from under a sand block) -
+//      checks if sand sits directly above and needs to fall as a result.
+private void TryApplyGravity(int x, int y, int z, BlockState placedBlock)
+{
+    if (placedBlock.BlockId == "sand" && !IsSolidSupport(GetBlockCrossChunk(x, y - 1, z)))
+    {
+        ApplyGravityFall(x, y, z);
+        return;
+    }
+
+    if (!IsSolidSupport(placedBlock))
+    {
+        BlockState above = GetBlockCrossChunk(x, y + 1, z);
+        if (above.BlockId == "sand")
+            ApplyGravityFall(x, y + 1, z);
+    }
+}
+
+// Drops the sand block at local (x, y, z) straight down until it lands
+// on solid support (or the bottom of the loaded world). Also handles a
+// full "domino" cascade: after moving a sand block, it checks the
+// position directly above (which may have been resting on the block
+// that just moved) and repeats, so a whole stack of sand collapses in
+// one pass rather than needing separate trigger events per block.
+private void ApplyGravityFall(int x, int y, int z)
+{
+    int currentY = y;
+    int safety = 0; // hard cap so malformed/edge-case data can't cause a runaway loop
+
+    while (safety++ < 512)
+    {
+        BlockState current = GetBlockCrossChunk(x, currentY, z);
+        if (current.BlockId != "sand") break;
+
+        int restY = currentY;
+        while (true)
+        {
+            int worldYBelow = ChunkPosition.Y * HEIGHT + (restY - 1);
+            if (worldYBelow < 0) break; // don't fall below the bottom of the world
+
+            if (!GetBlockCrossChunk(x, restY - 1, z).IsAir()) break;
+            restY--;
+        }
+
+        if (restY != currentY)
+        {
+            var sandBlock = new BlockState { BlockId = "sand", BitMask = 0xFF };
+            WritePersisted(x, restY, z, sandBlock);
+            WritePersisted(x, currentY, z, BlockState.Air);
+        }
+
+        currentY++; // check what was resting on top of this block next
+    }
+}
+
+// Writes a block at a LOCAL offset from this chunk's origin, crossing
+// into a neighboring chunk via ChunkManager if needed - same as
+// SetBlockCrossChunkGrowth, but this variant DOES persist as a save
+// modification, since gravity is a real physical change (not ephemeral
+// growth like grass/wet-sand spread) and should survive a reload.
+private void WritePersisted(int x, int y, int z, BlockState block)
+{
+    if (IsInBounds(x, y, z))
+    {
+        _blocks[x, y, z] = block;
+        _isDirty = true;
+        _modifiedBlocks[new Vector3I(x, y, z)] = block;
+        return;
+    }
+
+    if (_chunkManager == null) return;
+
+    Vector3I worldPos = new Vector3I(
+        ChunkPosition.X * SIZE + x,
+        ChunkPosition.Y * HEIGHT + y,
+        ChunkPosition.Z * SIZE + z
+    );
+    _chunkManager.SetBlockAtWorld(worldPos, block);
 }
 
 // Used during initial world generation - does NOT mark as modified
@@ -88,11 +241,67 @@ public void ApplyModifications(Dictionary<Vector3I, BlockState> mods)
                z >= 0 && z < SIZE;
     }
 
-    public void MarkDirty()
+    // Sets a block due to natural/organic growth (e.g. grass spreading) -
+// marks the chunk dirty for a mesh rebuild, but does NOT record it in
+// _modifiedBlocks, matching how in-chunk grass spread already behaves
+// (keeps save files from bloating with every natural spread event).
+// Called directly for same-chunk writes, and via ChunkManager for
+// cross-chunk writes (see SetBlockAtWorldNaturalGrowth).
+public void SetBlockNaturalGrowth(int x, int y, int z, BlockState block)
+{
+    if (!IsInBounds(x, y, z)) return;
+    _blocks[x, y, z] = block;
+    _isDirty = true;
+}
+
+// Reads a block at a LOCAL offset from this chunk's origin, crossing
+// into a neighboring chunk via ChunkManager if the offset falls outside
+// this chunk's own bounds. Falls back to air if no chunk is currently
+// loaded there (e.g. player is near the edge of the loaded world) or if
+// this chunk has no ChunkManager reference yet.
+private BlockState GetBlockCrossChunk(int x, int y, int z)
+{
+    if (IsInBounds(x, y, z))
+        return _blocks[x, y, z];
+
+    if (_chunkManager == null)
+        return BlockState.Air;
+
+    Vector3I worldPos = new Vector3I(
+        ChunkPosition.X * SIZE + x,
+        ChunkPosition.Y * HEIGHT + y,
+        ChunkPosition.Z * SIZE + z
+    );
+    return _chunkManager.GetBlockAtWorld(worldPos);
+}
+
+// Writes a block at a LOCAL offset from this chunk's origin, crossing
+// into a neighboring chunk via ChunkManager if needed. Used only for
+// natural growth (grass spread) - never persisted as a save
+// modification, same as same-chunk spread.
+private void SetBlockCrossChunkGrowth(int x, int y, int z, BlockState block)
+{
+    if (IsInBounds(x, y, z))
     {
-        _isDirty = true;
+        SetBlockNaturalGrowth(x, y, z, block);
+        return;
     }
-    public void RequestRebuild()
+
+    if (_chunkManager == null) return;
+
+    Vector3I worldPos = new Vector3I(
+        ChunkPosition.X * SIZE + x,
+        ChunkPosition.Y * HEIGHT + y,
+        ChunkPosition.Z * SIZE + z
+    );
+    _chunkManager.SetBlockAtWorldNaturalGrowth(worldPos, block);
+}
+    public void MarkDirty()
+{
+    _isDirty = true;
+}
+
+public void RequestRebuild()
 {
     _isDirty = true;
 }
@@ -115,6 +324,22 @@ public override void _Process(double delta)
     }
 }
 
+// Chance that a successful grass spread also grows a flower/clover on
+// top of the newly-converted grass block - purely decorative, rolled
+// once per successful spread.
+private const float FlowerOnSpreadChance = 0.12f;
+
+private RandomNumberGenerator _grassRng = new RandomNumberGenerator();
+
+// Random tick: samples random blocks in the chunk each interval. Only
+// grass blocks are the "active agent" here - dirt is passive and does
+// nothing on its own. This matters for performance: dirt blocks are far
+// more numerous near any surface than grass blocks are, so if dirt were
+// also actively scanning for nearby grass, that (more expensive) search
+// would run on far more samples than the grass-only version does. Only
+// running the 3x3x3 neighbor search when the sample happens to land on
+// grass keeps the per-tick cost low regardless of how much dirt exists
+// in the chunk.
 private void RandomTick()
 {
     for (int i = 0; i < RandomTicksPerInterval; i++)
@@ -124,45 +349,125 @@ private void RandomTick()
         int rz = GD.RandRange(0, SIZE - 1);
 
         BlockState block = _blocks[rx, ry, rz];
-        if (block.BlockId != "grass_block") continue;
 
-        // Must have air above
-        if (ry + 1 < HEIGHT && !_blocks[rx, ry + 1, rz].IsAir()) continue;
-
-        // Search in a 3x3x3 area for eligible dirt
-        for (int dx = -1; dx <= 1; dx++)
+        if (block.BlockId == "grass_block")
         {
-            for (int dy = -1; dy <= 1; dy++)
+            // Must have air above - checks across the chunk boundary above if
+            // this grass block happens to sit at the very top of its chunk.
+            if (!GetBlockCrossChunk(rx, ry + 1, rz).IsAir()) continue;
+
+            TrySpreadFromGrass(rx, ry, rz);
+        }
+        else if (block.BlockId == "sand")
+        {
+            TryWetSandSpread(rx, ry, rz);
+        }
+        // NOTE: no early return here anymore - a previous version bailed
+        // out the instant it found ANY grass block, even if that one
+        // failed to find an eligible dirt neighbor, which wasted the rest
+        // of this tick's sample budget. Now every sample in the budget
+        // gets a real attempt, so multiple grass blocks can successfully
+        // spread within the same tick call.
+    }
+}
+
+// Wet sand spreading: a plain "sand" block that touches water becomes
+// wet_sand1. A plain "sand" block that touches wet_sand1 (but not water
+// directly) becomes wet_sand2 - a second, slightly-less-wet tier one
+// step further from the water's edge. This deliberately caps at two
+// tiers (wet_sand2 does not spread any further on its own), matching a
+// simple wet-sand gradient rather than an unbounded moisture spread.
+// Unlike grass spread, the sampled block converts ITSELF based on its
+// neighbors, so there's no separate neighbor-writing step needed.
+private void TryWetSandSpread(int x, int y, int z)
+{
+    if (HasNeighborBlock(x, y, z, "water"))
+    {
+        _blocks[x, y, z] = new BlockState { BlockId = "wet_sand1", BitMask = 0xFF };
+        _isDirty = true;
+        return;
+    }
+
+    if (HasNeighborBlock(x, y, z, "wet_sand1"))
+    {
+        _blocks[x, y, z] = new BlockState { BlockId = "wet_sand2", BitMask = 0xFF };
+        _isDirty = true;
+    }
+}
+
+// Checks this position's 3x3x3 neighborhood (excluding itself) for any
+// block matching the given id, crossing chunk boundaries via
+// GetBlockCrossChunk as needed. Stops as soon as a match is found.
+private bool HasNeighborBlock(int x, int y, int z, string blockId)
+{
+    for (int dx = -1; dx <= 1; dx++)
+    {
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dz = -1; dz <= 1; dz++)
             {
-                for (int dz = -1; dz <= 1; dz++)
-                {
-                    int nx = rx + dx;
-                    int ny = ry + dy;
-                    int nz = rz + dz;
-
-                    if (nx < 0 || nx >= SIZE || ny < 0 || ny >= HEIGHT || nz < 0 || nz >= SIZE)
-                        continue;
-
-                    BlockState neighbor = _blocks[nx, ny, nz];
-                    if (neighbor.BlockId != "dirt")
-                        continue;
-
-                    // Must have air above
-                    if (ny + 1 >= HEIGHT) continue;
-                    if (!_blocks[nx, ny + 1, nz].IsAir()) continue;
-
-                    // Spread grass!
-                    _blocks[nx, ny, nz] = new BlockState 
-                    { 
-                        BlockId = "grass_block", 
-                        BitMask = 0xFF
-                    };
-                    _isDirty = true;
-                    return; // one spread per tick
-                }
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                if (GetBlockCrossChunk(x + dx, y + dy, z + dz).BlockId == blockId)
+                    return true;
             }
         }
     }
+    return false;
+}
+
+// Search this grass block's 3x3x3 neighborhood for an eligible dirt
+// block (exposed to air above) and convert it to grass. On a successful
+// conversion, there's also a small chance to grow a flower or clover on
+// top of the new grass block, purely for visual variety.
+private bool TrySpreadFromGrass(int rx, int ry, int rz)
+{
+    for (int dx = -1; dx <= 1; dx++)
+    {
+        for (int dy = -1; dy <= 1; dy++)
+        {
+            for (int dz = -1; dz <= 1; dz++)
+            {
+                int nx = rx + dx;
+                int ny = ry + dy;
+                int nz = rz + dz;
+
+                // No bounds check/skip here anymore - GetBlockCrossChunk
+                // transparently reaches into a neighboring chunk if this
+                // offset falls outside SIZE/HEIGHT, which is what lets
+                // grass spread across a chunk boundary instead of only
+                // within its own 16x16x16 chunk.
+                BlockState neighbor = GetBlockCrossChunk(nx, ny, nz);
+                if (neighbor.BlockId != "dirt")
+                    continue;
+
+                // Must have air above (may also cross into another chunk)
+                if (!GetBlockCrossChunk(nx, ny + 1, nz).IsAir()) continue;
+
+                // Spread grass! Writes through the same cross-chunk-aware
+                // path so this works whether the target dirt block lives
+                // in this chunk or a neighboring one.
+                var grassBlock = new BlockState { BlockId = "grass_block", BitMask = 0xFF };
+                SetBlockCrossChunkGrowth(nx, ny, nz, grassBlock);
+
+                // Small chance to grow a flower/clover on top of the
+                // freshly-spread grass block. Reuses the air slot we
+                // already confirmed is empty above (ny + 1).
+                if (_grassRng.Randf() < FlowerOnSpreadChance)
+                {
+                    float typeRoll = _grassRng.Randf();
+                    string decorId = typeRoll < 0.34f ? "rose"
+                        : typeRoll < 0.67f ? "clover"
+                        : "dandelion";
+
+                    var decorBlock = new BlockState { BlockId = decorId, BitMask = 0xFF };
+                    SetBlockCrossChunkGrowth(nx, ny + 1, nz, decorBlock);
+                }
+
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 public void BuildMesh()
