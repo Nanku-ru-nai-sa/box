@@ -21,10 +21,31 @@ public partial class Chunk : Node3D
     private const float RandomTickInterval = 0.03f; // ~33 ticks per second (was 0.05f / 20 per second)
     private const int RandomTicksPerInterval = 10; // samples per tick (was 3) - higher = faster grass spread, more CPU per chunk per tick
 
+    // Rebuilding a chunk's mesh means re-triangulating its whole 16x16x16
+    // volume from scratch - fine for occasional player edits, but systemic
+    // tick-driven changes (grass spread, wet sand reacting near a
+    // coastline) can flip several blocks in quick succession, and without
+    // a limit that meant a full rebuild every single frame during a busy
+    // stretch. This cooldown batches rapid changes into far fewer rebuilds.
+    private float _meshRebuildCooldown = 0f;
+    private const float MeshRebuildMinInterval = 0.1f; // at most ~10 rebuilds/sec per chunk
+
     private enum FaceDirection
     {
         Top, Bottom, North, South, East, West
     }
+
+    // The 6 direct face neighbors (no diagonals) - used for wet-sand
+    // checks instead of a full 26-neighbor 3x3x3 scan, since "touching"
+    // only really needs to mean face-adjacent, and this is checked very
+    // frequently (every sand/wet-sand random tick sample near any
+    // coastline), so cutting 26 checks down to 6 meaningfully reduces cost.
+    private static readonly Vector3I[] OrthogonalOffsets = new Vector3I[]
+    {
+        new Vector3I(1, 0, 0), new Vector3I(-1, 0, 0),
+        new Vector3I(0, 1, 0), new Vector3I(0, -1, 0),
+        new Vector3I(0, 0, 1), new Vector3I(0, 0, -1)
+    };
 
 public override void _Ready()
 {
@@ -308,10 +329,14 @@ public void RequestRebuild()
 
 public override void _Process(double delta)
 {
-    if (_isDirty && IsGenerated)
+    if (_meshRebuildCooldown > 0f)
+        _meshRebuildCooldown -= (float)delta;
+
+    if (_isDirty && IsGenerated && _meshRebuildCooldown <= 0f)
     {
         BuildMesh();
         _isDirty = false;
+        _meshRebuildCooldown = MeshRebuildMinInterval;
     }
 
     if (!IsGenerated) return;
@@ -360,7 +385,15 @@ private void RandomTick()
         }
         else if (block.BlockId == "sand")
         {
-            TryWetSandSpread(rx, ry, rz);
+            TrySandToWetSand1(rx, ry, rz);
+        }
+        else if (block.BlockId == "wet_sand2")
+        {
+            TryWetSand2ToWetSand1(rx, ry, rz);
+        }
+        else if (block.BlockId == "wet_sand1")
+        {
+            TryWetSand1SpreadToSand(rx, ry, rz);
         }
         // NOTE: no early return here anymore - a previous version bailed
         // out the instant it found ANY grass block, even if that one
@@ -371,46 +404,71 @@ private void RandomTick()
     }
 }
 
-// Wet sand spreading: a plain "sand" block that touches water becomes
-// wet_sand1. A plain "sand" block that touches wet_sand1 (but not water
-// directly) becomes wet_sand2 - a second, slightly-less-wet tier one
-// step further from the water's edge. This deliberately caps at two
-// tiers (wet_sand2 does not spread any further on its own), matching a
-// simple wet-sand gradient rather than an unbounded moisture spread.
-// Unlike grass spread, the sampled block converts ITSELF based on its
-// neighbors, so there's no separate neighbor-writing step needed.
-private void TryWetSandSpread(int x, int y, int z)
+// Stage 1 of the wet-sand gradient: a plain "sand" block that touches
+// water converts itself to wet_sand1.
+private void TrySandToWetSand1(int x, int y, int z)
 {
     if (HasNeighborBlock(x, y, z, "water"))
     {
         _blocks[x, y, z] = new BlockState { BlockId = "wet_sand1", BitMask = 0xFF };
         _isDirty = true;
-        return;
     }
+}
 
-    if (HasNeighborBlock(x, y, z, "wet_sand1"))
+// Re-wetting: a "wet_sand2" block (the drier tier) that touches water
+// gets pulled back to wet_sand1 (the wetter tier) - water reaching a
+// wet_sand2 block re-wets it fully rather than leaving it as-is.
+private void TryWetSand2ToWetSand1(int x, int y, int z)
+{
+    if (HasNeighborBlock(x, y, z, "water"))
     {
-        _blocks[x, y, z] = new BlockState { BlockId = "wet_sand2", BitMask = 0xFF };
+        _blocks[x, y, z] = new BlockState { BlockId = "wet_sand1", BitMask = 0xFF };
         _isDirty = true;
     }
 }
 
-// Checks this position's 3x3x3 neighborhood (excluding itself) for any
+// Stage 2 of the wet-sand gradient: a "wet_sand1" block that touches a
+// plain "sand" neighbor triggers a mutual reaction - the sand neighbor
+// converts to wet_sand2, AND this wet_sand1 block converts to wet_sand2
+// as well (unlike grass spread, where only the target converts and the
+// source stays put). This is the ONLY way wet_sand1 progresses to
+// wet_sand2 - touching water directly does NOT push it that direction
+// (see TryWetSand2ToWetSand1 above for the reverse relationship).
+private void TryWetSand1SpreadToSand(int x, int y, int z)
+{
+    foreach (var offset in OrthogonalOffsets)
+    {
+        int nx = x + offset.X;
+        int ny = y + offset.Y;
+        int nz = z + offset.Z;
+
+        if (GetBlockCrossChunk(nx, ny, nz).BlockId != "sand") continue;
+
+        var wetSand2 = new BlockState { BlockId = "wet_sand2", BitMask = 0xFF };
+
+        // Convert the neighboring sand block (may cross into a
+        // neighboring chunk).
+        SetBlockCrossChunkGrowth(nx, ny, nz, wetSand2);
+
+        // Convert this wet_sand1 block itself too - (x, y, z) is
+        // always local since it came from this chunk's own
+        // RandomTick sample.
+        _blocks[x, y, z] = wetSand2;
+        _isDirty = true;
+
+        return; // one reaction per tick sample
+    }
+}
+
+// Checks this position's 6 direct face neighbors (not diagonals) for any
 // block matching the given id, crossing chunk boundaries via
 // GetBlockCrossChunk as needed. Stops as soon as a match is found.
 private bool HasNeighborBlock(int x, int y, int z, string blockId)
 {
-    for (int dx = -1; dx <= 1; dx++)
+    foreach (var offset in OrthogonalOffsets)
     {
-        for (int dy = -1; dy <= 1; dy++)
-        {
-            for (int dz = -1; dz <= 1; dz++)
-            {
-                if (dx == 0 && dy == 0 && dz == 0) continue;
-                if (GetBlockCrossChunk(x + dx, y + dy, z + dz).BlockId == blockId)
-                    return true;
-            }
-        }
+        if (GetBlockCrossChunk(x + offset.X, y + offset.Y, z + offset.Z).BlockId == blockId)
+            return true;
     }
     return false;
 }

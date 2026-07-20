@@ -10,9 +10,9 @@ public partial class MainMenu : Control
     private const string GameScene = "res://Scenes/Test.tscn";
 
     // World creation options
-    private static readonly string[] ThemeOptions      = { "Plains", "Forest", "Desert", "Tundra", "Jungle" };
-    private static readonly string[] StartBonusOptions = { "None", "Extra Tools", "Extra Food", "Head Start Shelter" };
-    private static readonly string[] TypeOptions        = { "Normal", "Sky Islands", "Hell", "Flat" };
+    private static readonly string[] ThemeOptions      = { "Normal", "Only Forest", "Only Desert" };
+    private static readonly string[] StartBonusOptions = { "None" };
+    private static readonly string[] TypeOptions        = { "Normal", "Flat", "Sky Islands" };    
     private static readonly string[] SeasonOptions      = { "Spring", "Summer", "Autumn", "Winter" };
 
     // Character creation options

@@ -1,5 +1,5 @@
 { "id": "sticks_from_planks",
 "result": "stick",
-"count": 4,
+"count": 16,
 "shaped": false,
-"ingredients": ["planks", "planks"] }
+"ingredients": ["log", "log"] }

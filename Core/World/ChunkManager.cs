@@ -2,11 +2,23 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
+public enum WorldGenType { Normal, Flat, SkyIslands }
+public enum WorldGenTheme { Normal, OnlyForest, OnlyDesert }
+
 public partial class ChunkManager : Node3D
 {
     [Export] public int RenderDistance { get; set; } = 7;
     [Export] public int VerticalRenderDistance { get; set; } = 8; // covers +/-8 chunks (+/-128 blocks) around the player - enough to see from ground level up through the sky island band (~Y230) when standing near sea level, without loading the full 18-layer world height at all times
     [Export] public int Seed { get; set; } = 777;
+
+    // Set from the active world's save data in _Ready(), before noise is configured.
+    // Defaults here only matter if you run this scene directly without going through the menu.
+    public WorldGenType WorldType { get; set; } = WorldGenType.Normal;
+    public WorldGenTheme WorldTheme { get; set; } = WorldGenTheme.Normal;
+
+    // ---- FLAT WORLD SETTINGS ----
+    [ExportGroup("Flat World")]
+    [Export] public int FlatGroundHeight = 100; // matches WaterLevel so flat worlds sit right at sea level
 
     // ---- CAVE SETTINGS ----
     // How caves work: two noise fields are sampled at every underground
@@ -93,6 +105,22 @@ public partial class ChunkManager : Node3D
 
     public override void _Ready()
     {
+        // Pull this world's settings from its save data before noise gets configured below.
+        // Falls back to the [Export] defaults above if there's no active world (e.g. running
+        // this scene directly instead of going through the main menu).
+        var activeWorld = SaveManager.Instance?.LoadWorldMeta(SaveManager.Instance.ActiveWorldId);
+        if (activeWorld != null)
+        {
+            Seed = unchecked((int)activeWorld.Seed);
+            WorldType = ParseWorldType(activeWorld.Type);
+            WorldTheme = ParseWorldTheme(activeWorld.Theme);
+            GD.Print($"Loaded world '{activeWorld.DisplayName}' — seed {Seed}, type {WorldType}, theme {WorldTheme}");
+        }
+        else
+        {
+            GD.Print("No active world found — using default Seed/WorldType.");
+        }
+
         _lowNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _lowNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
         _lowNoise.FractalOctaves = 6;
@@ -221,6 +249,20 @@ public partial class ChunkManager : Node3D
 
         SetProcess(true);
     }
+
+    private WorldGenType ParseWorldType(string type) => type switch
+    {
+        "Flat" => WorldGenType.Flat,
+        "Sky Islands" => WorldGenType.SkyIslands,
+        _ => WorldGenType.Normal
+    };
+
+    private WorldGenTheme ParseWorldTheme(string theme) => theme switch
+    {
+        "Only Forest" => WorldGenTheme.OnlyForest,
+        "Only Desert" => WorldGenTheme.OnlyDesert,
+        _ => WorldGenTheme.Normal
+    };
 
     public override void _Process(double delta)
     {
@@ -517,6 +559,10 @@ public Vector3? LoadPlayerPosition()
     private Biome GetBiome(float temp, float humid, int surfaceY)
     {
         if (surfaceY <= WaterLevel + 2 && surfaceY >= WaterLevel - 16) return Biome.Beach;
+
+        if (WorldTheme == WorldGenTheme.OnlyForest) return Biome.Forest;
+        if (WorldTheme == WorldGenTheme.OnlyDesert) return Biome.Desert;
+
         if (temp > 0.4f && humid < -0.1f) return Biome.Desert;
         if (temp < -0.3f) return Biome.Tundra;
         if (humid > 0.1f) return Biome.Forest;
@@ -553,6 +599,55 @@ public Vector3? LoadPlayerPosition()
     }
 
     private float GetDensity(int worldX, int worldY, int worldZ)
+    {
+        if (WorldType == WorldGenType.Flat)
+            return GetFlatDensity(worldY);
+
+        if (WorldType == WorldGenType.SkyIslands)
+            return GetSkyIslandsOnlyDensity(worldX, worldY, worldZ);
+
+        return GetNormalDensity(worldX, worldY, worldZ);
+    }
+
+    // Flat world: a single solid slab up to FlatGroundHeight, air above it.
+    // No noise sampling at all, so this is essentially free performance-wise.
+    private float GetFlatDensity(int worldY)
+    {
+        const int worldHeightCap = 288;
+        if (worldY >= worldHeightCap) return -10f;
+        return worldY < FlatGroundHeight ? 10f : -10f;
+    }
+
+    // Sky Islands world: no continuous ground. Islands are generated using
+    // the same shape noise as the old "occasional sky island" feature, but
+    // applied across most of the world's height instead of gated behind a
+    // rare selector. A solid floor near the bottom keeps you from falling
+    // forever if you miss every island.
+    private float GetSkyIslandsOnlyDensity(int worldX, int worldY, int worldZ)
+    {
+        const int worldHeightCap = 288;
+        if (worldY >= worldHeightCap) return -10f;
+        if (worldY <= 4) return 10f; // safety floor
+
+        float shape = _skyIslandNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ);
+        // Slow vertical banding so islands cluster into rough layers instead
+        // of forming one continuous mess top to bottom.
+        float bandNoise = _skyIslandSelector.GetNoise3D(worldX, worldY * 0.15f, worldZ);
+
+        float density = (shape * 50f) - Mathf.Abs(bandNoise) * 80f + 10f;
+
+        float overhang = _overhangNoise.GetNoise3D(worldX, worldY * 1.3f, worldZ);
+        float surfaceCloseness = Mathf.Clamp(1f - Mathf.Abs(density) / 40f, 0f, 1f);
+        density += overhang * 20f * surfaceCloseness;
+
+        if (IsCave(worldX, worldY, worldZ, density))
+            density = -1f;
+
+        return density;
+    }
+
+    // Your original terrain shape function, unchanged.
+    private float GetNormalDensity(int worldX, int worldY, int worldZ)
     {
         float low = _lowNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ);
         float lowFlattened = Mathf.Sign(low) * Mathf.Pow(Mathf.Abs(low), 2.2f);

@@ -8,7 +8,7 @@ public partial class Player : CharacterBody3D
     [Export] public float SprintSpeed       { get; set; } = 8f;
     [Export] public float CrouchSpeed       { get; set; } = 2.5f;
     [Export] public float JumpVelocity      { get; set; } = 6f;
-    [Export] public float SprintStaminaCost { get; set; } = 10f;
+    [Export] public float SprintStaminaCost { get; set; } = 1f;
     [Export] public float JumpStaminaCost   { get; set; } = 10f;
 
     private float _gravity = 20f;
@@ -1413,6 +1413,19 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         _blockOutline.Visible = true;
     }
 
+    // Maps a broken block's BlockId to the item id it should drop.
+    // grass_block always drops dirt (breaking the grass "layer" leaves
+    // the dirt underneath). wet_sand1 and wet_sand2 both collapse into a
+    // single obtainable item, "wet_sand2" (displayed in-game as "Wet
+    // Sand") - wet_sand1 is purely a transitional block state on its way
+    // to becoming wet_sand2, so it never drops as itself.
+    private string GetDropId(string blockId)
+    {
+        if (blockId == "grass_block") return "dirt";
+        if (blockId == "wet_sand1" || blockId == "wet_sand2") return "wet_sand2";
+        return blockId;
+    }
+
     private void TryBreakBlock()
     {
         if (!_rayCast.IsColliding()) { ResetBreak(); return; }
@@ -1443,7 +1456,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (gm != null && gm.IsCreate)
         {
-            string dropC = b.BlockId == "grass_block" ? "dirt" : b.BlockId;
+            string dropC = GetDropId(b.BlockId);
             if (dropC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropC, 1);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak(); return;
@@ -1464,7 +1477,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakHitsNeeded) ?? (_breakHitCount >= _breakHitsNeeded);
         if (shouldBreak)
         {
-            string drop = b.BlockId == "grass_block" ? "dirt" : b.BlockId;
+            string drop = GetDropId(b.BlockId);
             if (drop is not ("rose" or "dandelion" or "clover")) AddItemToInventory(drop, 1);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak();

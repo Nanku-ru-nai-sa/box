@@ -27,9 +27,9 @@ public class WorldMeta
     public string LockedGameMode { get; set; } = "Survival";
     public string LockedDifficulty { get; set; } = "Normal";
 
-    public string Theme { get; set; } = "Plains";
+    public string Theme { get; set; } = "Normal";
     public string StartBonus { get; set; } = "None";
     public string Type { get; set; } = "Normal";
     public string Season { get; set; } = "Spring";
-    public bool SeasonLocked { get; set; } = false; // true = stays on Season forever, false = cycles normally
+    public bool SeasonLocked { get; set; } = false;
 }
