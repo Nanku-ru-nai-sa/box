@@ -126,6 +126,10 @@ public partial class Player : CharacterBody3D
         _rayCast      = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
         _rayCast.AddException(this);
 
+        // Lets ItemPickup (and anything else) reliably find the player node
+        // regardless of what it's actually named in the scene tree.
+        AddToGroup("player");
+
         _inventory           = new Inventory();
         _inventory.SlotCount = TotalSlots;
         AddChild(_inventory);
@@ -882,6 +886,25 @@ public partial class Player : CharacterBody3D
         return rem;
     }
 
+    // Called by ItemPickup when the player walks close enough to collect it.
+    // Returns how many items didn't fit anywhere (0 means it was fully collected).
+    public int CollectPickup(string itemId, int count)
+    {
+        return AddItemToInventory(itemId, count);
+    }
+
+    // Spawns a physical item drop in the world at worldPosition instead of
+    // adding the item straight to the inventory. Used by block breaking.
+    private void SpawnItemDrop(string itemId, int count, Vector3 worldPosition)
+    {
+        if (string.IsNullOrEmpty(itemId) || count <= 0) return;
+        var pickup = new ItemPickup();
+        pickup.ItemId = itemId;
+        pickup.Count  = count;
+        GetTree().Root.AddChild(pickup);
+        pickup.GlobalPosition = worldPosition;
+    }
+
     // =========================================================================
     // GLOBAL INPUT
     // =========================================================================
@@ -1444,8 +1467,10 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         BlockState above = chunk.GetBlock(bx, by + 1, bz);
         if (above.BlockId is "rose" or "clover" or "dandelion")
         {
-            if (above.BlockId == "rose")      AddItemToInventory("rose", 1);
-            if (above.BlockId == "dandelion") AddItemToInventory("dandelion", 1);
+            // Flowers pop out as a physical drop too, from just above the block being broken.
+            Vector3 aboveWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 1.5f, bz + 0.5f);
+            if (above.BlockId == "rose")      SpawnItemDrop("rose", 1, aboveWorldPos);
+            if (above.BlockId == "dandelion") SpawnItemDrop("dandelion", 1, aboveWorldPos);
             chunk.SetBlock(bx, by + 1, bz, BlockState.Air);
             ResetBreak(); return;
         }
@@ -1456,6 +1481,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (gm != null && gm.IsCreate)
         {
+            // Creative mode stays instant — no physical drop, straight to inventory.
             string dropC = GetDropId(b.BlockId);
             if (dropC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropC, 1);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
@@ -1478,7 +1504,13 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         if (shouldBreak)
         {
             string drop = GetDropId(b.BlockId);
-            if (drop is not ("rose" or "dandelion" or "clover")) AddItemToInventory(drop, 1);
+            if (drop is not ("rose" or "dandelion" or "clover"))
+            {
+                // Survival mode: spawn a physical drop at the block's position
+                // instead of adding it to the inventory directly.
+                Vector3 dropWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
+                SpawnItemDrop(drop, 1, dropWorldPos);
+            }
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak();
         }
