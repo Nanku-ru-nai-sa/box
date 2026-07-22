@@ -80,6 +80,7 @@ public partial class ChunkManager : Node3D
     private FastNoiseLite _lowNoise = new FastNoiseLite();
     private FastNoiseLite _highNoise = new FastNoiseLite();
     private FastNoiseLite _selectorNoise = new FastNoiseLite();
+    private FastNoiseLite _depthNoise = new FastNoiseLite(); // beta-style per-column heightmap ("Depth" noise) - decides how much this column's general ground level rises/dips from WaterLevel
 
     private FastNoiseLite _biomeTemp = new FastNoiseLite();
     private FastNoiseLite _biomeHumid = new FastNoiseLite();
@@ -143,8 +144,8 @@ public partial class ChunkManager : Node3D
 
         _overhangNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _overhangNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
-        _overhangNoise.FractalOctaves = 3;
-        _overhangNoise.Frequency = 0.022f;
+        _overhangNoise.FractalOctaves = 4; // was 3 - extra octave adds chunkier detail to match the strengthened overhangs in GetNormalDensity
+        _overhangNoise.Frequency = 0.026f; // was 0.022f
         _overhangNoise.Seed = Seed + 4;
 
         _skyIslandNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
@@ -162,16 +163,22 @@ public partial class ChunkManager : Node3D
         _selectorNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _selectorNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
         _selectorNoise.FractalOctaves = 2;
-        _selectorNoise.Frequency = 0.002f;
+        _selectorNoise.Frequency = 0.008f; // was 0.002f - now sampled in 3D (beta's "Main" noise varies with Y too, not just per-column), so frequency bumped to still give reasonably-sized rocky/smooth patches instead of one giant blob per column
         _selectorNoise.Seed = Seed + 2;
+
+        _depthNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _depthNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
+        _depthNoise.FractalOctaves = 3;
+        _depthNoise.Frequency = 0.003f; // slow - big, gentle regions of "generally higher" or "generally lower" ground, like beta's Depth noise
+        _depthNoise.Seed = Seed + 7;
 
         _biomeTemp.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _biomeTemp.Seed = 77777;
-        _biomeTemp.Frequency = 0.004f;
+        _biomeTemp.Frequency = 0.006f; // was 0.004f - smaller biome regions, so you hit a new one sooner instead of walking through one huge stretch
 
         _biomeHumid.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _biomeHumid.Seed = 88888;
-        _biomeHumid.Frequency = 0.004f;
+        _biomeHumid.Frequency = 0.006f; // was 0.004f
 
         _oreNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _oreNoise.Seed = 55555;
@@ -313,7 +320,39 @@ if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
 }
 
     }
-    private string SaveDirectory => "user://saves/world1/";
+    // Chunk/terrain data is keyed to the active world ONLY - the world's
+    // blocks are shared ground truth for anyone in that world, not
+    // character-specific. Falls back to "world1" if somehow no world is
+    // active (e.g. running this scene directly without going through the
+    // menu) so it doesn't throw.
+    private string SaveDirectory
+    {
+        get
+        {
+            string worldId = SaveManager.Instance != null && !string.IsNullOrEmpty(SaveManager.Instance.ActiveWorldId)
+                ? SaveManager.Instance.ActiveWorldId
+                : "world1";
+            return $"user://saves/worlds/{worldId}/chunks/";
+        }
+    }
+
+    // Player-specific data (inventory, position) is keyed to BOTH the
+    // active world AND the active character - so the same character
+    // starts fresh in a different world, and two different characters in
+    // the SAME world never see each other's inventory or position.
+    private string PlayerSaveDirectory
+    {
+        get
+        {
+            string worldId = SaveManager.Instance != null && !string.IsNullOrEmpty(SaveManager.Instance.ActiveWorldId)
+                ? SaveManager.Instance.ActiveWorldId
+                : "world1";
+            string characterId = SaveManager.Instance != null && !string.IsNullOrEmpty(SaveManager.Instance.ActiveCharacterId)
+                ? SaveManager.Instance.ActiveCharacterId
+                : "character1";
+            return $"user://saves/worlds/{worldId}/players/{characterId}/";
+        }
+    }
 
     public IEnumerable<Vector3I> GetLoadedChunkPositions()
     {
@@ -322,9 +361,7 @@ if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
 
     public void SaveModifiedChunks()
     {
-        var dir = DirAccess.Open("user://");
-        if (!dir.DirExists("saves/world1"))
-            dir.MakeDirRecursive("saves/world1");
+        DirAccess.MakeDirRecursiveAbsolute(SaveDirectory);
 
         int savedCount = 0;
         foreach (var kvp in _chunks)
@@ -352,9 +389,7 @@ if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
 
     public void SaveInventory(Inventory inventory)
 {
-    var dir = DirAccess.Open("user://");
-    if (!dir.DirExists("saves/world1"))
-        dir.MakeDirRecursive("saves/world1");
+    DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
 
     var slots = new Godot.Collections.Array();
     foreach (var slot in inventory.Slots)
@@ -366,14 +401,14 @@ if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
     }
 
     string json = Json.Stringify(slots);
-    using var file = FileAccess.Open(SaveDirectory + "inventory.json", FileAccess.ModeFlags.Write);
+    using var file = FileAccess.Open(PlayerSaveDirectory + "inventory.json", FileAccess.ModeFlags.Write);
     file.StoreString(json);
     GD.Print("Inventory saved.");
 }
 
 public void LoadInventory(Inventory inventory)
 {
-    string path = SaveDirectory + "inventory.json";
+    string path = PlayerSaveDirectory + "inventory.json";
     if (!FileAccess.FileExists(path)) return;
 
     using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -400,9 +435,7 @@ public void LoadInventory(Inventory inventory)
 
 public void SavePlayerPosition(Vector3 position)
 {
-    var dir = DirAccess.Open("user://");
-    if (!dir.DirExists("saves/world1"))
-        dir.MakeDirRecursive("saves/world1");
+    DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
 
     var data = new Godot.Collections.Dictionary
     {
@@ -411,14 +444,14 @@ public void SavePlayerPosition(Vector3 position)
         ["z"] = position.Z
     };
 
-    using var file = FileAccess.Open(SaveDirectory + "player.json", FileAccess.ModeFlags.Write);
+    using var file = FileAccess.Open(PlayerSaveDirectory + "player.json", FileAccess.ModeFlags.Write);
     file.StoreString(Json.Stringify(data));
     GD.Print($"Player position saved: {position}");
 }
 
 public Vector3? LoadPlayerPosition()
 {
-    string path = SaveDirectory + "player.json";
+    string path = PlayerSaveDirectory + "player.json";
     if (!FileAccess.FileExists(path)) return null;
 
     using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
@@ -646,47 +679,199 @@ public Vector3? LoadPlayerPosition()
         return density;
     }
 
-    // Your original terrain shape function, unchanged.
+    // ===== Adapted from real Minecraft Beta 1.7.3 terrain generation =====
+    // Reverse-engineered structure (see the i73 project's notes on beta gen):
+    //   1. A per-column "height center" (heightmap) - a slow noise that
+    //      decides how far this column's general ground level sits above
+    //      or below sea level. Dips (oceans/lowlands) are gentler than
+    //      rises (mountains).
+    //   2. "Biome chaos" - hot + humid areas get rougher, more chaotic
+    //      terrain than cold/dry ones. This is the ONLY way biome
+    //      influences terrain shape in beta (very different from modern MC).
+    //   3. Density = blend(lower noise, upper noise, main noise) minus a
+    //      falloff based on distance from the height center - and that
+    //      falloff is 4x steeper BELOW the height center than above it.
+    //      That asymmetry is what gives beta its calm, flat ocean floors
+    //      while still allowing tall, steep mountains above ground.
+    //   4. A taper near the very top of the world so peaks round off
+    //      naturally instead of getting flat-topped by the height cap.
+    //
+    // Beta's own magic numbers (512, 20, 8.5, 13...) were tuned for its
+    // own raw, un-normalized noise output, a 0-128 world, and sea at
+    // Y=64 - none of that carries over directly to our -1..1 FastNoiseLite
+    // output, our Y=0-288 world, or our WaterLevel of 100. So the
+    // mechanism is ported faithfully, but every constant below is
+    // rebuilt for our world, and pushed further ("amplify") than a
+    // straight 1:1 shrink of beta's numbers would give you.
     private float GetNormalDensity(int worldX, int worldY, int worldZ)
     {
-        float low = _lowNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ);
-        float lowFlattened = Mathf.Sign(low) * Mathf.Pow(Mathf.Abs(low), 2.2f);
+        // ---- 1. Height center (per-column heightmap) ----
+        float depthSample = _depthNoise.GetNoise2D(worldX, worldZ); // -1..1
 
-        float high = _highNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ) * 0.6f;
-        float selector = _selectorNoise.GetNoise2D(worldX, worldZ);
+        // Power-curve the noise before using it: values near the middle of
+        // the -1..1 range get pulled closer to 0 (flat, at water level),
+        // while only the noise that's already near the extremes keeps
+        // real elevation. This widens flat/playable land near water level
+        // without lowering how tall the tallest hills/mountains can still
+        // get at strong noise values (pow(1, x) == 1, so the max is
+        // untouched either way).
+        //
+        // Exponent dropped 2.4 -> 1.3. At 2.4 this was too aggressive: it
+        // didn't just flatten the MIDDLE of the range, it made almost
+        // every value near-zero (land) EXCEPT the values already close to
+        // the extreme, which stayed close to the extreme. That's a
+        // bimodal split with barely anything in between - so wherever
+        // water did form, it jumped straight to near-max depth instead of
+        // gradually sloping down from the shoreline, which is why it was
+        // showing up as deep trenches ~2 chunks down instead of normal
+        // shallow lakes/coastline at the surface. 1.3 still flattens the
+        // middle somewhat (bigger flat land area than doing nothing at
+        // all) but leaves a real gradient in between, so dips slope down
+        // gradually into shallow water before reaching real depth.
+        float depthShaped = Mathf.Sign(depthSample) * Mathf.Pow(Mathf.Abs(depthSample), 1.3f);
 
-        float blend = Mathf.Clamp((selector + 1f) * 0.5f, 0f, 1f);
-        blend = Mathf.Pow(blend, 1.6f);
-        blend = blend * blend * (3f - 2f * blend);
+        // Dips gentler than rises, like beta - brought back down from the
+        // last change (0.75 -> 0.55) now that the gentler power curve
+        // above is doing the real work of letting water actually form;
+        // 0.75 combined with the old steep curve is what was making dips
+        // plunge straight to nearly their max depth instead of grading in
+        // gradually.
+        float depth = depthShaped < 0f ? depthShaped * 0.55f : depthShaped;
+        const float heightCenterSwing = 46f; // how many blocks the height center can rise/dip from the LAND baseline (below) - pushed up from beta's real ~12-below/4-above blocks for a bigger, "amplified" range
 
-        float shape = Mathf.Lerp(lowFlattened, high, blend);
+        // Land bias: a positive baseline shift so typical/flat noise
+        // generates dry land instead of landing exactly at WaterLevel.
+        // Lowered slightly (10f -> 8f) alongside the curve/dip changes
+        // above so real coastline and shallow water can reach the
+        // surface without needing an extreme noise value first. This trio
+        // (bias, curve exponent, dip strength) is the set of knobs to
+        // retune later if you want more or less water: raise the bias or
+        // exponent for less water, lower them (or raise the 0.55 dip
+        // multiplier) for more.
+        const float landBiasAboveWater = 8f;
+        float heightCenter = WaterLevel + landBiasAboveWater + depth * heightCenterSwing;
 
-        const float terrainCenter = 107f;
-        const float terrainAmplitude = 160f; // was 300f, lowered so peaks (terrainCenter + amplitude ~= 267) stay safely under the new 288 height cap instead of getting clipped flat at the top
+        // ---- 2. Biome chaos ----
+        // Reuses the same temp/humid noise GetBiome() samples, so hot+wet
+        // areas get chaotic, broken terrain and cold/dry areas stay calmer.
+        float temp = _biomeTemp.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
+        float humid = _biomeHumid.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
+        // STILL CAPPING, HERE'S WHY: raising the floor last time (0.5 ->
+        // 1.1) helped but didn't fully fix it, because chaos was still
+        // DIVIDING the height falloff rate below (calmness / chaos). Even
+        // at the 1.1 floor, that's still ~27% weaker than the 1.5
+        // best-case - so mountain height was still silently varying by
+        // biome, just by a smaller margin than before. Anywhere not both
+        // hot AND wet was still capped below full potential.
+        //
+        // Real fix: chaos no longer touches the height falloff rate at
+        // all (that now uses a fixed best-case constant below, so every
+        // biome gets full, consistent mountain-height potential). chaos
+        // is kept only as a small additive roughness bonus instead - hot
+        // and wet areas get a bit of extra bumpiness, but nowhere gets
+        // its overall height ceiling silently reduced anymore.
+        float chaos = Mathf.Clamp(1.5f - Mathf.Pow(1f - humid * temp, 4f), 1.1f, 1.5f);
 
-        // Slightly gentler cliffs than before (higher threshold, smaller
-        // push) - part of smoothing the terrain out toward a beta 1.7.3
-        // feel, and it means we don't need a post-process spike remover
-        // anymore.
+        // ---- 3. Lower/upper/main blend ----
+        // "Main" now varies with Y too (not just per-column), so the same
+        // column can be rocky/broken at one height and smooth at another -
+        // matches beta's Main noise being a real 3D field.
+        float lower = _lowNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ);
+        float upper = _highNoise.GetNoise3D(worldX, worldY * 0.5f, worldZ);
+        float main = Mathf.Clamp(_selectorNoise.GetNoise3D(worldX, worldY, worldZ) * 0.5f + 0.5f, 0f, 1f);
+        float shape = Mathf.Lerp(lower, upper, main);
+
+        // Dropped from 95f -> 75f. This noise is sampled per-block (much
+        // higher frequency than the landBias/heightCenter noise above), so
+        // at 95f it was punching enough small local dips through the
+        // raised land baseline to still poke water/ponds through what
+        // should have been solid, flat land. 75f keeps mountains/cliffs
+        // punchy (still gets real amplification from the taper/cliff logic
+        // below) while leaving the raised baseline actually dry in
+        // typical/flat areas instead of getting undercut by local noise.
+        const float shapeAmplitude = 75f;
+
+        float distanceAboveCenter = worldY - heightCenter;
+        if (distanceAboveCenter < 0f)
+            distanceAboveCenter *= 4f; // flatten below the height center - calm oceans/lowlands, steep peaks above
+
+        const float heightStretch = 0.42f; // how fast density falls off away from the height center
+        float calmness = distanceAboveCenter * heightStretch;
+
+        // Fixed 1.5 (the old best-case chaos value) instead of dividing
+        // by the variable chaos - see the note above on why letting
+        // biome chaos gate this was the actual bug. Every biome now gets
+        // the same, full mountain-height potential.
+        float density = shape * shapeAmplitude - calmness / 1.5f;
+
+        // Small roughness bonus from biome chaos instead of a height
+        // gate - hot/wet areas get a bit of extra local bumpiness, cold/dry
+        // areas stay calmer, but nobody's overall height ceiling changes.
+        density += (chaos - 1.1f) * 10f;
+
+        // Cliffs made more frequent (threshold 0.7 -> 0.55) and sharper
+        // (0.6 -> 0.85), rescaled to shapeAmplitude now that shape isn't
+        // pre-multiplied before this point.
         float cliff = _cliffNoise.GetNoise3D(worldX, worldY * 0.3f, worldZ);
-        if (Mathf.Abs(cliff) > 0.7f)
-            shape += cliff * 0.6f;
+        if (Mathf.Abs(cliff) > 0.55f)
+            density += cliff * shapeAmplitude * 0.4f;
 
-        float scaledShape = shape * terrainAmplitude;
-        float density = scaledShape - (worldY - terrainCenter);
-
-        // Overhang strength reduced (was 35f) - still gives some ledges and
-        // little roof pockets, but far less likely to leave floating
-        // single blocks behind.
+        // Overhangs: 4 octaves, stronger pull (30f) for bigger ledges/roof
+        // pockets. This is close to the old 35f that used to cause floating
+        // single blocks - keep an eye out when you playtest, dial back if
+        // you spot any.
         float overhang = _overhangNoise.GetNoise3D(worldX, worldY, worldZ);
-        float surfaceCloseness = Mathf.Clamp(1f - Mathf.Abs(density) / 60f, 0f, 1f);
-        density += overhang * 20f * surfaceCloseness;
+        float surfaceCloseness = Mathf.Clamp(1f - Mathf.Abs(density) / 70f, 0f, 1f);
+        density += overhang * 30f * surfaceCloseness;
 
         const int seaFloorLimit = WaterLevel - MaxOceanDepthBelowSeaLevel;
         if (worldY < seaFloorLimit)
         {
             density = Mathf.Max(density, 0.3f);
         }
+
+        // ---- 4. Taper near the top so peaks round off instead of clipping ----
+        // Hardcoded plain numbers now instead of formulas derived from
+        // other constants (worldHeightCap - 10, WaterLevel + 100, etc) -
+        // easier to read and retune directly without tracing through
+        // subtraction chains.
+        //
+        // 208 = just over 100 blocks above WaterLevel (100), rounded up
+        // to the nearest chunk boundary (Chunk.HEIGHT = 16): 100+100=200,
+        // rounds up to 208 (13 chunks). This is where terrain generation
+        // is required to stop completely - nothing solid at or above it -
+        // well clear of the true 288 world/chunk-loading cap, so there's
+        // no risk of ever bumping into that separately.
+        //
+        // 150 is where the rounding taper starts kicking in - gives
+        // mountains a solid ~50 blocks above water of completely
+        // unrestricted climbing before any rounding math touches them,
+        // then a 58-block dome-off zone up to the 208 stop line.
+        const float terrainStopLine = 208f;
+        const float taperStart = 150f;
+        const float taperRange = terrainStopLine - taperStart;
+        if (worldY > taperStart)
+        {
+            float t = Mathf.Clamp((worldY - taperStart) / taperRange, 0f, 1f);
+            t = t * t * (3f - 2f * t); // smoothstep - gentle at first, then rounds off harder near the top
+            density *= 1f - t;
+            density -= 26f * t; // pushed strong so density is reliably negative (air) well before terrainStopLine
+        }
+
+        // Hard safety clamp: no matter what the noise/taper math above
+        // produces, GROUND terrain is never allowed to be solid at or
+        // above terrainStopLine. This is a guarantee, not just a strong
+        // nudge - the taper above should already round mountains off
+        // long before this point, but this makes sure a spike or clipped
+        // peak poking up past 208 is never possible.
+        //
+        // NOTE: this only clamps ground density, not the whole function -
+        // sky islands (below) are a separate floating feature centered
+        // much higher up (Y230) and are allowed to keep using the real
+        // 288 world cap. An early `return -10f` here would have silently
+        // deleted sky islands entirely, since they live above 208.
+        if (worldY >= terrainStopLine)
+            density = -10f;
 
         if (Mathf.Abs(density) < 0.3f)
             density = density > 0 ? 0.3f : -0.3f;
@@ -877,6 +1062,16 @@ public Vector3? LoadPlayerPosition()
                         }
                     }
 
+                    // Sand that generates directly touching water comes out
+                    // as wet_sand1 immediately, instead of starting as plain
+                    // "sand" and waiting for a runtime random tick to catch
+                    // up (see TrySandToWetSand1 in Chunk.cs). Only sand
+                    // right at the coastline gets this - sand a block or two
+                    // inland (e.g. beach going down to depthToAir 2-3, or
+                    // desert not near water at all) stays plain sand.
+                    if (block.BlockId == "sand" && TouchesWaterAtGen(worldX, worldY, worldZ, waterFloor))
+                        block = new BlockState { BlockId = "wet_sand1", BitMask = 0xFF };
+
                     chunk.SetBlockInternal(x, y, z, block);
                 }
             }
@@ -887,6 +1082,33 @@ public Vector3? LoadPlayerPosition()
         SpawnDecorations(chunk, chunkPos);
         chunk.MarkDirty();
     }
+
+    // Checks this position's 6 face-adjacent neighbors for water, using the
+    // exact same "non-solid + within the water Y band" rule GenerateChunk
+    // itself uses to decide whether a spot is water or air. This lets us
+    // check "is this touching water" during generation without needing the
+    // neighboring column to have actually been written to a Chunk yet -
+    // GetDensity works for any world coordinate regardless of chunk state.
+    private bool TouchesWaterAtGen(int worldX, int worldY, int worldZ, int waterFloor)
+    {
+        foreach (var offset in FaceOffsets)
+        {
+            int nx = worldX + offset.X;
+            int ny = worldY + offset.Y;
+            int nz = worldZ + offset.Z;
+
+            if (ny > WaterLevel || ny < waterFloor) continue;
+            if (GetDensity(nx, ny, nz) <= 0f) return true;
+        }
+        return false;
+    }
+
+    private static readonly Vector3I[] FaceOffsets = new Vector3I[]
+    {
+        new Vector3I(1, 0, 0), new Vector3I(-1, 0, 0),
+        new Vector3I(0, 1, 0), new Vector3I(0, -1, 0),
+        new Vector3I(0, 0, 1), new Vector3I(0, 0, -1)
+    };
 
     // Deep underground block choice: ores (each with their own noise/Y
     // range/rarity), then rare "rock" patches, then gravel patches, then

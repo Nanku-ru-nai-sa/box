@@ -354,6 +354,13 @@ public override void _Process(double delta)
 // once per successful spread.
 private const float FlowerOnSpreadChance = 0.12f;
 
+// Gates how often a grass random-tick sample actually attempts a spread.
+// 0.5 = spreads at roughly half the rate it did before. This only throttles
+// grass specifically - sand/wet_sand1/wet_sand2 conversions still run at
+// full speed off the same shared tick, since slowing RandomTickInterval or
+// RandomTicksPerInterval directly would have slowed those down too.
+private const float GrassSpreadChancePerTick = 0.5f;
+
 private RandomNumberGenerator _grassRng = new RandomNumberGenerator();
 
 // Random tick: samples random blocks in the chunk each interval. Only
@@ -381,20 +388,28 @@ private void RandomTick()
             // this grass block happens to sit at the very top of its chunk.
             if (!GetBlockCrossChunk(rx, ry + 1, rz).IsAir()) continue;
 
+            if (_grassRng.Randf() > GrassSpreadChancePerTick) continue;
+
             TrySpreadFromGrass(rx, ry, rz);
         }
-        else if (block.BlockId == "sand")
-        {
-            TrySandToWetSand1(rx, ry, rz);
-        }
-        else if (block.BlockId == "wet_sand2")
-        {
-            TryWetSand2ToWetSand1(rx, ry, rz);
-        }
-        else if (block.BlockId == "wet_sand1")
-        {
-            TryWetSand1SpreadToSand(rx, ry, rz);
-        }
+        // Sand/wet_sand1/wet_sand2 spreading is disabled for now - it was
+        // too laggy (see TrySandToWetSand1 / TryWetSand2ToWetSand1 /
+        // TryWetSand1SpreadToSand below, still here for reference when this
+        // gets reworked). Sand placed as wet_sand1 at world gen (see
+        // ChunkManager.TouchesWaterAtGen) still happens - that's a one-time
+        // cost at chunk creation, not a per-tick cost, so it's unaffected.
+        //else if (block.BlockId == "sand")
+        //{
+        //    TrySandToWetSand1(rx, ry, rz);
+        //}
+        //else if (block.BlockId == "wet_sand2")
+        //{
+        //    TryWetSand2ToWetSand1(rx, ry, rz);
+        //}
+        //else if (block.BlockId == "wet_sand1")
+        //{
+        //    TryWetSand1SpreadToSand(rx, ry, rz);
+        //}
         // NOTE: no early return here anymore - a previous version bailed
         // out the instant it found ANY grass block, even if that one
         // failed to find an eligible dirt neighbor, which wasted the rest
