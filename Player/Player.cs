@@ -26,6 +26,12 @@ public partial class Player : CharacterBody3D
     private bool  _isBreaking  = false;
     private float _breakTimer  = 0f;
     private const float BreakInterval = 0.4f;
+    private bool  _isDropping  = false;
+    private float _dropTimer   = 0f;
+    private const float DropInterval    = 0.25f; // how often it drops again while Q is held
+    private const float DropForwardSpeed = 7.5f;  // pushed out further
+    private const float DropUpSpeed      = 1.0f;  // less of an upward pop now
+    private const float DropSpawnHeight  = 0.8f;  // roughly chest/face height instead of over the top of the head
     private string         _selectedBlockId    = "";
     private MeshInstance3D _blockOutline;
 
@@ -894,15 +900,41 @@ public partial class Player : CharacterBody3D
     }
 
     // Spawns a physical item drop in the world at worldPosition instead of
-    // adding the item straight to the inventory. Used by block breaking.
-    private void SpawnItemDrop(string itemId, int count, Vector3 worldPosition)
+    // adding the item straight to the inventory. Used by block breaking and
+    // by manually dropping items with Q. If tossVelocity is given (Q-drops),
+    // the pickup uses that instead of its default random "popped out of a
+    // broken block" velocity.
+    private void SpawnItemDrop(string itemId, int count, Vector3 worldPosition, Vector3? tossVelocity = null)
     {
         if (string.IsNullOrEmpty(itemId) || count <= 0) return;
         var pickup = new ItemPickup();
         pickup.ItemId = itemId;
         pickup.Count  = count;
+        pickup.TossVelocity = tossVelocity;
         GetTree().Root.AddChild(pickup);
         pickup.GlobalPosition = worldPosition;
+    }
+
+    // Drops one item from the currently selected hotbar slot, tossed a
+    // little way in front of the player. Called once on Q press, and
+    // repeatedly while Q is held (see _PhysicsProcess / _UnhandledInput).
+    private void DropOneItem()
+    {
+        var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory) return;
+
+        var slot = _inventory.Slots[MainInvSize + _selectedSlot];
+        if (slot.IsEmpty) return;
+
+        string itemId = slot.ItemId;
+        slot.Count--;
+        if (slot.Count <= 0) slot.Clear();
+        FireChanged();
+
+        Vector3 forward  = -_rayCast.GlobalTransform.Basis.Z;
+        Vector3 spawnPos = GlobalPosition + new Vector3(0, DropSpawnHeight, 0) + forward * 0.6f;
+        Vector3 tossVel  = forward * DropForwardSpeed + Vector3.Up * DropUpSpeed;
+        SpawnItemDrop(itemId, 1, spawnPos, tossVel);
     }
 
     // =========================================================================
@@ -1261,6 +1293,8 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (_isPlacing) { _placeTimer += dt; if (_placeTimer >= PlaceInterval) { TryPlaceBlock(); _placeTimer = 0f; } }
 
+        if (_isDropping) { _dropTimer += dt; if (_dropTimer >= DropInterval) { DropOneItem(); _dropTimer = 0f; } }
+
         float speed = _isCrouching ? CrouchSpeed : _isSprinting ? SprintSpeed : WalkSpeed;
         if (_isInWater) speed *= 0.5f;
 
@@ -1280,6 +1314,9 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (@event is InputEventKey qUp && !qUp.Pressed && qUp.Keycode == Key.Q)
+            _isDropping = false;
+
         if (@event is InputEventMouseButton mb)
         {
             if (!_inventoryOpen && !_chatOpen)
@@ -1315,6 +1352,13 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             else if (key.Keycode == Key.Equal) SelectHotbarSlot(11);
 
             if (key.Keycode == Key.Tab) ToggleInventory();
+
+            if (key.Keycode == Key.Q && !_isDropping)
+            {
+                _isDropping = true;
+                _dropTimer  = 0f;
+                DropOneItem();
+            }
 
             if (key.Keycode == Key.F4)
             {
