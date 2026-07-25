@@ -12,7 +12,7 @@ public partial class MainMenu : Control
     // World creation options
     private static readonly string[] ThemeOptions      = { "Normal", "Only Forest", "Only Desert" };
     private static readonly string[] StartBonusOptions = { "None" };
-    private static readonly string[] TypeOptions        = { "Normal", "Flat", "Sky Islands" };    
+    private static readonly string[] TypeOptions        = { "Normal", "Flat", "Sky Islands", "One Block" };    
     private static readonly string[] SeasonOptions      = { "Spring", "Summer", "Autumn", "Winter" };
 
     // Character creation options

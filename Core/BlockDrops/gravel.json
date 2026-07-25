@@ -1,0 +1,6 @@
+{
+  "block": "gravel",
+  "drops": [
+	{ "item": "flint", "chance": 0.12 }
+  ]
+}

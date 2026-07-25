@@ -15,6 +15,7 @@ public partial class Player : CharacterBody3D
     private PlayerStats  _stats;
     private PlayerCamera _playerCamera;
     private RayCast3D    _rayCast;
+    private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool  _isSprinting = false;
     private bool  _isCrouching = false;
     private bool  _hasDoubleJumped = false;
@@ -31,7 +32,7 @@ public partial class Player : CharacterBody3D
     private const float DropInterval    = 0.25f; // how often it drops again while Q is held
     private const float DropForwardSpeed = 7.5f;  // pushed out further
     private const float DropUpSpeed      = 1.0f;  // less of an upward pop now
-    private const float DropSpawnHeight  = 0.8f;  // roughly chest/face height instead of over the top of the head
+    private const float DropSpawnHeight  = 1.0f;  // roughly chest/face height instead of over the top of the head
     private string         _selectedBlockId    = "";
     private MeshInstance3D _blockOutline;
 
@@ -131,6 +132,7 @@ public partial class Player : CharacterBody3D
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
         _rayCast      = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
         _rayCast.AddException(this);
+        _dropRng.Randomize();
 
         // Lets ItemPickup (and anything else) reliably find the player node
         // regardless of what it's actually named in the scene tree.
@@ -1480,17 +1482,28 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         _blockOutline.Visible = true;
     }
 
-    // Maps a broken block's BlockId to the item id it should drop.
+    // Maps a broken block's BlockId to the item(s) it should drop.
+    // Checks BlockDropManager first — custom, JSON-editable drop rules
+    // (e.g. gravel -> chance of flint) live there, same pattern as
+    // RecipeManager. If there's no custom rule, or the roll didn't hit one,
+    // falls back to these built-in special cases:
     // grass_block always drops dirt (breaking the grass "layer" leaves
     // the dirt underneath). wet_sand1 and wet_sand2 both collapse into a
     // single obtainable item, "wet_sand2" (displayed in-game as "Wet
     // Sand") - wet_sand1 is purely a transitional block state on its way
-    // to becoming wet_sand2, so it never drops as itself.
-    private string GetDropId(string blockId)
+    // to becoming wet_sand2, so it never drops as itself. Otherwise the
+    // block just drops itself, count 1.
+    private (string ItemId, int Count) GetDrop(string blockId)
     {
-        if (blockId == "grass_block") return "dirt";
-        if (blockId == "wet_sand1" || blockId == "wet_sand2") return "wet_sand2";
-        return blockId;
+        if (BlockDropManager.Instance != null &&
+            BlockDropManager.Instance.TryRollDrop(blockId, _dropRng, out string customId, out int customCount))
+        {
+            return (customId, customCount);
+        }
+
+        if (blockId == "grass_block") return ("dirt", 1);
+        if (blockId == "wet_sand1" || blockId == "wet_sand2") return ("wet_sand2", 1);
+        return (blockId, 1);
     }
 
     private void TryBreakBlock()
@@ -1526,8 +1539,8 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         if (gm != null && gm.IsCreate)
         {
             // Creative mode stays instant — no physical drop, straight to inventory.
-            string dropC = GetDropId(b.BlockId);
-            if (dropC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropC, 1);
+            var (dropIdC, dropCountC) = GetDrop(b.BlockId);
+            if (dropIdC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropIdC, dropCountC);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak(); return;
         }
@@ -1547,13 +1560,13 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakHitsNeeded) ?? (_breakHitCount >= _breakHitsNeeded);
         if (shouldBreak)
         {
-            string drop = GetDropId(b.BlockId);
+            var (drop, dropCount) = GetDrop(b.BlockId);
             if (drop is not ("rose" or "dandelion" or "clover"))
             {
                 // Survival mode: spawn a physical drop at the block's position
                 // instead of adding it to the inventory directly.
                 Vector3 dropWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
-                SpawnItemDrop(drop, 1, dropWorldPos);
+                SpawnItemDrop(drop, dropCount, dropWorldPos);
             }
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak();

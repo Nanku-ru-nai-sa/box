@@ -2,7 +2,7 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-public enum WorldGenType { Normal, Flat, SkyIslands }
+public enum WorldGenType { Normal, Flat, SkyIslands, OneBlock }
 public enum WorldGenTheme { Normal, OnlyForest, OnlyDesert }
 
 public partial class ChunkManager : Node3D
@@ -18,7 +18,23 @@ public partial class ChunkManager : Node3D
 
     // ---- FLAT WORLD SETTINGS ----
     [ExportGroup("Flat World")]
-    [Export] public int FlatGroundHeight = 100; // matches WaterLevel so flat worlds sit right at sea level
+    // 1 - directly on top of the Y=0 bedrock floor, per request ("push the
+    // grass down to the bedrock so it goes grass, bedrock" - no gap
+    // between them). The old default (101, floating way above an unrelated
+    // distant bedrock floor at Y=0) is gone. The worldY<=WaterLevel
+    // dirt-vs-grass check and bedrock-zone logic elsewhere are both now
+    // special-cased for Flat worlds so this still comes out as grass, not
+    // dirt or stone, despite sitting at such a low Y.
+    [Export] public int FlatGroundHeight = 1;
+
+    // ---- ONE BLOCK WORLD SETTINGS ----
+    // Separate from FlatGroundHeight (used to share it, but that meant
+    // changing one to fix Flat's "grass on bedrock" request would have
+    // also silently moved One Block's spawn height). One Block has no
+    // bedrock at all now anyway (see the Y==0 check above), so this can
+    // sit anywhere - kept at the old shared default (101) so One Block's
+    // height/feel is unchanged by the Flat-world fix.
+    [Export] public int OneBlockHeight = 101;
 
     // ---- CAVE SETTINGS ----
     // How caves work: two noise fields are sampled at every underground
@@ -81,6 +97,7 @@ public partial class ChunkManager : Node3D
     private FastNoiseLite _highNoise = new FastNoiseLite();
     private FastNoiseLite _selectorNoise = new FastNoiseLite();
     private FastNoiseLite _depthNoise = new FastNoiseLite(); // beta-style per-column heightmap ("Depth" noise) - decides how much this column's general ground level rises/dips from WaterLevel
+    private FastNoiseLite _mountainAreaNoise = new FastNoiseLite(); // large, slow-moving regions that decide Alpha Mountains (normal) vs Beta Mountains (amplified) areas
 
     private FastNoiseLite _biomeTemp = new FastNoiseLite();
     private FastNoiseLite _biomeHumid = new FastNoiseLite();
@@ -172,6 +189,12 @@ public partial class ChunkManager : Node3D
         _depthNoise.Frequency = 0.003f; // slow - big, gentle regions of "generally higher" or "generally lower" ground, like beta's Depth noise
         _depthNoise.Seed = Seed + 7;
 
+        _mountainAreaNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _mountainAreaNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
+        _mountainAreaNoise.FractalOctaves = 2;
+        _mountainAreaNoise.Frequency = 0.0012f; // very slow - large, sprawling regions (hundreds of blocks across) so Beta Mountains areas read as a whole distinct mountain range, not scattered patches
+        _mountainAreaNoise.Seed = Seed + 27;
+
         _biomeTemp.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _biomeTemp.Seed = 77777;
         _biomeTemp.Frequency = 0.006f; // was 0.004f - smaller biome regions, so you hit a new one sooner instead of walking through one huge stretch
@@ -243,6 +266,33 @@ public partial class ChunkManager : Node3D
         var canvasLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", canvasLayer);
 
+        // BUG FIXED HERE: _player used to only ever get assigned inside
+        // _Process (as a fallback lookup), which meant it was still NULL
+        // the first time UpdateChunks() ran below, since _Ready() always
+        // finishes before the first _Process() call. UpdateChunks() falls
+        // back to Vector3I.Zero when _player is null, which loads chunks
+        // Y=0 through Y=VerticalRenderDistance (8) - i.e. blocks 0-143.
+        // That's a hard ceiling at Y=144, exactly 44 blocks above
+        // WaterLevel (100) - matches the "world only goes 44 blocks above
+        // water" symptom exactly. And since chunk streaming-on-move is
+        // disabled below (commented out for perf), that wrong window was
+        // never recalculated for the rest of the session, no matter how
+        // tall the terrain generation math said peaks should reach -
+        // those chunks just never got queued to load in the first place.
+        //
+        // Fixed by resolving _player (and setting its real spawn
+        // position) BEFORE calling UpdateChunks(), instead of after, so
+        // the one-time initial load window correctly centers near water
+        // level from the start.
+        if (_player == null)
+        {
+            var found = GetTree().Root.FindChild("player", true, false);
+            _player = found as Node3D;
+        }
+
+        if (_player != null)
+            _player.GlobalPosition = new Vector3(8, 120, 8); // sits just above sea level (WaterLevel=100) within the new 0-288 world height range
+
         if (_player == null)
             GD.Print("ChunkManager: No player found");
         else
@@ -251,9 +301,6 @@ public partial class ChunkManager : Node3D
         GD.Print("Calling UpdateChunks...");
         UpdateChunks();
 
-        if (_player != null)
-            _player.GlobalPosition = new Vector3(8, 120, 8); // sits just above sea level (WaterLevel=100) within the new 0-288 world height range
-
         SetProcess(true);
     }
 
@@ -261,6 +308,7 @@ public partial class ChunkManager : Node3D
     {
         "Flat" => WorldGenType.Flat,
         "Sky Islands" => WorldGenType.SkyIslands,
+        "One Block" => WorldGenType.OneBlock,
         _ => WorldGenType.Normal
     };
 
@@ -587,7 +635,7 @@ public Vector3? LoadPlayerPosition()
         _chunks.Remove(chunkPos);
     }
 
-    private enum Biome { Plains, Forest, Desert, Tundra, Beach }
+    private enum Biome { Plains, Forest, Desert, Beach }
 
     private Biome GetBiome(float temp, float humid, int surfaceY)
     {
@@ -597,7 +645,6 @@ public Vector3? LoadPlayerPosition()
         if (WorldTheme == WorldGenTheme.OnlyDesert) return Biome.Desert;
 
         if (temp > 0.4f && humid < -0.1f) return Biome.Desert;
-        if (temp < -0.3f) return Biome.Tundra;
         if (humid > 0.1f) return Biome.Forest;
         return Biome.Plains;
     }
@@ -639,16 +686,33 @@ public Vector3? LoadPlayerPosition()
         if (WorldType == WorldGenType.SkyIslands)
             return GetSkyIslandsOnlyDensity(worldX, worldY, worldZ);
 
+        if (WorldType == WorldGenType.OneBlock)
+            return GetOneBlockDensity(worldX, worldY, worldZ);
+
         return GetNormalDensity(worldX, worldY, worldZ);
     }
 
-    // Flat world: a single solid slab up to FlatGroundHeight, air above it.
-    // No noise sampling at all, so this is essentially free performance-wise.
+    // Flat world: solid ONLY at the single Y layer FlatGroundHeight - one
+    // block thick, air everywhere above AND below it (was previously a
+    // full solid slab from Y=0 up to FlatGroundHeight - ~100 layers of
+    // stone/dirt underneath a grass top instead of a true single layer).
+    // Still essentially free performance-wise - no noise sampling at all.
     private float GetFlatDensity(int worldY)
     {
         const int worldHeightCap = 288;
         if (worldY >= worldHeightCap) return -10f;
-        return worldY < FlatGroundHeight ? 10f : -10f;
+        return worldY == FlatGroundHeight ? 10f : -10f;
+    }
+
+    // One Block challenge world: the ENTIRE world is a single solid block
+    // at one fixed X/Z (matching the player's spawn column, 8/8), at
+    // OneBlockHeight - everywhere else, in every direction, is pure
+    // void/air. No noise sampling, effectively free.
+    private float GetOneBlockDensity(int worldX, int worldY, int worldZ)
+    {
+        const int spawnX = 8;
+        const int spawnZ = 8;
+        return (worldX == spawnX && worldZ == spawnZ && worldY == OneBlockHeight) ? 10f : -10f;
     }
 
     // Sky Islands world: no continuous ground. Islands are generated using
@@ -741,15 +805,70 @@ public Vector3? LoadPlayerPosition()
 
         // Land bias: a positive baseline shift so typical/flat noise
         // generates dry land instead of landing exactly at WaterLevel.
-        // Lowered slightly (10f -> 8f) alongside the curve/dip changes
-        // above so real coastline and shallow water can reach the
-        // surface without needing an extreme noise value first. This trio
-        // (bias, curve exponent, dip strength) is the set of knobs to
-        // retune later if you want more or less water: raise the bias or
-        // exponent for less water, lower them (or raise the 0.55 dip
-        // multiplier) for more.
-        const float landBiasAboveWater = 8f;
+        // Lowered again (8f -> 3f) per request - the plains/beach area
+        // should sit close to water level itself, not noticeably elevated
+        // above it, so the transition reads as water -> beach -> flat
+        // grass -> rising into hills, instead of a visible "step up" onto
+        // the plains. This also naturally makes it EASIER for a spot to
+        // dip below WaterLevel into a real lake/pond (less bias to
+        // overcome to cross below sea level), which is what keeps lakes
+        // showing through instead of the lower plains swallowing them -
+        // this and the dip-strength/curve-exponent knobs above are what
+        // to retune if you want more or less water later.
+        const float landBiasAboveWater = 3f;
         float heightCenter = WaterLevel + landBiasAboveWater + depth * heightCenterSwing;
+
+        // ---- Plains buffer between beach and mountains ----
+        // Requested: a stretch of calm, flat, buildable land between the
+        // coastline and where real mountains start, instead of hills
+        // rising right up out of the sand. heightCenter itself already
+        // tells us "how elevated is this column's general area" (it's
+        // WaterLevel+landBias right at the coast, and rises the further
+        // inland/into hill-country the depth noise says a spot is) - so
+        // it doubles as a stand-in for "roughly how far this is from the
+        // coast" without needing a separate distance-to-coastline pass.
+        //
+        // mountainFactor blends from 0 (right at the flat coastal
+        // baseline - plains) to 1 (comfortably elevated - full mountains
+        // allowed), and gates shapeAmplitude/cliffs/overhangs below. The
+        // gate band (flatBaseline+6 to flatBaseline+20) is tuned to
+        // roughly approximate the requested ~2 chunks (32 blocks) of
+        // calm terrain near a typical coastline, though because this
+        // rides on a noise field rather than a true measured distance,
+        // it won't be an exact 32-block guarantee everywhere - some
+        // stretches of coast will get a bit more buffer, some a bit
+        // less. A precise, uniform distance would need a proper
+        // distance-to-coast pass, which is a bigger change - this gets
+        // the requested feel without that complexity.
+        float flatBaseline = WaterLevel + landBiasAboveWater;
+        float mountainGateStart = flatBaseline + 6f;
+        float mountainGateEnd = flatBaseline + 20f;
+        float mountainT = Mathf.Clamp((heightCenter - mountainGateStart) / (mountainGateEnd - mountainGateStart), 0f, 1f);
+        mountainT = mountainT * mountainT * (3f - 2f * mountainT); // smoothstep
+        // Plains areas still get a SMALL amount of shape variance (15%)
+        // for gentle, natural-looking undulation - not perfectly
+        // billiard-table flat - just nowhere near full mountain force.
+        float mountainFactor = Mathf.Lerp(0.15f, 1f, mountainT);
+
+        // ---- Alpha Mountains vs Beta Mountains areas ----
+        // "Area" here instead of "biome" - a large, slow-moving region
+        // selector (independent of temp/humid biome noise) that decides
+        // whether a given stretch of the map is a normal Alpha Mountains
+        // area or an amplified Beta Mountains area. Beta areas push real
+        // mountain peaks up an extra ~2 chunks (32 blocks) higher than
+        // Alpha - everything else (plains buffer, water, cliffs/overhang
+        // character) is identical between the two.
+        //
+        // areaBonus is scaled by mountainT (not mountainFactor's 0.15
+        // floor) so it ONLY affects genuine mountain zones - the plains
+        // buffer next to the coast stays exactly as flat in a Beta
+        // Mountains area as it does in an Alpha one; only the mountains
+        // themselves get taller.
+        float mountainAreaSample = _mountainAreaNoise.GetNoise2D(worldX, worldZ);
+        bool isBetaMountainsArea = mountainAreaSample > 0.2f;
+        const float betaMountainsBonus = 32f; // ~2 chunks, per request
+        float areaBonus = isBetaMountainsArea ? betaMountainsBonus * mountainT : 0f;
+        heightCenter += areaBonus;
 
         // ---- 2. Biome chaos ----
         // Reuses the same temp/humid noise GetBiome() samples, so hot+wet
@@ -802,27 +921,44 @@ public Vector3? LoadPlayerPosition()
         // by the variable chaos - see the note above on why letting
         // biome chaos gate this was the actual bug. Every biome now gets
         // the same, full mountain-height potential.
-        float density = shape * shapeAmplitude - calmness / 1.5f;
+        //
+        // shape*shapeAmplitude is scaled by mountainFactor here - this is
+        // what actually creates the plains buffer: near the coast
+        // (mountainFactor low) the local bumpiness is heavily suppressed,
+        // so terrain stays close to flatBaseline instead of the local
+        // shape noise pushing it up into hills immediately.
+        float density = shape * shapeAmplitude * mountainFactor - calmness / 1.5f;
 
         // Small roughness bonus from biome chaos instead of a height
         // gate - hot/wet areas get a bit of extra local bumpiness, cold/dry
         // areas stay calmer, but nobody's overall height ceiling changes.
-        density += (chaos - 1.1f) * 10f;
+        // Also gated by mountainFactor so plains stay calm regardless of
+        // biome.
+        density += (chaos - 1.1f) * 10f * mountainFactor;
 
-        // Cliffs made more frequent (threshold 0.7 -> 0.55) and sharper
-        // (0.6 -> 0.85), rescaled to shapeAmplitude now that shape isn't
-        // pre-multiplied before this point.
+        // Cliffs eased back a bit further (threshold 0.65 -> 0.72, push
+        // 0.3 -> 0.22) for the "smooth it a bit more" pass - cliffs are
+        // now noticeably rarer and gentler than a few rounds ago, but
+        // still show up. Also gated by mountainFactor - no cliffs cutting
+        // through the plains buffer zone right next to the beach.
         float cliff = _cliffNoise.GetNoise3D(worldX, worldY * 0.3f, worldZ);
-        if (Mathf.Abs(cliff) > 0.55f)
-            density += cliff * shapeAmplitude * 0.4f;
+        if (Mathf.Abs(cliff) > 0.72f)
+            density += cliff * shapeAmplitude * 0.22f * mountainFactor;
 
-        // Overhangs: 4 octaves, stronger pull (30f) for bigger ledges/roof
-        // pockets. This is close to the old 35f that used to cause floating
-        // single blocks - keep an eye out when you playtest, dial back if
-        // you spot any.
+        // Overhangs trimmed further (24f -> 20f) for the extra smoothness
+        // pass requested here, but deliberately NOT removed or gutted -
+        // these are what let terrain occasionally carve deep enough to
+        // detach and float on its own (the "islands that happen to
+        // overhang and break off" behavior from beta), which is exactly
+        // what's meant to replace the deleted dedicated sky-island system
+        // above. Gated by its own, gentler factor (floor 0.3, not 0.15)
+        // than the plains buffer's shape/cliff gating - keeps a little
+        // texture even in the flatter zone instead of going completely
+        // dead flat there.
         float overhang = _overhangNoise.GetNoise3D(worldX, worldY, worldZ);
         float surfaceCloseness = Mathf.Clamp(1f - Mathf.Abs(density) / 70f, 0f, 1f);
-        density += overhang * 30f * surfaceCloseness;
+        float overhangFactor = Mathf.Lerp(0.3f, 1f, mountainT);
+        density += overhang * 20f * surfaceCloseness * overhangFactor;
 
         const int seaFloorLimit = WaterLevel - MaxOceanDepthBelowSeaLevel;
         if (worldY < seaFloorLimit)
@@ -836,20 +972,23 @@ public Vector3? LoadPlayerPosition()
         // easier to read and retune directly without tracing through
         // subtraction chains.
         //
-        // 208 = just over 100 blocks above WaterLevel (100), rounded up
-        // to the nearest chunk boundary (Chunk.HEIGHT = 16): 100+100=200,
-        // rounds up to 208 (13 chunks). This is where terrain generation
-        // is required to stop completely - nothing solid at or above it -
-        // well clear of the true 288 world/chunk-loading cap, so there's
-        // no risk of ever bumping into that separately.
+        // 176 = squished down 32 blocks (2 chunks) from the previous 208,
+        // per request. This is where terrain generation is required to
+        // stop completely - nothing solid at or above it - still well
+        // clear of the true 288 world/chunk-loading cap.
         //
-        // 150 is where the rounding taper starts kicking in - gives
-        // mountains a solid ~50 blocks above water of completely
-        // unrestricted climbing before any rounding math touches them,
-        // then a 58-block dome-off zone up to the 208 stop line.
-        const float terrainStopLine = 208f;
-        const float taperStart = 150f;
-        const float taperRange = terrainStopLine - taperStart;
+        // 118 is where the rounding taper starts kicking in - shifted
+        // down the same 32 blocks as the stop line so the shape of the
+        // rounding (58-block dome zone) stays identical, just lower.
+        //
+        // Both are shifted UP by areaBonus in Beta Mountains areas, so
+        // those extra-tall peaks actually get the full 32 blocks of extra
+        // room to round off in, instead of just running into the normal
+        // Alpha Mountains ceiling early and getting flattened at the same
+        // height as everywhere else.
+        float terrainStopLine = 176f + areaBonus; // was 208f before the earlier squish
+        float taperStart = 118f + areaBonus; // was 150f before the earlier squish
+        float taperRange = terrainStopLine - taperStart;
         if (worldY > taperStart)
         {
             float t = Mathf.Clamp((worldY - taperStart) / taperRange, 0f, 1f);
@@ -863,13 +1002,14 @@ public Vector3? LoadPlayerPosition()
         // above terrainStopLine. This is a guarantee, not just a strong
         // nudge - the taper above should already round mountains off
         // long before this point, but this makes sure a spike or clipped
-        // peak poking up past 208 is never possible.
+        // peak poking up past the (possibly area-boosted) stop line is
+        // never possible.
         //
-        // NOTE: this only clamps ground density, not the whole function -
-        // sky islands (below) are a separate floating feature centered
-        // much higher up (Y230) and are allowed to keep using the real
-        // 288 world cap. An early `return -10f` here would have silently
-        // deleted sky islands entirely, since they live above 208.
+        // NOTE: kept as a density assignment (not an early return) rather
+        // than out of necessity now that the dedicated sky-island blend
+        // above this point has been removed - but leaving it this way
+        // costs nothing and keeps the door open if a similar high-altitude
+        // feature gets added back later.
         if (worldY >= terrainStopLine)
             density = -10f;
 
@@ -885,26 +1025,23 @@ public Vector3? LoadPlayerPosition()
         if (IsCave(worldX, worldY, worldZ, density))
             density = -1f;
 
-        const float skyIslandCenter = 230f; // was 550f, lowered to fit within the new 288 world height cap (leaves ~58 blocks of clearance to the cap, plus room below for ground mountains up to ~280)
-        const float skyIslandAmplitude = 60f;
-        const float skyIslandThickness = 40f;
-
-        float skySelector = _skyIslandSelector.GetNoise2D(worldX, worldZ);
-        if (skySelector > 0.25f)
-        {
-            float skyShape = _skyIslandNoise.GetNoise3D(worldX, worldY * 0.6f, worldZ);
-            float skyDistanceFromCenter = Mathf.Abs(worldY - skyIslandCenter);
-            float skyDensity = (skyShape * skyIslandAmplitude) - (skyDistanceFromCenter - skyIslandThickness);
-
-            float skyOverhang = _overhangNoise.GetNoise3D(worldX, worldY * 1.3f, worldZ + 5000f);
-            float skySurfaceCloseness = Mathf.Clamp(1f - Mathf.Abs(skyDensity) / 50f, 0f, 1f);
-            skyDensity += skyOverhang * 30f * skySurfaceCloseness;
-
-            float patchFade = Mathf.Clamp((skySelector - 0.25f) / 0.15f, 0f, 1f);
-            skyDensity = Mathf.Lerp(-10f, skyDensity, patchFade);
-
-            density = Mathf.Max(density, skyDensity);
-        }
+        // Dedicated floating sky-island system removed from Normal terrain
+        // (it used to blend in guaranteed, large islands centered at
+        // Y230 via skyIslandCenter/skyIslandAmplitude/skyIslandThickness
+        // below - a completely separate noise feature, not an emergent
+        // side effect). That's not how beta 1.7.3 worked - it never had
+        // a dedicated floating-island generator. Occasional floating
+        // terrain there was just a rare side effect of overhangs carving
+        // too aggressively and detaching a piece from the main mass. The
+        // overhang noise earlier in this function already does that
+        // naturally on its own - sometimes producing a real floating
+        // chunk when the carve goes deep enough - without a second,
+        // dedicated system guaranteeing big islands every time.
+        //
+        // The dedicated "Sky Islands" world TYPE (chosen at world
+        // creation, GetSkyIslandsOnlyDensity below) is untouched - that's
+        // a deliberate, opt-in world style, different from this blended-
+        // into-Normal-terrain surprise.
 
         // ---- HARD WORLD HEIGHT CAP ----
         // World capped at 288 (16 x 18 = 288), the nearest clean multiple of
@@ -960,12 +1097,22 @@ public Vector3? LoadPlayerPosition()
 
                     BlockState block;
 
-                    if (worldY == 0)
+                    if (worldY == 0 && WorldType != WorldGenType.OneBlock)
                     {
+                        // One Block worlds skip this - no bedrock anywhere,
+                        // just the single floating block and void, per
+                        // request.
                         block = new BlockState { BlockId = "bedrock", BitMask = 0xFF };
                     }
-                    else if (worldY < bedrockHeight)
+                    else if (worldY < bedrockHeight && WorldType != WorldGenType.Flat)
                     {
+                        // Flat worlds skip this special low-Y bedrock/stone
+                        // zone entirely (even though worldY<bedrockHeight
+                        // is still true down here) so their single grass
+                        // layer - now sitting right at Y=1, directly above
+                        // the Y=0 bedrock - gets normal surface
+                        // classification (grass) instead of being caught
+                        // by this zone and turned into stone/bedrock.
                         float bedrockNoise = _oreNoise.GetNoise3D(worldX, worldY, worldZ);
                         if (!isSolid)
                         {
@@ -980,7 +1127,15 @@ public Vector3? LoadPlayerPosition()
                     }
                     else if (!isSolid)
                     {
-                        block = (worldY <= WaterLevel && worldY >= waterFloor)
+                        // Flat AND One Block worlds skip water entirely -
+                        // the shared water-fill rule below is Y-range
+                        // based and would otherwise flood the whole
+                        // WaterLevel-to-waterFloor band under the single
+                        // grass block(s) with water, which isn't "just a
+                        // single layer of grass block" (or "a single dirt
+                        // grass block" for One Block).
+                        bool isSingleLayerWorld = WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock;
+                        block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
                             ? new BlockState { BlockId = "water", BitMask = 0xFF }
                             : BlockState.Air;
                     }
@@ -1013,7 +1168,15 @@ public Vector3? LoadPlayerPosition()
 
                         if (nearSurface && depthToAir <= 4 && isRealSurface)
                         {
-                            Biome biome = GetBiome(temp, humid, worldY);
+                            // Flat AND One Block worlds always use Plains,
+                            // skipping the usual temp/humid/beach biome
+                            // variation - so the single block(s) come out
+                            // as uniform grass instead of patchy
+                            // sand/snow/clay depending on where the biome
+                            // noise happens to land that column.
+                            Biome biome = (WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock)
+                                ? Biome.Plains
+                                : GetBiome(temp, humid, worldY);
 
                             if (depthToAir <= 1)
                             {
@@ -1028,11 +1191,16 @@ public Vector3? LoadPlayerPosition()
                                             ? new BlockState { BlockId = "clay", BitMask = 0xFF }
                                             : new BlockState { BlockId = "sand", BitMask = 0xFF };
                                         break;
-                                    case Biome.Tundra:
-                                        block = new BlockState { BlockId = "snow", BitMask = 0xFF };
-                                        break;
                                     default:
-                                        block = worldY <= WaterLevel
+                                        // Flat/One Block worlds force grass
+                                        // here regardless of worldY - Flat's
+                                        // single layer now sits at Y=1
+                                        // (right on bedrock), which is well
+                                        // below WaterLevel and would
+                                        // otherwise fall into the "dirt"
+                                        // side of this check.
+                                        bool forceGrass = WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock;
+                                        block = (!forceGrass && worldY <= WaterLevel)
                                             ? new BlockState { BlockId = "dirt", BitMask = 0xFF }
                                             : new BlockState { BlockId = "grass_block", BitMask = 0xFF };
                                         break;
@@ -1078,8 +1246,17 @@ public Vector3? LoadPlayerPosition()
         }
 
         GenerateTrees(chunk, chunkPos);
-        SpawnMelons(chunk, chunkPos);
-        SpawnDecorations(chunk, chunkPos);
+
+        // Flowers and melons are skipped on Flat and One Block worlds -
+        // these are meant as clean, empty testing/building spaces, not
+        // dotted with random decoration. Trees are untouched here since
+        // only flowers/melons were asked to go.
+        if (WorldType != WorldGenType.Flat && WorldType != WorldGenType.OneBlock)
+        {
+            SpawnMelons(chunk, chunkPos);
+            SpawnDecorations(chunk, chunkPos);
+        }
+
         chunk.MarkDirty();
     }
 
@@ -1333,7 +1510,7 @@ public Vector3? LoadPlayerPosition()
                 float humid = _biomeHumid.GetNoise2D(worldX, worldZ);
                 Biome biome = GetBiome(temp, humid, surfaceY);
 
-                if (biome == Biome.Desert || biome == Biome.Beach || biome == Biome.Tundra) continue;
+                if (biome == Biome.Desert || biome == Biome.Beach) continue;
                 if (surfaceY <= WaterLevel) continue;
 
                 int localSurfaceY = surfaceY - (chunkPos.Y * Chunk.HEIGHT);
