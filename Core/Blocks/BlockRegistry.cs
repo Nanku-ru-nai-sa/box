@@ -33,10 +33,6 @@ public partial class BlockRegistry : Node
         var gravelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gravel.png");
         var clayTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clay.png");
         var bedrockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bedrock.png");
-        var coalOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/coal_ore.png");
-        var ironOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/iron_ore.png");
-        var goldOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gold_ore.png");
-        var diamondOreTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/diamond_ore.png");
         var obsidianTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/obsidian.png");
         var snowTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/snow.png");
         var melonTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_top.png");
@@ -44,6 +40,15 @@ public partial class BlockRegistry : Node
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
         var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
+
+        // Ore Hint Rocks - small flat-ground pebbles, same rendering
+        // mechanism as clover. Using the existing Items/ icon art instead of
+        // making new dedicated rock textures.
+        var rockFlintTex  = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/flint.png");
+        var rockCoalTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/coal_ore.png");
+        var rockIronTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/iron_ore.png");
+        var rockTinTex    = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/Tin_ore.png");
+        var rockCopperTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/Copper_ore.png");
 
         var air = new BlockResource();
         air.BlockId = "air"; air.DisplayName = "Air";
@@ -141,30 +146,6 @@ public partial class BlockRegistry : Node
         bedrock.TextureTop = bedrockTex; bedrock.TextureSide = bedrockTex; bedrock.TextureBottom = bedrockTex;
         Register(bedrock);
 
-        var coalOre = new BlockResource();
-        coalOre.BlockId = "coal_ore"; coalOre.DisplayName = "Coal Ore";
-        coalOre.IsSolid = true; coalOre.CanChisel = true; coalOre.Hardness = 3.0f;
-        coalOre.TextureTop = coalOreTex; coalOre.TextureSide = coalOreTex; coalOre.TextureBottom = coalOreTex;
-        Register(coalOre);
-
-        var ironOre = new BlockResource();
-        ironOre.BlockId = "iron_ore"; ironOre.DisplayName = "Iron Ore";
-        ironOre.IsSolid = true; ironOre.CanChisel = true; ironOre.Hardness = 3.0f;
-        ironOre.TextureTop = ironOreTex; ironOre.TextureSide = ironOreTex; ironOre.TextureBottom = ironOreTex;
-        Register(ironOre);
-
-        var goldOre = new BlockResource();
-        goldOre.BlockId = "gold_ore"; goldOre.DisplayName = "Gold Ore";
-        goldOre.IsSolid = true; goldOre.CanChisel = true; goldOre.Hardness = 3.0f;
-        goldOre.TextureTop = goldOreTex; goldOre.TextureSide = goldOreTex; goldOre.TextureBottom = goldOreTex;
-        Register(goldOre);
-
-        var diamondOre = new BlockResource();
-        diamondOre.BlockId = "diamond_ore"; diamondOre.DisplayName = "Diamond Ore";
-        diamondOre.IsSolid = true; diamondOre.CanChisel = true; diamondOre.Hardness = 3.0f;
-        diamondOre.TextureTop = diamondOreTex; diamondOre.TextureSide = diamondOreTex; diamondOre.TextureBottom = diamondOreTex;
-        Register(diamondOre);
-
         var obsidian = new BlockResource();
         obsidian.BlockId = "obsidian"; obsidian.DisplayName = "Obsidian";
         obsidian.IsSolid = true; obsidian.CanChisel = true; obsidian.Hardness = 50f;
@@ -200,6 +181,41 @@ public partial class BlockRegistry : Node
         clover.IsSolid = false; clover.CanChisel = false; clover.IsTransparent = true; clover.IsFlatGround = true; clover.Hardness = 0f;
         clover.TextureTop = cloverTex; clover.TextureSide = cloverTex; clover.TextureBottom = cloverTex;
         Register(clover);
+
+        // Ore Hint Rocks: flat-ground, instant-break, no chiseling - just a
+        // little visual tell. IsFlatGround also makes them placeable by the
+        // player through the normal block-placement path for free, same as
+        // clover, so "placing rocks/items down for fun" doesn't need any
+        // extra placement code.
+        var rockFlint = new BlockResource();
+        rockFlint.BlockId = "rock_flint"; rockFlint.DisplayName = "Flint";
+        rockFlint.IsSolid = false; rockFlint.CanChisel = false; rockFlint.IsTransparent = true; rockFlint.IsFlatGround = true; rockFlint.Hardness = 0f;
+        rockFlint.TextureTop = rockFlintTex; rockFlint.TextureSide = rockFlintTex; rockFlint.TextureBottom = rockFlintTex;
+        Register(rockFlint);
+
+        var rockCoal = new BlockResource();
+        rockCoal.BlockId = "rock_coal"; rockCoal.DisplayName = "Coal Bit";
+        rockCoal.IsSolid = false; rockCoal.CanChisel = false; rockCoal.IsTransparent = true; rockCoal.IsFlatGround = true; rockCoal.Hardness = 0f;
+        rockCoal.TextureTop = rockCoalTex; rockCoal.TextureSide = rockCoalTex; rockCoal.TextureBottom = rockCoalTex;
+        Register(rockCoal);
+
+        var rockIron = new BlockResource();
+        rockIron.BlockId = "rock_iron"; rockIron.DisplayName = "Iron Bit";
+        rockIron.IsSolid = false; rockIron.CanChisel = false; rockIron.IsTransparent = true; rockIron.IsFlatGround = true; rockIron.Hardness = 0f;
+        rockIron.TextureTop = rockIronTex; rockIron.TextureSide = rockIronTex; rockIron.TextureBottom = rockIronTex;
+        Register(rockIron);
+
+        var rockTin = new BlockResource();
+        rockTin.BlockId = "rock_tin"; rockTin.DisplayName = "Tin Bit";
+        rockTin.IsSolid = false; rockTin.CanChisel = false; rockTin.IsTransparent = true; rockTin.IsFlatGround = true; rockTin.Hardness = 0f;
+        rockTin.TextureTop = rockTinTex; rockTin.TextureSide = rockTinTex; rockTin.TextureBottom = rockTinTex;
+        Register(rockTin);
+
+        var rockCopper = new BlockResource();
+        rockCopper.BlockId = "rock_copper"; rockCopper.DisplayName = "Copper Bit";
+        rockCopper.IsSolid = false; rockCopper.CanChisel = false; rockCopper.IsTransparent = true; rockCopper.IsFlatGround = true; rockCopper.Hardness = 0f;
+        rockCopper.TextureTop = rockCopperTex; rockCopper.TextureSide = rockCopperTex; rockCopper.TextureBottom = rockCopperTex;
+        Register(rockCopper);
 
         GD.Print("Blocks registered.");
     }

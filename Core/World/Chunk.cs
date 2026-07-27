@@ -570,7 +570,20 @@ if (resource.IsCross)
 else if (resource.IsFlatGround)
     AddFlatGroundFace(cutoutSurfaces, resource, x, y, z);
 else if (block.IsFullBlock())
+{
     AddFullBlockFaces(surfaces, block, resource, x, y, z);
+
+    // Ore overlay: a second, alpha-scissored pass of the ore's fleck
+    // texture, nudged slightly outward so the host block's own texture
+    // still shows through the transparent parts of the ore art. Reuses
+    // the same cutoutSurfaces pass/material as flowers/clover above -
+    // depth testing handles the compositing correctly regardless of
+    // draw order, since the discard on transparent pixels means nothing
+    // gets written there for the host face behind it to lose to.
+    var ore = OreRegistry.Instance?.GetOreFromBlockState(block);
+    if (ore != null)
+        AddOreOverlayFaces(cutoutSurfaces, ore.OverlayTexture, resource, x, y, z);
+}
 else
     AddChiseledBlockFaces(surfaces, block, resource, x, y, z);
             }
@@ -810,6 +823,63 @@ private bool IsAirAt(int x, int y, int z)
         if (ShouldDrawFace(x + 1, y, z, resource.IsTransparent))
             AddQuad(GetOrCreateSurface(surfaces, resource.TextureSide),
                 GetFaceVertices(x, y, z, FaceDirection.East, 1.0f));
+    }
+
+    private static readonly Dictionary<FaceDirection, Vector3> _faceNormals = new()
+    {
+        { FaceDirection.Top,    new Vector3(0, 1, 0) },
+        { FaceDirection.Bottom, new Vector3(0, -1, 0) },
+        { FaceDirection.North,  new Vector3(0, 0, -1) },
+        { FaceDirection.South,  new Vector3(0, 0, 1) },
+        { FaceDirection.West,   new Vector3(-1, 0, 0) },
+        { FaceDirection.East,   new Vector3(1, 0, 0) },
+    };
+
+    private const float OreOverlayNudge = 0.0015f; // pushes the overlay quad slightly out from the host face so they don't z-fight
+
+    private Vector3[] NudgeVerts(Vector3[] verts, FaceDirection dir)
+    {
+        Vector3 offset = _faceNormals[dir] * OreOverlayNudge;
+        var nudged = new Vector3[verts.Length];
+        for (int i = 0; i < verts.Length; i++)
+            nudged[i] = verts[i] + offset;
+        return nudged;
+    }
+
+    // Draws the ore's transparent fleck texture as a second quad on top of
+    // each visible face of a full block, same face-visibility rules as
+    // AddFullBlockFaces. Only supports full blocks for now - chiseled
+    // (partial) blocks don't get an ore overlay.
+    private void AddOreOverlayFaces(
+        Dictionary<Texture2D, SurfaceTool> surfaces,
+        Texture2D overlayTexture, BlockResource resource,
+        int x, int y, int z)
+    {
+        if (overlayTexture == null) return;
+
+        if (ShouldDrawFace(x, y + 1, z, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.Top, 1.0f), FaceDirection.Top));
+
+        if (ShouldDrawFace(x, y - 1, z, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.Bottom, 1.0f), FaceDirection.Bottom));
+
+        if (ShouldDrawFace(x, y, z - 1, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.North, 1.0f), FaceDirection.North));
+
+        if (ShouldDrawFace(x, y, z + 1, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.South, 1.0f), FaceDirection.South));
+
+        if (ShouldDrawFace(x - 1, y, z, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.West, 1.0f), FaceDirection.West));
+
+        if (ShouldDrawFace(x + 1, y, z, resource.IsTransparent))
+            AddQuad(GetOrCreateSurface(surfaces, overlayTexture),
+                NudgeVerts(GetFaceVertices(x, y, z, FaceDirection.East, 1.0f), FaceDirection.East));
     }
 
     private void AddChiseledBlockFaces(

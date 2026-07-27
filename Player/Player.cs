@@ -1522,12 +1522,13 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         int bx = Mathf.FloorToInt(lPos.X), by = Mathf.FloorToInt(lPos.Y), bz = Mathf.FloorToInt(lPos.Z);
 
         BlockState above = chunk.GetBlock(bx, by + 1, bz);
-        if (above.BlockId is "rose" or "clover" or "dandelion")
+        if (above.BlockId is "rose" or "clover" or "dandelion" or "rock_flint" or "rock_coal" or "rock_iron" or "rock_tin" or "rock_copper")
         {
-            // Flowers pop out as a physical drop too, from just above the block being broken.
+            // Flowers/rocks pop out as a physical drop too, from just above the block being broken.
             Vector3 aboveWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 1.5f, bz + 0.5f);
             if (above.BlockId == "rose")      SpawnItemDrop("rose", 1, aboveWorldPos);
             if (above.BlockId == "dandelion") SpawnItemDrop("dandelion", 1, aboveWorldPos);
+            if (above.BlockId.StartsWith("rock_")) SpawnItemDrop(above.BlockId, 1, aboveWorldPos);
             chunk.SetBlock(bx, by + 1, bz, BlockState.Air);
             ResetBreak(); return;
         }
@@ -1541,6 +1542,8 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             // Creative mode stays instant — no physical drop, straight to inventory.
             var (dropIdC, dropCountC) = GetDrop(b.BlockId);
             if (dropIdC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropIdC, dropCountC);
+            var oreC = OreRegistry.Instance?.GetOreFromBlockState(b);
+            if (oreC != null) AddItemToInventory(oreC.ItemId, 1);
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak(); return;
         }
@@ -1567,6 +1570,11 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                 // instead of adding it to the inventory directly.
                 Vector3 dropWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
                 SpawnItemDrop(drop, dropCount, dropWorldPos);
+
+                // Ore-logged blocks drop the ore item too, alongside the
+                // host block itself (e.g. coal on clay -> clay + coal).
+                var ore = OreRegistry.Instance?.GetOreFromBlockState(b);
+                if (ore != null) SpawnItemDrop(ore.ItemId, 1, dropWorldPos);
             }
             chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak();

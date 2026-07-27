@@ -49,35 +49,79 @@ public partial class ChunkManager : Node3D
     [Export] public float CaveThreshold = 0.12f; // tunnel width - higher = fatter tunnels, lower = thinner. Keep this modest for a beta-accurate look; big values start looking like open caverns instead of worm tunnels.
 
     // ---- ORE SETTINGS ----
-    // Each ore has its own noise field, its own Y range, and its own
-    // "Rarity" threshold. Rarity is compared against a noise value that
-    // ranges roughly -1 to 1, so a HIGHER rarity number = a smaller slice
-    // of that range counts as ore = the ore is RARER. Because each ore now
-    // has an independent noise field, they no longer cluster together the
-    // way coal and iron used to.
+    // Ores are no longer their own block type. Each one is a Feature tag
+    // ("ore:coal", "ore:iron", etc.) that gets stamped onto whatever solid
+    // block generation already picked for that spot (stone, rock, dirt,
+    // gravel...). BlockRegistry/Chunk.cs render the ore as a transparent
+    // overlay texture on top of the host block's normal texture, and
+    // breaking the block drops BOTH the host block and the ore item.
+    //
+    // Ore placement works like actual Minecraft: each chunk rolls a small
+    // number of "vein attempts" per ore. Each attempt picks a random spot
+    // in that ore's Y range and grows a connected blob of roughly VeinSize
+    // blocks outward from it via a short random walk - so ore always shows
+    // up as a compact pocket, never as scattered single blocks, and it's
+    // bounded/predictable by construction (no noise curve to miscalibrate).
+    //
+    // Four knobs per ore, so it's fast to retune in the Inspector:
+    //   StartY        - the highest Y this ore can appear at
+    //   Depth         - how far below StartY it keeps appearing (StartY - Depth = lowest Y)
+    //   VeinSize      - roughly how many blocks are in one pocket
+    //   VeinsPerChunk - how many vein attempts get rolled per chunk (can be
+    //                   fractional - e.g. 0.25 means roughly 1 attempt every 4 chunks)
     [ExportGroup("Ore Generation")]
-    [Export] public int CoalMinY = 5;
-    [Export] public int CoalMaxY = 128;
-    [Export] public float CoalRarity = 0.30f;
+    [Export] public int CoalStartY = 128;
+    [Export] public int CoalDepth = 123;
+    [Export] public int CoalVeinSize = 16;
+    [Export] public float CoalVeinsPerChunk = 5f;
 
-    [Export] public int IronMinY = 5;
-    [Export] public int IronMaxY = 64;
-    [Export] public float IronRarity = 0.40f;
+    [Export] public int IronStartY = 64;
+    [Export] public int IronDepth = 59;
+    [Export] public int IronVeinSize = 9;
+    [Export] public float IronVeinsPerChunk = 3f;
 
-    [Export] public int GoldMinY = 5;
-    [Export] public int GoldMaxY = 32;
-    [Export] public float GoldRarity = 0.46f;
+    [Export] public int TinStartY = 110;   // shallow/common - paired with Copper for early bronze-age crafting
+    [Export] public int TinDepth = 90;
+    [Export] public int TinVeinSize = 8;
+    [Export] public float TinVeinsPerChunk = 2.5f;
 
-    [Export] public int DiamondMinY = 5;
-    [Export] public int DiamondMaxY = 16;
-    [Export] public float DiamondRarity = 0.55f;
+    [Export] public int CopperStartY = 110;
+    [Export] public int CopperDepth = 90;
+    [Export] public int CopperVeinSize = 8;
+    [Export] public float CopperVeinsPerChunk = 2.5f;
 
+    [Export] public int GoldStartY = 32;
+    [Export] public int GoldDepth = 27;
+    [Export] public int GoldVeinSize = 7;
+    [Export] public float GoldVeinsPerChunk = 0.8f;
+
+    [Export] public int DiamondStartY = 16;
+    [Export] public int DiamondDepth = 11;
+    [Export] public int DiamondVeinSize = 6;
+    [Export] public float DiamondVeinsPerChunk = 0.25f;
+
+    [Export] public int MithrilStartY = 10;   // rarest/deepest ore - lives right down near bedrock, rarer than diamond
+    [Export] public int MithrilDepth = 5;
+    [Export] public int MithrilVeinSize = 4;
+    [Export] public float MithrilVeinsPerChunk = 0.06f;
+
+    // Obsidian stays a normal standalone block (not an overlay ore) - keeps
+    // its original noise-threshold placement, untouched by the rework above.
     [Export] public int ObsidianMinY = 5;  // kept just above the bedrock layer (Y0-3), which is handled separately and never rolls for ore - that's why it wasn't showing up before
     [Export] public int ObsidianMaxY = 20;
     [Export] public float ObsidianRarity = 0.42f;
 
     [Export] public float RockPatchRarity = 0.52f; // "rock" (cobblestone-style) patches - higher = rarer/smaller patches
     [Export] public float DirtPatchRarity = 0.60f; // rare underground dirt patches - higher = rarer/smaller patches
+
+    // ---- ORE HINT ROCKS ----
+    // Small non-block pebbles that can spawn on the grass surface, hinting
+    // that a matching vein exists somewhere underneath. Only "natural" ores
+    // get a hint rock (coal/iron/tin/copper + flint for gravel) - gold,
+    // diamond, and mithril stay hidden, no surface tell.
+    [ExportGroup("Ore Hint Rocks")]
+    [Export] public float RockSpawnChance = 0.01f; // rolled per grass column, per matching vein found below it
+    [Export] public int RockProbeDepth = 24;        // how far below the surface to check for a vein before giving up on that column
 
     public bool IsInitialLoadComplete { get; private set; } = false;
 [Signal] public delegate void WorldReadyEventHandler();
@@ -113,13 +157,10 @@ public partial class ChunkManager : Node3D
     private FastNoiseLite _caveNoiseB = new FastNoiseLite();
     private FastNoiseLite _caveRadiusNoise = new FastNoiseLite(); // makes tunnel width drift wider/narrower along their length, like a worm's radius changing as it burrows
 
-    private FastNoiseLite _coalNoise = new FastNoiseLite();
-    private FastNoiseLite _ironNoise = new FastNoiseLite();
-    private FastNoiseLite _goldNoise = new FastNoiseLite();
-    private FastNoiseLite _diamondNoise = new FastNoiseLite();
     private FastNoiseLite _obsidianNoise = new FastNoiseLite();
     private FastNoiseLite _rockPatchNoise = new FastNoiseLite();
     private FastNoiseLite _dirtPatchNoise = new FastNoiseLite();
+    private RandomNumberGenerator _oreVeinRng = new RandomNumberGenerator(); // deterministic per-chunk RNG that rolls and places ore veins
 
     public override void _Ready()
     {
@@ -203,6 +244,8 @@ public partial class ChunkManager : Node3D
         _biomeHumid.Seed = 88888;
         _biomeHumid.Frequency = 0.006f; // was 0.004f
 
+        // NOTE: despite the name, _oreNoise is used for bedrock roughness
+        // below, not ore veins - left as-is, unrelated to the ore rework.
         _oreNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _oreNoise.Seed = 55555;
         _oreNoise.Frequency = 0.1f;
@@ -233,23 +276,9 @@ public partial class ChunkManager : Node3D
         _caveRadiusNoise.Frequency = 0.01f;
         _caveRadiusNoise.Seed = Seed + 12;
 
-        // Ores: each gets its own field/seed/frequency so veins no longer
-        // line up with each other.
-        _coalNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
-        _coalNoise.Frequency = 0.11f;
-        _coalNoise.Seed = Seed + 20;
-
-        _ironNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
-        _ironNoise.Frequency = 0.10f;
-        _ironNoise.Seed = Seed + 21;
-
-        _goldNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
-        _goldNoise.Frequency = 0.095f;
-        _goldNoise.Seed = Seed + 22;
-
-        _diamondNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
-        _diamondNoise.Frequency = 0.09f;
-        _diamondNoise.Seed = Seed + 23;
+        // Ore veins are placed with plain RNG (GenerateOreVeins), not
+        // noise, so they're bounded/predictable by construction - see the
+        // Ore Generation export group for the tunable knobs.
 
         _obsidianNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _obsidianNoise.Frequency = 0.12f;
@@ -1245,6 +1274,12 @@ public Vector3? LoadPlayerPosition()
             }
         }
 
+        // Ore veins get stamped on after the chunk's blocks are filled in,
+        // so PlaceOreVein can check what's actually there. Runs for every
+        // world type - Flat/OneBlock just won't have much eligible stone
+        // for it to land on.
+        GenerateOreVeins(chunk, chunkPos);
+
         GenerateTrees(chunk, chunkPos);
 
         // Flowers and melons are skipped on Flat and One Block worlds -
@@ -1255,6 +1290,7 @@ public Vector3? LoadPlayerPosition()
         {
             SpawnMelons(chunk, chunkPos);
             SpawnDecorations(chunk, chunkPos);
+            SpawnOreHintRocks(chunk, chunkPos);
         }
 
         chunk.MarkDirty();
@@ -1287,27 +1323,12 @@ public Vector3? LoadPlayerPosition()
         new Vector3I(0, 0, 1), new Vector3I(0, 0, -1)
     };
 
-    // Deep underground block choice: ores (each with their own noise/Y
-    // range/rarity), then rare "rock" patches, then gravel patches, then
-    // plain stone as the fallback.
+    // Deep underground block choice: gravel/rock/dirt patches, plain stone
+    // as the fallback, obsidian as its own separate standalone block. Ore
+    // is NOT decided here anymore - GenerateOreVeins stamps ore Features
+    // onto these blocks afterward, once the whole chunk is filled in.
     private BlockState GetUndergroundBlock(int worldX, int worldY, int worldZ)
     {
-        if (worldY >= DiamondMinY && worldY <= DiamondMaxY &&
-            _diamondNoise.GetNoise3D(worldX, worldY, worldZ) > DiamondRarity)
-            return new BlockState { BlockId = "diamond_ore", BitMask = 0xFF };
-
-        if (worldY >= GoldMinY && worldY <= GoldMaxY &&
-            _goldNoise.GetNoise3D(worldX, worldY, worldZ) > GoldRarity)
-            return new BlockState { BlockId = "gold_ore", BitMask = 0xFF };
-
-        if (worldY >= IronMinY && worldY <= IronMaxY &&
-            _ironNoise.GetNoise3D(worldX, worldY, worldZ) > IronRarity)
-            return new BlockState { BlockId = "iron_ore", BitMask = 0xFF };
-
-        if (worldY >= CoalMinY && worldY <= CoalMaxY &&
-            _coalNoise.GetNoise3D(worldX, worldY, worldZ) > CoalRarity)
-            return new BlockState { BlockId = "coal_ore", BitMask = 0xFF };
-
         if (worldY >= ObsidianMinY && worldY <= ObsidianMaxY &&
             _obsidianNoise.GetNoise3D(worldX, worldY, worldZ) > ObsidianRarity)
             return new BlockState { BlockId = "obsidian", BitMask = 0xFF };
@@ -1317,20 +1338,98 @@ public Vector3? LoadPlayerPosition()
             return new BlockState { BlockId = "gravel", BitMask = 0xFF };
 
         // Small, uncommon "rock" patches (your cobblestone-style block).
-        // NOTE: swap "rock" below for whatever block id you actually use
-        // for that block if it's registered under a different name.
         float rockVal = _rockPatchNoise.GetNoise3D(worldX, worldY * 2f, worldZ + 9000f);
         if (rockVal > RockPatchRarity)
             return new BlockState { BlockId = "rock", BitMask = 0xFF };
 
-        // Rare underground dirt patches, separate from the surface
-        // topsoil layer - most cave walls should still read as stone, this
-        // is just an occasional pocket to stumble across.
+        // Rare underground dirt patches, separate from the surface topsoil
+        // layer - most cave walls should still read as stone, this is just
+        // an occasional pocket to stumble across.
         float dirtVal = _dirtPatchNoise.GetNoise3D(worldX + 4000f, worldY * 2f, worldZ);
         if (dirtVal > DirtPatchRarity)
             return new BlockState { BlockId = "dirt", BitMask = 0xFF };
 
         return new BlockState { BlockId = "stone", BitMask = 0xFF };
+    }
+
+    // Rolls and places every ore's veins for this chunk, rarest first (so a
+    // rare vein isn't silently skipped just because a common one already
+    // claimed that spot). Called once per chunk, after the chunk's blocks
+    // are already filled in.
+    private void GenerateOreVeins(Chunk chunk, Vector3I chunkPos)
+    {
+        _oreVeinRng.Seed = (ulong)(chunkPos.X * 92821 ^ chunkPos.Z * 68917 ^ chunkPos.Y * 50331653 ^ 0x0FE571);
+
+        TryPlaceVeinsForOre(chunk, chunkPos, "mithril", MithrilStartY, MithrilDepth, MithrilVeinSize, MithrilVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "diamond", DiamondStartY, DiamondDepth, DiamondVeinSize, DiamondVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "gold", GoldStartY, GoldDepth, GoldVeinSize, GoldVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "copper", CopperStartY, CopperDepth, CopperVeinSize, CopperVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "tin", TinStartY, TinDepth, TinVeinSize, TinVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "iron", IronStartY, IronDepth, IronVeinSize, IronVeinsPerChunk);
+        TryPlaceVeinsForOre(chunk, chunkPos, "coal", CoalStartY, CoalDepth, CoalVeinSize, CoalVeinsPerChunk);
+    }
+
+    // Works out how many vein attempts this ore gets in this chunk (0 if
+    // the chunk's Y slice doesn't even overlap the ore's Y range), then
+    // fires off that many attempts at random spots within the overlap.
+    private void TryPlaceVeinsForOre(Chunk chunk, Vector3I chunkPos, string oreId, int startY, int depth, int veinSize, float veinsPerChunk)
+    {
+        int oreYMin = startY - depth;
+        int oreYMax = startY;
+        int chunkYMin = chunkPos.Y * Chunk.HEIGHT;
+        int chunkYMax = chunkYMin + Chunk.HEIGHT - 1;
+
+        int overlapMin = Mathf.Max(oreYMin, chunkYMin);
+        int overlapMax = Mathf.Min(oreYMax, chunkYMax);
+        if (overlapMin > overlapMax) return; // this chunk doesn't reach this ore's Y range at all
+
+        // veinsPerChunk can be fractional (e.g. 0.25 = roughly one vein
+        // attempt every 4 chunks) - the whole part always fires, the
+        // fractional part is a weighted coin flip.
+        int wholeAttempts = (int)veinsPerChunk;
+        float fraction = veinsPerChunk - wholeAttempts;
+        int attempts = wholeAttempts + (_oreVeinRng.Randf() < fraction ? 1 : 0);
+
+        for (int i = 0; i < attempts; i++)
+        {
+            int worldX = chunkPos.X * Chunk.SIZE + _oreVeinRng.RandiRange(0, Chunk.SIZE - 1);
+            int worldZ = chunkPos.Z * Chunk.SIZE + _oreVeinRng.RandiRange(0, Chunk.SIZE - 1);
+            int worldY = _oreVeinRng.RandiRange(overlapMin, overlapMax);
+            PlaceOreVein(chunk, chunkPos, oreId, new Vector3I(worldX, worldY, worldZ), veinSize);
+        }
+    }
+
+    // Grows one vein: a short random walk of veinSize steps starting at
+    // origin, stamping an "ore:<id>" Feature onto any eligible host block
+    // (stone/rock/dirt/gravel, and not already carrying an ore) it lands
+    // on. Steps that wander outside this chunk are simply skipped - a vein
+    // centered near a chunk edge just doesn't fully continue into the
+    // neighboring chunk, same as it works in actual Minecraft.
+    private void PlaceOreVein(Chunk chunk, Vector3I chunkPos, string oreId, Vector3I origin, int veinSize)
+    {
+        Vector3I pos = origin;
+        for (int i = 0; i < veinSize; i++)
+        {
+            int lx = pos.X - chunkPos.X * Chunk.SIZE;
+            int ly = pos.Y - chunkPos.Y * Chunk.HEIGHT;
+            int lz = pos.Z - chunkPos.Z * Chunk.SIZE;
+
+            if (lx >= 0 && lx < Chunk.SIZE && ly >= 0 && ly < Chunk.HEIGHT && lz >= 0 && lz < Chunk.SIZE)
+            {
+                BlockState existing = chunk.GetBlock(lx, ly, lz);
+                bool eligibleHost = existing.BlockId is "stone" or "rock" or "dirt" or "gravel";
+                bool alreadyOre = existing.Features != null && existing.Features.Length > 0;
+                if (eligibleHost && !alreadyOre)
+                {
+                    existing.AddFeature("ore:" + oreId);
+                    chunk.SetBlockInternal(lx, ly, lz, existing);
+                }
+            }
+
+            // Random walk step, biased to stay compact/connected rather
+            // than wandering off in a straight line.
+            pos += new Vector3I(_oreVeinRng.RandiRange(-1, 1), _oreVeinRng.RandiRange(-1, 1), _oreVeinRng.RandiRange(-1, 1));
+        }
     }
 
     private void SpawnMelons(Chunk chunk, Vector3I chunkPos)
@@ -1487,6 +1586,83 @@ public Vector3? LoadPlayerPosition()
 
                 chunk.SetBlockInternal(x, localSurfaceY + 1, z,
                     new BlockState { BlockId = decorId, BitMask = 0xFF });
+            }
+        }
+    }
+
+    private RandomNumberGenerator _rockHintRng = new RandomNumberGenerator();
+
+    // Scatters small hint pebbles ("Rocks") on the grass surface, tied to
+    // whatever's actually underneath that column - flint over a gravel
+    // pocket, a coal/iron/tin/copper bit over that ore's vein. Gold,
+    // diamond, and mithril deliberately don't get a hint rock - those stay
+    // a surprise. These are placed as ordinary flat-ground blocks
+    // (BlockRegistry.IsFlatGround), the same mechanism clover/flowers use,
+    // so they're also player-placeable through the normal block-placement
+    // path for free.
+    private void SpawnOreHintRocks(Chunk chunk, Vector3I chunkPos)
+    {
+        _rockHintRng.Seed = (ulong)(chunkPos.X * 27182818 ^ chunkPos.Z * 16180339 ^ chunkPos.Y * 14142135);
+
+        for (int x = 0; x < Chunk.SIZE; x++)
+        {
+            for (int z = 0; z < Chunk.SIZE; z++)
+            {
+                if (_rockHintRng.Randf() > RockSpawnChance) continue;
+
+                int worldX = chunkPos.X * Chunk.SIZE + x;
+                int worldZ = chunkPos.Z * Chunk.SIZE + z;
+
+                int surfaceY = GetSurfaceHeight(worldX, worldZ);
+                int localSurfaceY = surfaceY - (chunkPos.Y * Chunk.HEIGHT);
+                if (localSurfaceY < 0 || localSurfaceY >= Chunk.HEIGHT - 1) continue;
+                if (surfaceY < WaterLevel) continue;
+
+                BlockState surfaceBlock = chunk.GetBlock(x, localSurfaceY, z);
+                if (surfaceBlock.BlockId != "grass_block") continue;
+
+                BlockState above = chunk.GetBlock(x, localSurfaceY + 1, z);
+                if (!above.IsAir()) continue;
+
+                // Probe straight down looking for the first thing worth
+                // hinting at - whichever hits first (closest to the
+                // surface) wins, so the rock reflects the nearest vein.
+                // Checks the actual placed blocks (GenerateOreVeins already
+                // ran for this chunk by the time this executes), not noise.
+                string hintRockId = null;
+                for (int depth = 1; depth <= RockProbeDepth; depth++)
+                {
+                    int probeY = surfaceY - depth;
+                    if (probeY < 1) break;
+                    int localProbeY = probeY - (chunkPos.Y * Chunk.HEIGHT);
+                    if (localProbeY < 0) break; // wandered below this chunk - can't see that far down from here
+
+                    BlockState probeBlock = chunk.GetBlock(x, localProbeY, z);
+
+                    if (probeBlock.BlockId == "gravel")
+                    {
+                        hintRockId = "rock_flint";
+                        break;
+                    }
+
+                    if (probeBlock.Features != null)
+                    {
+                        foreach (var feature in probeBlock.Features)
+                        {
+                            if (feature is "ore:coal" or "ore:iron" or "ore:tin" or "ore:copper")
+                            {
+                                hintRockId = "rock_" + feature.Substring(4);
+                                break;
+                            }
+                        }
+                    }
+                    if (hintRockId != null) break;
+                }
+
+                if (hintRockId == null) continue;
+
+                chunk.SetBlockInternal(x, localSurfaceY + 1, z,
+                    new BlockState { BlockId = hintRockId, BitMask = 0xFF });
             }
         }
     }

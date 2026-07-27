@@ -24,6 +24,7 @@ GameModeManager="*uid://yy85qxxs4go8"
 RecipeManager="*uid://c8lukl8n5wfft"
 SaveManager="*uid://i7knv8bhtfli"
 BlockDropManager="*uid://ch8cl10j1ad4x"
+OreRegistry="*uid://coclp16v2cgix"
 
 [display]
 
