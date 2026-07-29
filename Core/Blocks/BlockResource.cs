@@ -22,5 +22,6 @@ public partial class BlockResource : Resource
     [Export] public int LightLevel { get; set; } = 0;
     [Export] public bool IsFlammable { get; set; } = false;
     [Export] public bool IsCross { get; set; } = false; // renders as X cross (flowers)
-    [Export] public bool IsFlatGround { get; set; } = false; // renders as flat 1px slab (clover)
+    [Export] public bool IsFlatGround { get; set; } = false; // renders as a flat, zero-thickness 2-sided plane (clover)
+    [Export] public bool IsThinItem { get; set; } = false; // renders as a real thin 3D box with side walls (1/16 block tall) - the Rocks look, like a Minecraft item/frame model instead of a flat plane. Only takes effect if IsFlatGround is also true.
 }

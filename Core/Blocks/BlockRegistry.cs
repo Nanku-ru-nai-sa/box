@@ -189,31 +189,31 @@ public partial class BlockRegistry : Node
         // extra placement code.
         var rockFlint = new BlockResource();
         rockFlint.BlockId = "rock_flint"; rockFlint.DisplayName = "Flint";
-        rockFlint.IsSolid = false; rockFlint.CanChisel = false; rockFlint.IsTransparent = true; rockFlint.IsFlatGround = true; rockFlint.Hardness = 0f;
+        rockFlint.IsSolid = false; rockFlint.CanChisel = false; rockFlint.IsTransparent = true; rockFlint.IsFlatGround = true; rockFlint.IsThinItem = true; rockFlint.Hardness = 0f;
         rockFlint.TextureTop = rockFlintTex; rockFlint.TextureSide = rockFlintTex; rockFlint.TextureBottom = rockFlintTex;
         Register(rockFlint);
 
         var rockCoal = new BlockResource();
         rockCoal.BlockId = "rock_coal"; rockCoal.DisplayName = "Coal Bit";
-        rockCoal.IsSolid = false; rockCoal.CanChisel = false; rockCoal.IsTransparent = true; rockCoal.IsFlatGround = true; rockCoal.Hardness = 0f;
+        rockCoal.IsSolid = false; rockCoal.CanChisel = false; rockCoal.IsTransparent = true; rockCoal.IsFlatGround = true; rockCoal.IsThinItem = true; rockCoal.Hardness = 0f;
         rockCoal.TextureTop = rockCoalTex; rockCoal.TextureSide = rockCoalTex; rockCoal.TextureBottom = rockCoalTex;
         Register(rockCoal);
 
         var rockIron = new BlockResource();
         rockIron.BlockId = "rock_iron"; rockIron.DisplayName = "Iron Bit";
-        rockIron.IsSolid = false; rockIron.CanChisel = false; rockIron.IsTransparent = true; rockIron.IsFlatGround = true; rockIron.Hardness = 0f;
+        rockIron.IsSolid = false; rockIron.CanChisel = false; rockIron.IsTransparent = true; rockIron.IsFlatGround = true; rockIron.IsThinItem = true; rockIron.Hardness = 0f;
         rockIron.TextureTop = rockIronTex; rockIron.TextureSide = rockIronTex; rockIron.TextureBottom = rockIronTex;
         Register(rockIron);
 
         var rockTin = new BlockResource();
         rockTin.BlockId = "rock_tin"; rockTin.DisplayName = "Tin Bit";
-        rockTin.IsSolid = false; rockTin.CanChisel = false; rockTin.IsTransparent = true; rockTin.IsFlatGround = true; rockTin.Hardness = 0f;
+        rockTin.IsSolid = false; rockTin.CanChisel = false; rockTin.IsTransparent = true; rockTin.IsFlatGround = true; rockTin.IsThinItem = true; rockTin.Hardness = 0f;
         rockTin.TextureTop = rockTinTex; rockTin.TextureSide = rockTinTex; rockTin.TextureBottom = rockTinTex;
         Register(rockTin);
 
         var rockCopper = new BlockResource();
         rockCopper.BlockId = "rock_copper"; rockCopper.DisplayName = "Copper Bit";
-        rockCopper.IsSolid = false; rockCopper.CanChisel = false; rockCopper.IsTransparent = true; rockCopper.IsFlatGround = true; rockCopper.Hardness = 0f;
+        rockCopper.IsSolid = false; rockCopper.CanChisel = false; rockCopper.IsTransparent = true; rockCopper.IsFlatGround = true; rockCopper.IsThinItem = true; rockCopper.Hardness = 0f;
         rockCopper.TextureTop = rockCopperTex; rockCopper.TextureSide = rockCopperTex; rockCopper.TextureBottom = rockCopperTex;
         Register(rockCopper);
 

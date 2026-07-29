@@ -568,7 +568,12 @@ public void BuildMesh()
 if (resource.IsCross)
     AddCrossFaces(cutoutSurfaces, resource, x, y, z);
 else if (resource.IsFlatGround)
-    AddFlatGroundFace(cutoutSurfaces, resource, x, y, z);
+{
+    if (resource.IsThinItem)
+        AddThinItemFaces(cutoutSurfaces, resource, x, y, z);
+    else
+        AddFlatGroundFace(cutoutSurfaces, resource, x, y, z);
+}
 else if (block.IsFullBlock())
 {
     AddFullBlockFaces(surfaces, block, resource, x, y, z);
@@ -733,6 +738,152 @@ private void AddFlatGroundFace(Dictionary<Texture2D, SurfaceTool> surfaces,
     st.SetUV(new Vector2(0, 0)); st.AddVertex(new Vector3(x,     flatY, z + 1));
     st.SetUV(new Vector2(1, 1)); st.AddVertex(new Vector3(x + 1, flatY, z));
     st.SetUV(new Vector2(0, 1)); st.AddVertex(new Vector3(x,     flatY, z));
+}
+
+private const float ThinItemHeight = 0.0625f; // 1/16 block - real 3D extrusion thickness, not just a Y offset
+private const int ThinItemGridSize = 16;       // matches a standard 16x16 texture, 1 texel = 1 world-space "pixel"
+
+// One 16x16 opacity mask per unique texture, built once from the actual
+// image data and reused for every rock/item placed with it - this is the
+// expensive part (reading pixels), so it only happens once per texture,
+// not once per placed block.
+private static readonly Dictionary<Texture2D, bool[,]> _thinItemAlphaCache = new();
+
+private bool[,] GetOrBuildAlphaMask(Texture2D tex)
+{
+    if (_thinItemAlphaCache.TryGetValue(tex, out var cached)) return cached;
+
+    var mask = new bool[ThinItemGridSize, ThinItemGridSize];
+    Image img = tex.GetImage();
+    if (img != null)
+    {
+        img.Convert(Image.Format.Rgba8);
+        int w = img.GetWidth(), h = img.GetHeight();
+        for (int v = 0; v < ThinItemGridSize; v++)
+        {
+            for (int u = 0; u < ThinItemGridSize; u++)
+            {
+                // Sample the pixel at the middle of this texel's cell, scaled
+                // to the source image's actual size (in case it isn't 16x16).
+                int px = Mathf.Clamp((int)((u + 0.5f) / ThinItemGridSize * w), 0, w - 1);
+                int py = Mathf.Clamp((int)((v + 0.5f) / ThinItemGridSize * h), 0, h - 1);
+                mask[u, v] = img.GetPixel(px, py).A > 0.5f;
+            }
+        }
+    }
+    // If img came back null (can happen if the texture's import "Compress
+    // Mode" doesn't allow CPU readback), this silently falls back to an
+    // all-transparent mask, so you'd just get no side walls. If that
+    // happens, set that texture's Compress Mode to Lossless/Uncompressed
+    // in the Import tab and reimport.
+    _thinItemAlphaCache[tex] = mask;
+    return mask;
+}
+
+private void AddQuadWithUV(SurfaceTool surface, Vector3[] verts, Vector2 uv)
+{
+    surface.SetUV(uv); surface.AddVertex(verts[0]);
+    surface.SetUV(uv); surface.AddVertex(verts[1]);
+    surface.SetUV(uv); surface.AddVertex(verts[2]);
+
+    surface.SetUV(uv); surface.AddVertex(verts[0]);
+    surface.SetUV(uv); surface.AddVertex(verts[2]);
+    surface.SetUV(uv); surface.AddVertex(verts[3]);
+}
+
+// Real thin 3D box: full-icon top/bottom faces, plus pixel-perfect side
+// walls generated from the texture's actual silhouette, the same way
+// Minecraft's own generated item models (and TFC) work - not a stretched
+// copy of the face texture. For every opaque texel, check its 4
+// neighbors in texture space; wherever a neighbor is transparent (or off
+// the edge of the image), emit a tiny 1-texel-wide wall sampling ONLY
+// that texel's color, so the silhouette edge (little notches, chips,
+// speckles and all) reads correctly from the side.
+private void AddThinItemFaces(Dictionary<Texture2D, SurfaceTool> surfaces,
+    BlockResource resource, int x, int y, int z)
+{
+    Texture2D tex = resource.TextureTop;
+    if (tex == null) return;
+
+    float topY = y + ThinItemHeight;
+    SurfaceTool st = GetOrCreateSurface(surfaces, tex);
+
+    // Top face - the full icon, standard UV.
+    AddQuad(st, new Vector3[]
+    {
+        new Vector3(x,     topY, z),
+        new Vector3(x + 1, topY, z),
+        new Vector3(x + 1, topY, z + 1),
+        new Vector3(x,     topY, z + 1)
+    });
+
+    // Bottom face - same icon, facing down.
+    AddQuad(st, new Vector3[]
+    {
+        new Vector3(x,     y, z + 1),
+        new Vector3(x + 1, y, z + 1),
+        new Vector3(x + 1, y, z),
+        new Vector3(x,     y, z)
+    });
+
+    bool[,] mask = GetOrBuildAlphaMask(tex);
+    float step = 1f / ThinItemGridSize;
+
+    for (int v = 0; v < ThinItemGridSize; v++)
+    {
+        for (int u = 0; u < ThinItemGridSize; u++)
+        {
+            if (!mask[u, v]) continue;
+
+            float x0 = x + u * step, x1 = x0 + step;
+            float z0 = z + v * step, z1 = z0 + step;
+
+            // Sample from the middle of this texel, same UV for all 4
+            // corners of every wall segment on it - a flat 1-pixel swatch
+            // of color, not a gradient.
+            Vector2 swatchUV = new Vector2((u + 0.5f) * step, 1f - (v + 0.5f) * step);
+
+            // West wall (-X): emitted if the texel to the left is empty or off the image edge
+            if (u == 0 || !mask[u - 1, v])
+                AddQuadWithUV(st, new Vector3[]
+                {
+                    new Vector3(x0, y,    z1),
+                    new Vector3(x0, y,    z0),
+                    new Vector3(x0, topY, z0),
+                    new Vector3(x0, topY, z1)
+                }, swatchUV);
+
+            // East wall (+X)
+            if (u == ThinItemGridSize - 1 || !mask[u + 1, v])
+                AddQuadWithUV(st, new Vector3[]
+                {
+                    new Vector3(x1, y,    z0),
+                    new Vector3(x1, y,    z1),
+                    new Vector3(x1, topY, z1),
+                    new Vector3(x1, topY, z0)
+                }, swatchUV);
+
+            // North wall (-Z, toward the texel above it)
+            if (v == 0 || !mask[u, v - 1])
+                AddQuadWithUV(st, new Vector3[]
+                {
+                    new Vector3(x0, y,    z0),
+                    new Vector3(x1, y,    z0),
+                    new Vector3(x1, topY, z0),
+                    new Vector3(x0, topY, z0)
+                }, swatchUV);
+
+            // South wall (+Z, toward the texel below it)
+            if (v == ThinItemGridSize - 1 || !mask[u, v + 1])
+                AddQuadWithUV(st, new Vector3[]
+                {
+                    new Vector3(x1, y,    z1),
+                    new Vector3(x0, y,    z1),
+                    new Vector3(x0, topY, z1),
+                    new Vector3(x1, topY, z1)
+                }, swatchUV);
+        }
+    }
 }
 private void BuildCollision(ArrayMesh mesh)
 {
