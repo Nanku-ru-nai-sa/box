@@ -96,6 +96,13 @@ public partial class Player : CharacterBody3D
     private EquipmentPanel _equipmentPanel;
     private CanvasLayer    _equipmentLayer;
 
+    // ── Creative menu ─────────────────────────────────────────────────────────
+    // Item browser for Create mode — see CreativeMenu.cs / ItemCatalog.cs.
+    // Opened/closed with V (see _UnhandledInput), independent of Tab/inventory.
+    private CreativeMenu _creativeMenu;
+    private CanvasLayer  _creativeMenuLayer;
+    private bool         _creativeMenuOpen = false;
+
     // ── Stats HUD ─────────────────────────────────────────────────────────────
     private StatsHud    _statsHud;
     private CanvasLayer _statsHudLayer;
@@ -188,6 +195,7 @@ public partial class Player : CharacterBody3D
         BuildCursorPanel();
         BuildCraftingPanel();
         BuildEquipmentPanel();
+        BuildCreativeMenu();
 
         if (_stats == null) { _stats = new PlayerStats(); AddChild(_stats); }
         if (_playerCamera == null)
@@ -416,6 +424,29 @@ public partial class Player : CharacterBody3D
         _equipmentPanel.Visible      = false;
 
         _equipmentLayer.CallDeferred("add_child", _equipmentPanel);
+    }
+
+    private void BuildCreativeMenu()
+    {
+        _creativeMenuLayer       = new CanvasLayer();
+        _creativeMenuLayer.Layer = 12;
+        GetTree().Root.CallDeferred("add_child", _creativeMenuLayer);
+
+        _creativeMenu = new CreativeMenu();
+
+        float w = CreativeMenu.TotalWidth;
+        float h = CreativeMenu.TotalHeight;
+        _creativeMenu.AnchorLeft   = 0.5f; _creativeMenu.AnchorRight  = 0.5f;
+        _creativeMenu.AnchorTop    = 0.5f; _creativeMenu.AnchorBottom = 0.5f;
+        _creativeMenu.OffsetLeft   = -w / 2f;
+        _creativeMenu.OffsetRight  =  w / 2f;
+        _creativeMenu.OffsetTop    = -h / 2f;
+        _creativeMenu.OffsetBottom =  h / 2f;
+        _creativeMenu.Visible      = false;
+        _creativeMenu.OnItemChosen += OnCreativeItemChosen;
+
+        _creativeMenuLayer.CallDeferred("add_child", _creativeMenu);
+        _creativeMenu.CallDeferred(nameof(CreativeMenu.Init));
     }
 
     private void BuildStatsHud()
@@ -1135,6 +1166,40 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                 FireChanged();
                 UpdateCursorVisual();
             }
+
+    // =========================================================================
+    // CREATIVE MENU (routed from CreativeMenu)
+    // =========================================================================
+
+    // Called whenever an item is clicked in the creative menu — left-click
+    // gives a full stack, right-click gives one (CreativeMenu decides which
+    // and just hands us the count). Goes straight into inventory, same path
+    // as picking up a world drop.
+    private void OnCreativeItemChosen(string itemId, int count)
+    {
+        AddItemToInventory(itemId, count);
+        FireChanged();
+    }
+
+    private void ToggleCreativeMenu()
+    {
+        _creativeMenuOpen     = !_creativeMenuOpen;
+        _creativeMenu.Visible = _creativeMenuOpen;
+
+        if (_creativeMenuOpen)
+        {
+            _hotbarLayer.Visible = false;
+            if (_statsHudLayer != null) _statsHudLayer.Visible = false;
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+        }
+        else
+        {
+            _hotbarLayer.Visible = _hudVisible;
+            if (_statsHudLayer != null) _statsHudLayer.Visible = _hudVisible;
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+    }
+
     // =========================================================================
     // VISUALS
     // =========================================================================
@@ -1275,7 +1340,8 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (Input.IsActionJustReleased("ui_cancel"))
         {
-            if (_inventoryOpen)         ToggleInventory();
+            if (_creativeMenuOpen)      ToggleCreativeMenu();
+            else if (_inventoryOpen)    ToggleInventory();
             else if (_pauseMenu.IsOpen) _pauseMenu.Close();
             else                        _pauseMenu.Open();
         }
@@ -1324,7 +1390,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (@event is InputEventMouseButton mb)
         {
-            if (!_inventoryOpen && !_chatOpen)
+            if (!_inventoryOpen && !_chatOpen && !_creativeMenuOpen)
             {
                 if (mb.ButtonIndex == MouseButton.Left)
                 {
@@ -1356,7 +1422,14 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             else if (key.Keycode == Key.Minus) SelectHotbarSlot(10);
             else if (key.Keycode == Key.Equal) SelectHotbarSlot(11);
 
-            if (key.Keycode == Key.Tab) ToggleInventory();
+            if (key.Keycode == Key.Tab && !_creativeMenuOpen) ToggleInventory();
+
+            // Creative item browser — only meaningful in Create mode, but if
+            // it's somehow already open (e.g. gamemode changed mid-browse)
+            // still let it close.
+            if (key.Keycode == Key.V && !_inventoryOpen &&
+                (_creativeMenuOpen || GameModeManager.Instance?.IsCreate == true))
+                ToggleCreativeMenu();
 
             if (key.Keycode == Key.Q && !_isDropping)
             {
@@ -1675,6 +1748,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         _chatLayer?.QueueFree();
         _craftingLayer?.QueueFree();
         _equipmentLayer?.QueueFree();
+        _creativeMenuLayer?.QueueFree();
         _statsHudLayer?.QueueFree();
         _breakOverlay?.QueueFree();
         _crosshairLayer?.QueueFree();
