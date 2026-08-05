@@ -43,6 +43,9 @@ public partial class Player : CharacterBody3D
     private Vector3I          _breakTargetBlock   = new Vector3I(int.MinValue, 0, 0);
     private string            _breakTargetBlockId = "";
 
+    // ── Combat ───────────────────────────────────────────────────────────────
+    private const float UnarmedAttackDamage = 2f; // TODO: replace with per-weapon damage once weapon stats exist
+
     // ── Hotbar ───────────────────────────────────────────────────────────────
     private const int HotbarSize = 12;
     private Panel[]       _hotbarSlots     = new Panel[HotbarSize];
@@ -1514,6 +1517,7 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         var col = _rayCast.GetCollider() as Node;
         if (col is Melon melon) { melon.Break(_inventory); ResetBreak(); return; }
+        if (col is Mob mob) { mob.TakeDamage(UnarmedAttackDamage, GlobalPosition); ResetBreak(); return; }
         if (col == null || !col.HasMeta("chunk")) { ResetBreak(); return; }
 
         Chunk chunk  = (Chunk)col.GetMeta("chunk").AsGodotObject();

@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://dhfrwx04yvws0" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
 [ext_resource type="PackedScene" uid="uid://cwo0b48pnm0pr" path="res://Player/player.tscn" id="2_gxb1y"]
 [ext_resource type="Script" uid="uid://d2km18kovq21" path="res://Scenes/LoadingScreen.cs" id="3_f2nln"]
+[ext_resource type="PackedScene" uid="uid://cqopmewi8qjri" path="res://Mobs/mob.tscn" id="5_efk68"]
 
 [node name="TestWorld" type="Node3D" unique_id=1392221281]
 
@@ -24,4 +25,9 @@ script = ExtResource("1_ko2s7")
 script = ExtResource("3_f2nln")
 
 [node name="player" parent="." unique_id=189951435 instance=ExtResource("2_gxb1y")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 500, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 200, 8)
+
+[node name="Mob" parent="." unique_id=1903476427 instance=ExtResource("5_efk68")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 201, 0)
+MinIdleTime = 0.2
+MaxIdleTime = 0.9

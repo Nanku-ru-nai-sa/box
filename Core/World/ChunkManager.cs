@@ -330,6 +330,11 @@ public partial class ChunkManager : Node3D
         GD.Print("Calling UpdateChunks...");
         UpdateChunks();
 
+       VoxelPathfinder.IsSolidBlock = pos =>
+{
+    var block = GetBlockAtWorld(pos);
+    return !block.IsAir() && block.BlockId != "water";
+};
         SetProcess(true);
     }
 
