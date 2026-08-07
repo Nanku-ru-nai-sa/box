@@ -28,6 +28,7 @@ public partial class BlockRegistry : Node
         var logSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/log.png");
         var planksTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/planks.png");
         var crafterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crafter.png");
+        var toolBenchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/tool_bench.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
         var gravelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gravel.png");
@@ -127,6 +128,16 @@ public partial class BlockRegistry : Node
         crafter.IsSolid = true; crafter.CanChisel = false; crafter.Hardness = 1.0f;
         crafter.TextureTop = crafterTex; crafter.TextureSide = crafterTex; crafter.TextureBottom = crafterTex;
         Register(crafter);
+
+        // Tool Bench — new station block. Same shape as Crafter (full block,
+        // no overlay), opened the same way (right-click), but drives the
+        // ToolBenchPanel UI instead of CraftingPanel. See Player.cs proximity
+        // + TryOpenCraftingTable / OpenStationMenu.
+        var toolBench = new BlockResource();
+        toolBench.BlockId = "tool_bench"; toolBench.DisplayName = "Tool Bench";
+        toolBench.IsSolid = true; toolBench.CanChisel = false; toolBench.Hardness = 1.0f;
+        toolBench.TextureTop = toolBenchTex; toolBench.TextureSide = toolBenchTex; toolBench.TextureBottom = toolBenchTex;
+        Register(toolBench);
 
         var leaves = new BlockResource();
         leaves.BlockId = "leaves"; leaves.DisplayName = "Leaves";

@@ -1,15 +1,87 @@
+// NEW FILE
+// Put this in Scripts/Tools/ToolCrafting.cs
+//
+// This is the actual "craft a tool" function. Call ToolCrafting.CraftTool(...)
+// from your Crafter/Tool Bench UI when the player confirms a craft.
+// It builds a unique ItemId from the recipe, registers the tool as an
+// ItemResource the first time that exact recipe is crafted (reused after
+// that - crafting the same recipe twice does not make two different items),
+// and returns the ItemId + durability so you can add it to the inventory.
+
 using Godot;
-using System;
+using System.Collections.Generic;
+using System.Linq;
 
-public partial class Toolcrafting : Node
+public static class ToolCrafting
 {
-	// Called when the node enters the scene tree for the first time.
-	public override void _Ready()
-	{
-	}
+    // Builds a stable id like "tool_pickaxe_flint_stick" from the recipe.
+    public static string BuildToolItemId(
+        ToolFamily primaryFamily,
+        ToolFamily? secondaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        var parts = new List<string> { "tool", primaryFamily.ToString().ToLower() };
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-	}
+        if (secondaryFamily.HasValue)
+            parts.Add(secondaryFamily.Value.ToString().ToLower());
+
+        // Fixed slot order so the same recipe always produces the same id
+        // regardless of what order the player dropped materials in.
+        foreach (var slot in new[] { PartSlot.HeadA, PartSlot.HeadB, PartSlot.Handle, PartSlot.Binding })
+        {
+            if (materialsBySlot.TryGetValue(slot, out var materialId))
+                parts.Add(materialId.ToLower());
+        }
+
+        return string.Join("_", parts);
+    }
+
+    // Builds a display name like "Flint Pickaxe". You can replace this
+    // later with something fancier (e.g. naming after the rarest material).
+    public static string BuildToolDisplayName(
+        ToolFamily primaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        string headMaterial = materialsBySlot.TryGetValue(PartSlot.HeadA, out var m) ? m : "";
+        string headCapitalized = string.IsNullOrEmpty(headMaterial)
+            ? ""
+            : char.ToUpper(headMaterial[0]) + headMaterial.Substring(1);
+
+        return $"{headCapitalized} {primaryFamily}".Trim();
+    }
+
+    // Registers (if needed) and returns the ItemId + calculated durability
+    // for the given recipe. Does NOT touch the player's inventory - do that
+    // separately with Inventory.AddCraftedTool(itemId, durability).
+    public static (string itemId, int durability) CraftTool(
+        ToolFamily primaryFamily,
+        ToolFamily? secondaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        string itemId = BuildToolItemId(primaryFamily, secondaryFamily, materialsBySlot);
+        int durability = ToolCraftingRules.CalculateDurability(materialsBySlot, primaryFamily, secondaryFamily);
+
+        if (!ItemRegistry.Instance.ItemExists(itemId))
+        {
+            var item = new ItemResource
+            {
+                ItemId = itemId,
+                DisplayName = BuildToolDisplayName(primaryFamily, materialsBySlot),
+                GridWidth = 1,
+                GridHeight = 1,
+                IsStackable = false,
+                IsEquippable = true,
+                EquipSlot = "hand",
+                ToolType = primaryFamily.ToString(),
+                HasDurability = true,
+                MaxDurability = durability,
+                // Icon is left null for now - set once the extrusion/compositor
+                // pipeline for tool models exists.
+            };
+
+            ItemRegistry.Instance.RegisterRuntime(item);
+        }
+
+        return (itemId, durability);
+    }
 }

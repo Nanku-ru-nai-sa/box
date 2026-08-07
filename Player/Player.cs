@@ -96,6 +96,17 @@ public partial class Player : CharacterBody3D
     private EquipmentPanel _equipmentPanel;
     private CanvasLayer    _equipmentLayer;
 
+    // ── Tool Bench ────────────────────────────────────────────────────────────
+    private ToolBenchPanel _toolBenchPanel;
+
+    // ── Station tab bar (Crafter / Tool Bench / others in range) ────────────────
+    private Control _stationTabBar;
+    private Panel   _tabCrafterStation;
+    private Panel   _tabToolBenchStation;
+    private Label   _tabCrafterStationLbl;
+    private Label   _tabToolBenchStationLbl;
+    private string  _activeStation = "crafter"; // "crafter" or "tool_bench"
+
     // ── Creative menu ─────────────────────────────────────────────────────────
     // Item browser for Create mode — see CreativeMenu.cs / ItemCatalog.cs.
     // Opened/closed with V (see _UnhandledInput), independent of Tab/inventory.
@@ -194,6 +205,8 @@ public partial class Player : CharacterBody3D
         BuildInventoryScreen();
         BuildCursorPanel();
         BuildCraftingPanel();
+        BuildToolBenchPanel();
+        BuildStationTabBar();
         BuildEquipmentPanel();
         BuildCreativeMenu();
 
@@ -399,6 +412,107 @@ public partial class Player : CharacterBody3D
         _craftingLayer.CallDeferred("add_child", _craftingPanel);
     }
 
+    private void BuildToolBenchPanel()
+    {
+        // Shares _craftingLayer (built in BuildCraftingPanel, which always
+        // runs first) so it sorts on the same layer as the Crafter panel.
+        _toolBenchPanel = new ToolBenchPanel();
+        _toolBenchPanel.Init(_inventory);
+        _toolBenchPanel.OnSlotClicked   += HandleToolBenchSlotClicked;
+        _toolBenchPanel.OnOutputClicked += HandleToolBenchOutputClicked;
+
+        float gridW    = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float pad      = 16f;
+        float totalW   = gridW + pad * 2f;
+        float invHalfW = totalW / 2f;
+
+        // Identical anchors/offsets to _craftingPanel so the two panels sit
+        // in exactly the same screen position and overlap when swapped.
+        _toolBenchPanel.AnchorLeft   = 0.5f;
+        _toolBenchPanel.AnchorRight  = 0.5f;
+        _toolBenchPanel.AnchorTop    = 0.5f;
+        _toolBenchPanel.AnchorBottom = 0.5f;
+        _toolBenchPanel.OffsetLeft   = -invHalfW - 10f - 300f;
+        _toolBenchPanel.OffsetRight  = -invHalfW - 10f;
+        _toolBenchPanel.OffsetTop    = -180f;
+        _toolBenchPanel.OffsetBottom =  159f;
+        _toolBenchPanel.Visible      = false;
+
+        _craftingLayer.CallDeferred("add_child", _toolBenchPanel);
+    }
+
+    private void BuildStationTabBar()
+    {
+        float gridW    = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float pad      = 16f;
+        float totalW   = gridW + pad * 2f;
+        float invHalfW = totalW / 2f;
+
+        _stationTabBar = new Control();
+        _stationTabBar.AnchorLeft   = 0.5f;
+        _stationTabBar.AnchorRight  = 0.5f;
+        _stationTabBar.AnchorTop    = 0.5f;
+        _stationTabBar.AnchorBottom = 0.5f;
+        _stationTabBar.OffsetLeft   = -invHalfW - 10f - 300f;
+        _stationTabBar.OffsetRight  = -invHalfW - 10f;
+        _stationTabBar.OffsetTop    = -180f - 28f;
+        _stationTabBar.OffsetBottom = -180f - 4f;
+        _stationTabBar.Visible      = false;
+
+        _tabCrafterStation    = MakeStationTab("Crafter",    0f,   out _tabCrafterStationLbl);
+        _tabToolBenchStation  = MakeStationTab("Tool Bench", 96f,  out _tabToolBenchStationLbl);
+
+        _tabCrafterStation.GuiInput   += (InputEvent ev) => { if (IsStationTabClick(ev)) SwitchStation("crafter"); };
+        _tabToolBenchStation.GuiInput += (InputEvent ev) => { if (IsStationTabClick(ev)) SwitchStation("tool_bench"); };
+
+        _stationTabBar.AddChild(_tabCrafterStation);
+        _stationTabBar.AddChild(_tabToolBenchStation);
+
+        _craftingLayer.CallDeferred("add_child", _stationTabBar);
+    }
+
+    private Panel MakeStationTab(string text, float x, out Label label)
+    {
+        var tab = new Panel();
+        tab.Position          = new Vector2(x, 0f);
+        tab.CustomMinimumSize = new Vector2(90f, 24f);
+        tab.MouseFilter       = Control.MouseFilterEnum.Stop;
+
+        label = new Label();
+        label.Text                = text;
+        label.HorizontalAlignment = HorizontalAlignment.Center;
+        label.VerticalAlignment   = VerticalAlignment.Center;
+        label.AnchorRight         = 1f; label.AnchorBottom = 1f;
+        label.AddThemeFontSizeOverride("font_size", 11);
+        label.MouseFilter         = Control.MouseFilterEnum.Ignore;
+        tab.AddChild(label);
+
+        return tab;
+    }
+
+    private bool IsStationTabClick(InputEvent ev) =>
+        ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left;
+
+    private void SwitchStation(string stationId)
+    {
+        _activeStation = stationId;
+        if (_craftingPanel  != null) _craftingPanel.Visible  = (stationId == "crafter");
+        if (_toolBenchPanel != null) _toolBenchPanel.Visible = (stationId == "tool_bench");
+        SetStationTabStyle(_tabCrafterStation,   _tabCrafterStationLbl,   stationId == "crafter");
+        SetStationTabStyle(_tabToolBenchStation, _tabToolBenchStationLbl, stationId == "tool_bench");
+    }
+
+    private void SetStationTabStyle(Panel tab, Label label, bool active)
+    {
+        var s = new StyleBoxFlat();
+        s.BgColor         = active ? new Color(0.2f, 0.2f, 0.25f) : new Color(0.12f, 0.12f, 0.15f);
+        s.BorderColor     = active ? new Color(0.6f, 0.6f, 0.7f)  : new Color(0.3f, 0.3f, 0.35f);
+        s.BorderWidthTop  = 2; s.BorderWidthBottom = 2;
+        s.BorderWidthLeft = 2; s.BorderWidthRight  = 2;
+        tab.AddThemeStyleboxOverride("panel", s);
+        label.AddThemeColorOverride("font_color", active ? new Color(1f,1f,1f) : new Color(0.55f,0.55f,0.55f));
+    }
+
     private void BuildEquipmentPanel()
     {
         _equipmentLayer       = new CanvasLayer();
@@ -535,27 +649,49 @@ public partial class Player : CharacterBody3D
     // CRAFTING PROXIMITY
     // =========================================================================
 
+    private static readonly string[] StationBlockIds = { "crafter", "tool_bench" };
+
+    private HashSet<string> GetNearbyStationTypes()
+    {
+        var found = new HashSet<string>();
+        var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
+        if (cm == null) return found;
+
+        Vector3 pos = GlobalPosition;
+        for (int dx = -5; dx <= 5; dx++)
+        for (int dy = -3; dy <= 3; dy++)
+        for (int dz = -5; dz <= 5; dz++)
+        {
+            if (new Vector3(dx, dy, dz).Length() > CraftingTableRange) continue;
+            var block = cm.GetBlockAtWorld(new Vector3I(
+                Mathf.FloorToInt(pos.X) + dx,
+                Mathf.FloorToInt(pos.Y) + dy,
+                Mathf.FloorToInt(pos.Z) + dz));
+            if (System.Array.IndexOf(StationBlockIds, block.BlockId) >= 0)
+                found.Add(block.BlockId);
+        }
+        return found;
+    }
+
     private void UpdateCraftingProximity()
     {
         if (!_inventoryOpen || RecipeManager.Instance == null) return;
-        bool nearTable = false;
-        var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
-        if (cm != null)
-        {
-            Vector3 pos = GlobalPosition;
-            for (int dx = -5; dx <= 5 && !nearTable; dx++)
-            for (int dy = -3; dy <= 3 && !nearTable; dy++)
-            for (int dz = -5; dz <= 5 && !nearTable; dz++)
-            {
-                if (new Vector3(dx, dy, dz).Length() > CraftingTableRange) continue;
-                var block = cm.GetBlockAtWorld(new Vector3I(
-                    Mathf.FloorToInt(pos.X) + dx,
-                    Mathf.FloorToInt(pos.Y) + dy,
-                    Mathf.FloorToInt(pos.Z) + dz));
-                if (block.BlockId == "crafter") nearTable = true;
-            }
-        }
+
+        var nearby = GetNearbyStationTypes();
+        bool nearTable = nearby.Contains("crafter");
         _craftingPanel?.SetGridSize(nearTable ? 3 : 2, nearTable);
+
+        bool showBar = nearby.Count > 0;
+        if (_stationTabBar != null) _stationTabBar.Visible = showBar;
+        if (_tabCrafterStation   != null) _tabCrafterStation.Visible   = nearby.Contains("crafter");
+        if (_tabToolBenchStation != null) _tabToolBenchStation.Visible = nearby.Contains("tool_bench");
+
+        // If the currently active station walked out of range, fall back to
+        // whichever tab is still available (or hide the tab bar entirely).
+        if (_activeStation == "tool_bench" && !nearby.Contains("tool_bench") && nearby.Contains("crafter"))
+            SwitchStation("crafter");
+        else if (_activeStation == "crafter" && !nearby.Contains("crafter") && nearby.Contains("tool_bench"))
+            SwitchStation("tool_bench");
     }
 
     private bool TryOpenCraftingTable()
@@ -567,12 +703,15 @@ public partial class Player : CharacterBody3D
         Vector3 tPos = _rayCast.GetCollisionPoint() - _rayCast.GetCollisionNormal() * 0.5f;
         Vector3 lPos = tPos - chunk.GlobalPosition;
         var b = chunk.GetBlock(Mathf.FloorToInt(lPos.X), Mathf.FloorToInt(lPos.Y), Mathf.FloorToInt(lPos.Z));
-        if (b.BlockId != "crafter") return false;
+
+        if (b.BlockId != "crafter" && b.BlockId != "tool_bench") return false;
+
         if (!_inventoryOpen) ToggleInventory();
-        _craftingPanel?.SetGridSize(3, true);
         _hotbarLayer.Visible = false;
-            if (_craftingPanel != null) { _craftingPanel.Visible = true; UpdateCraftingProximity(); }
-            if (_equipmentPanel != null) _equipmentPanel.Visible = true;
+        if (_craftingPanel  != null) { _craftingPanel.SetGridSize(3, true); UpdateCraftingProximity(); }
+        if (_equipmentPanel != null) _equipmentPanel.Visible = true;
+
+        SwitchStation(b.BlockId);
         return true;
     }
 
@@ -1094,6 +1233,106 @@ public partial class Player : CharacterBody3D
         UpdateCursorVisual();
     }
 
+    private void HandleToolBenchSlotClicked(int idx, MouseButton button, bool shift)
+    {
+        if (_toolBenchPanel == null) return;
+        var slot = _toolBenchPanel.GetSlot(idx);
+        if (slot == null) return;
+
+        if (shift && button == MouseButton.Left)
+        {
+            if (slot.IsEmpty) return;
+            int leftover = AddItemToInventory(slot.ItemId, slot.Count);
+            int moved    = slot.Count - leftover;
+            slot.Count -= moved;
+            if (slot.Count <= 0) slot.Clear();
+            _toolBenchPanel.RefreshAllVisuals();
+            FireChanged();
+            UpdateCursorVisual();
+            return;
+        }
+
+        if (button == MouseButton.Left)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count  = slot.Count;
+                slot.Clear();
+            }
+            else
+            {
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count  = _heldSlot.Count;
+                    _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int space    = _inventory.MaxStackSize - slot.Count;
+                    int transfer = Mathf.Min(space, _heldSlot.Count);
+                    slot.Count      += transfer;
+                    _heldSlot.Count -= transfer;
+                    if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                }
+                else
+                {
+                    (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
+                    (slot.Count,  _heldSlot.Count)  = (_heldSlot.Count,  slot.Count);
+                }
+            }
+        }
+        else if (button == MouseButton.Right)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                int half         = Mathf.CeilToInt(slot.Count / 2f);
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count  = half;
+                slot.Count      -= half;
+                if (slot.Count <= 0) slot.Clear();
+            }
+            else
+            {
+                if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
+                if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return;
+                if (slot.IsEmpty) slot.ItemId = _heldSlot.ItemId;
+                slot.Count++;
+                _heldSlot.Count--;
+                if (_heldSlot.Count <= 0) _heldSlot.Clear();
+            }
+        }
+
+        _toolBenchPanel.RefreshAllVisuals();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    private void HandleToolBenchOutputClicked(MouseButton button, bool shift)
+    {
+        if (_toolBenchPanel == null) return;
+        if (button != MouseButton.Left) return;
+
+        if (!_toolBenchPanel.PeekResult(out string peekId, out int _)) return;
+
+        // Cursor must be empty - crafted tools are unique/durable items,
+        // not simple stackable counts, so we don't try to merge onto
+        // whatever's already held (unlike the Crafter's grid output).
+        if (!_heldSlot.IsEmpty) return;
+
+        if (_toolBenchPanel.TryConsumeOneCraft(out string resultId, out int resultDurability))
+        {
+            _heldSlot.ItemId            = resultId;
+            _heldSlot.Count             = 1;
+            _heldSlot.CurrentDurability = resultDurability;
+            FireChanged();
+            UpdateCursorVisual();
+        }
+    }
+
 private void HandleOutputClicked(MouseButton button, bool shift)
     {
         if (_craftingPanel == null) return;
@@ -1522,6 +1761,11 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             _craftingPanel?.OnInventoryClose();
             if (_craftingPanel != null) _craftingPanel.Visible = false;
             if (_equipmentPanel != null) _equipmentPanel.Visible = false;
+
+            _toolBenchPanel?.ReturnSocketsToInventory();
+            if (_toolBenchPanel != null) _toolBenchPanel.Visible = false;
+            if (_stationTabBar != null) _stationTabBar.Visible = false;
+            _activeStation = "crafter";
             EndDrag();
             _hotbarLayer.Visible = _hudVisible;
             if (_statsHudLayer != null) _statsHudLayer.Visible = _hudVisible;

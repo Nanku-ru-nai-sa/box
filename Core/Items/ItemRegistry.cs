@@ -1,3 +1,8 @@
+// UPDATED FILE - replaces your existing ItemRegistry.cs
+// Added: RegisterRuntime(), so crafted tools can be added to the registry
+// after the game has already started (your original _items dictionary
+// was private with no way to add to it after _Ready).
+
 using Godot;
 using System.Collections.Generic;
 
@@ -29,5 +34,23 @@ public partial class ItemRegistry : Node
     public IEnumerable<ItemResource> GetAllItems()
     {
         return _items.Values;
+    }
+
+    // NEW: registers an item created at runtime (e.g. a freshly-crafted
+    // tool from ToolCrafting.CraftTool). Safe to call multiple times with
+    // the same ItemId - it will only register the first time.
+    public void RegisterRuntime(ItemResource item)
+    {
+        if (item == null || string.IsNullOrEmpty(item.ItemId))
+        {
+            GD.PrintErr("ItemRegistry: Tried to register a null item or one with no ItemId.");
+            return;
+        }
+
+        if (!_items.ContainsKey(item.ItemId))
+        {
+            _items[item.ItemId] = item;
+            GD.Print($"ItemRegistry: Runtime-registered {item.ItemId}");
+        }
     }
 }
