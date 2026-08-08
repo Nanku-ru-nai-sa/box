@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://f3sao6yaiin3"
-path="res://.godot/imported/diamond_pickaxe.png-9c645f1d73b489ca60cadec9f39c24ec.ctex"
+uid="uid://b4u1joesj1yy0"
+path="res://.godot/imported/schist_ashfield.png-8193821e95a5071eda5f31708c2f019b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/chalk/diamond_pickaxe.png"
-dest_files=["res://.godot/imported/diamond_pickaxe.png-9c645f1d73b489ca60cadec9f39c24ec.ctex"]
+source_file="res://Assets/Textures/Blocks/schist_ashfield.png"
+dest_files=["res://.godot/imported/schist_ashfield.png-8193821e95a5071eda5f31708c2f019b.ctex"]
 
 [params]
 

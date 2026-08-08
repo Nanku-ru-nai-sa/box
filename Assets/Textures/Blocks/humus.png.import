@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vjc7hjnr5bt5"
-path="res://.godot/imported/diamond_hoe.png-e7b5485fb9cff55deb5c516caa9f985c.ctex"
+uid="uid://c2actfixa6kc7"
+path="res://.godot/imported/humus.png-294c0b7f3485e4f887422b444e655083.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/chalk/diamond_hoe.png"
-dest_files=["res://.godot/imported/diamond_hoe.png-e7b5485fb9cff55deb5c516caa9f985c.ctex"]
+source_file="res://Assets/Textures/Blocks/humus.png"
+dest_files=["res://.godot/imported/humus.png-294c0b7f3485e4f887422b444e655083.ctex"]
 
 [params]
 

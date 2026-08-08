@@ -16,6 +16,7 @@ public static class ToolCraftingRules
         { (ToolFamily.Axe,     PartSlot.HeadA), 3 },
         { (ToolFamily.Shovel,  PartSlot.HeadA), 1 },
         { (ToolFamily.Hoe,     PartSlot.HeadA), 1 },
+        { (ToolFamily.Hammer,  PartSlot.HeadA), 4 },
         // Anything not listed here (Handle, Binding, HeadB) defaults to 1 below.
     };
 
@@ -46,7 +47,7 @@ public static class ToolCraftingRules
 
             int qty = GetRequiredQuantity(familyForSlot, slot);
 
-            var stats = MaterialStatsDb.Instance?.Get(materialId);
+            var stats = MaterialStatsDb.Get(materialId);
             int durabilityPerUnit = stats?.DurabilityPerUnit ?? 0;
 
             total += qty * durabilityPerUnit;

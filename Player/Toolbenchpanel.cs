@@ -59,6 +59,23 @@ public partial class ToolBenchPanel : Control
     // recomputed by UpdateOutputPreview() after every socket change.
     private ToolBenchCraftResolver.ResolveResult _currentResult;
 
+    // ── Tool type selection (set via the center-diamond picker, or restored
+    // by LoadExistingTool when modifying an already-crafted tool) ──────────────
+    public ToolFamily? PrimaryFamily   { get; private set; }
+    public ToolFamily? SecondaryFamily { get; private set; }
+
+    // Bonus durability carried over from an existing tool loaded in for
+    // modification — added on top of the freshly-calculated total, then
+    // reset to 0 once that craft is grabbed.
+    public int DurabilityCarryOver { get; set; } = 0;
+
+    public Action OnCenterClicked;
+
+    private Panel   _familyPickerBg;
+    private TextureRect _centerIconTex;
+    private static readonly ToolFamily[] PickableFamilies =
+        { ToolFamily.Pickaxe, ToolFamily.Shovel, ToolFamily.Axe, ToolFamily.Sword, ToolFamily.Hoe, ToolFamily.Hammer };
+
     // Same constants as CraftingPanel so the two panels' grids line up exactly.
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
@@ -83,6 +100,8 @@ public partial class ToolBenchPanel : Control
         BuildTitle();
         BuildSockets();
         BuildOutputArea();
+        BuildFamilyPicker();
+        UpdateCenterIcon();
         UpdateOutputPreview();
     }
 
@@ -152,21 +171,40 @@ public partial class ToolBenchPanel : Control
             new Vector2(col0X + SlotSz / 2f, row0Y + SlotSz / 2f), // 3 Binding  - top left
         };
 
-        // Decorative center piece — rotated 45°, sits behind the 4 corner
-        // sockets as the "X" hub. Not interactive, not a real slot.
+        // Center piece — rotated 45°, sits behind the 4 corner sockets as
+        // the "X" hub. Clickable: opens the tool-type picker, or (if you're
+        // holding an existing crafted tool) loads it in for modification.
         _centerPiece = new Panel();
         _centerPiece.Position          = new Vector2(centerX, centerY);
         _centerPiece.CustomMinimumSize = new Vector2(SlotSz, SlotSz);
         _centerPiece.PivotOffset       = new Vector2(SlotSz / 2f, SlotSz / 2f);
         _centerPiece.Rotation          = Mathf.Pi / 4f;
-        _centerPiece.MouseFilter       = MouseFilterEnum.Ignore;
-        var centerStyle = new StyleBoxFlat();
-        centerStyle.BgColor     = new Color(0.15f, 0.15f, 0.18f, 0.9f);
-        centerStyle.BorderColor = new Color(0.4f, 0.4f, 0.46f);
-        centerStyle.BorderWidthTop = 2; centerStyle.BorderWidthBottom = 2;
-        centerStyle.BorderWidthLeft = 2; centerStyle.BorderWidthRight = 2;
-        _centerPiece.AddThemeStyleboxOverride("panel", centerStyle);
+        _centerPiece.MouseFilter       = MouseFilterEnum.Stop;
+        _centerPiece.GuiInput         += (InputEvent ev) =>
+        {
+            if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+                OnCenterClicked?.Invoke();
+        };
+        _centerPiece.MouseEntered += () => _centerPiece.AddThemeStyleboxOverride("panel", MakeCenterStyle(true));
+        _centerPiece.MouseExited  += () => _centerPiece.AddThemeStyleboxOverride("panel", MakeCenterStyle(false));
+        _centerPiece.AddThemeStyleboxOverride("panel", MakeCenterStyle(false));
         _socketRow.AddChild(_centerPiece);
+
+        // Shows the currently selected tool type's icon (or unknown.png when
+        // nothing's selected yet) — the center diamond acts like a slot.
+        // Counter-rotated back upright same as the corner socket icons.
+        const float centerIconSz = SlotSz - 12f; // 44, same margin convention as the corner sockets
+        _centerIconTex = new TextureRect();
+        _centerIconTex.ExpandMode    = TextureRect.ExpandModeEnum.IgnoreSize;
+        _centerIconTex.StretchMode   = TextureRect.StretchModeEnum.KeepAspectCentered;
+        _centerIconTex.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        _centerIconTex.AnchorLeft = _centerIconTex.AnchorTop = _centerIconTex.AnchorRight = _centerIconTex.AnchorBottom = 0f;
+        _centerIconTex.Position    = new Vector2((SlotSz - centerIconSz) / 2f, (SlotSz - centerIconSz) / 2f);
+        _centerIconTex.Size        = new Vector2(centerIconSz, centerIconSz);
+        _centerIconTex.PivotOffset = new Vector2(centerIconSz / 2f, centerIconSz / 2f);
+        _centerIconTex.Rotation    = -Mathf.Pi / 4f;
+        _centerIconTex.MouseFilter = MouseFilterEnum.Ignore;
+        _centerPiece.AddChild(_centerIconTex);
 
         // Icon size stays fixed regardless of the box size around it — only
         // the diamond frame shrinks, the item art doesn't. Same 44px the
@@ -344,6 +382,7 @@ public partial class ToolBenchPanel : Control
 
     // Called when closing the panel to return any leftover socketed items
     // to the inventory. Same idea as CraftingPanel.Return3x3ToInventory.
+    // Also resets tool-type selection so the next open starts fresh.
     public void ReturnSocketsToInventory()
     {
         for (int i = 0; i < 4; i++)
@@ -355,6 +394,12 @@ public partial class ToolBenchPanel : Control
             }
         }
         _inventory.OnInventoryChanged?.Invoke();
+
+        PrimaryFamily       = null;
+        SecondaryFamily      = null;
+        DurabilityCarryOver = 0;
+        UpdateCenterIcon();
+
         RefreshAllVisuals();
     }
 
@@ -414,30 +459,13 @@ public partial class ToolBenchPanel : Control
             return false;
         }
 
-        var item = ItemRegistry.Instance.GetItem(_currentResult.ItemId);
-        ToolFamily primaryFamily = System.Enum.Parse<ToolFamily>(item.ToolType);
-        ToolFamily? secondaryFamily = GetFilledSockets().ContainsKey(PartSlot.HeadB)
-            ? ReadSecondaryFamily() : null;
-
         resultId         = _currentResult.ItemId;
-        resultDurability = _currentResult.Durability;
+        resultDurability = _currentResult.Durability; // already includes DurabilityCarryOver
 
-        ToolBenchCraftResolver.ConsumeIngredients(this, primaryFamily, secondaryFamily);
+        ToolBenchCraftResolver.ConsumeIngredients(this);
+        DurabilityCarryOver = 0; // that bonus has now been spent
         RefreshAllVisuals(); // also re-runs UpdateOutputPreview for the (now likely empty) sockets
         return true;
-    }
-
-    private ToolFamily? ReadSecondaryFamily()
-    {
-        // HeadB's family isn't stored anywhere else once we're mid-consume,
-        // so re-derive it the same way the resolver does.
-        if (!GetFilledSockets().TryGetValue(PartSlot.HeadB, out var headB)) return null;
-        var item = ItemRegistry.Instance.GetItem(headB.ItemId);
-        if (item?.Tags == null) return null;
-        foreach (var tag in item.Tags)
-            if (tag.StartsWith("family:") && System.Enum.TryParse<ToolFamily>(tag.Substring(7), true, out var fam))
-                return fam;
-        return null;
     }
 
     // =========================================================================
@@ -479,12 +507,158 @@ public partial class ToolBenchPanel : Control
     // HELPERS — same visual style as CraftingPanel's
     // =========================================================================
 
+    // =========================================================================
+    // FAMILY PICKER — overlays the diamond/socket area when the center
+    // diamond is clicked. Uses the outline textures you're making at
+    // Assets/Textures/Items/tool/chalk/{family}.png
+    // =========================================================================
+
+    private void BuildFamilyPicker()
+    {
+        // Same footprint as the whole Tool Bench panel, so it matches up
+        // cleanly when it drops over everything (not just the socket area).
+        _familyPickerBg = new Panel();
+        _familyPickerBg.Position     = Vector2.Zero;
+        _familyPickerBg.Size         = new Vector2(PanelW, 339f);
+        _familyPickerBg.MouseFilter  = MouseFilterEnum.Stop; // blocks clicks to sockets underneath while open
+        _familyPickerBg.Visible      = false;
+
+        var s = new StyleBoxFlat();
+        s.BgColor         = new Color(0.05f, 0.05f, 0.07f, 0.97f);
+        s.BorderColor     = new Color(0.4f, 0.4f, 0.46f);
+        s.BorderWidthTop  = 2; s.BorderWidthBottom = 2;
+        s.BorderWidthLeft = 2; s.BorderWidthRight  = 2;
+        _familyPickerBg.AddThemeStyleboxOverride("panel", s);
+        AddChild(_familyPickerBg); // added last = renders above everything else
+
+        // Same size/spacing as inventory slots (SlotSz/SlotGap), and the
+        // same grid math the sockets/CraftingPanel use (gridX, rowH), so the
+        // 6 options line up on the exact same row/column lines as the rest
+        // of the panel — this just happens to fill the grid's top 2 rows.
+        const int cols = 3;
+        float gridPx = 3 * SlotSz + 2 * SlotGap;   // 178
+        float gridX  = (PanelW - gridPx) / 2f;      // 61 — column 0 x
+        float rowH   = SlotSz + SlotGap;             // 61
+        float topOffset = 14f;                        // matches _socketRow's top offset
+
+        for (int i = 0; i < PickableFamilies.Length; i++)
+        {
+            ToolFamily fam = PickableFamilies[i];
+            int col = i % cols, row = i / cols;
+
+            var slot = MakePartSlot(SlotSz);
+            slot.Position    = new Vector2(gridX + col * rowH, topOffset + row * rowH);
+            slot.MouseFilter = MouseFilterEnum.Stop;
+
+            var tex = new TextureRect();
+            tex.ExpandMode    = TextureRect.ExpandModeEnum.IgnoreSize;
+            tex.StretchMode   = TextureRect.StretchModeEnum.KeepAspectCentered;
+            tex.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            tex.AnchorRight   = 1f; tex.AnchorBottom = 1f;
+            tex.OffsetLeft    = 6f; tex.OffsetTop = 6f; tex.OffsetRight = -6f; tex.OffsetBottom = -6f;
+            tex.MouseFilter   = MouseFilterEnum.Ignore;
+            string path = $"res://Assets/Textures/Items/tool/chalk/{fam.ToString().ToLower()}.png";
+            tex.Texture = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+            slot.AddChild(tex);
+
+            slot.MouseEntered += () => slot.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.7f, 0.7f, 0.75f)));
+            slot.MouseExited  += () => slot.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.3f, 0.3f, 0.35f)));
+
+            ToolFamily famCaptured = fam;
+            slot.GuiInput += (InputEvent ev) =>
+            {
+                if (ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left)
+                    SelectFamily(famCaptured);
+            };
+
+            _familyPickerBg.AddChild(slot);
+        }
+    }
+
+    // Opens/closes the picker. Called from Player when the center diamond
+    // is clicked with an empty cursor.
+    public void ToggleFamilyPicker()
+    {
+        _familyPickerBg.Visible = !_familyPickerBg.Visible;
+    }
+
+    private void SelectFamily(ToolFamily family)
+    {
+        PrimaryFamily = family;
+        _familyPickerBg.Visible = false;
+        UpdateCenterIcon();
+        RefreshAllVisuals();
+    }
+
+    private void UpdateCenterIcon()
+    {
+        string path = PrimaryFamily.HasValue
+            ? $"res://Assets/Textures/Items/tool/chalk/{PrimaryFamily.Value.ToString().ToLower()}.png"
+            : "res://Assets/Textures/Items/tool/chalk/unknown.png";
+        _centerIconTex.Texture = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+    }
+
+    // =========================================================================
+    // MODIFY MODE — dropping an existing crafted tool on the center diamond
+    // disassembles it back into its sockets (using the recipe tags
+    // ToolCrafting.CraftTool encoded on it) so you can swap a part and
+    // re-craft. Its remaining durability carries over as a bonus.
+    //
+    // NOTE: if you close the panel mid-modification without re-crafting,
+    // ReturnSocketsToInventory() gives back the raw materials but the
+    // DurabilityCarryOver bonus is lost and the original tool is NOT
+    // reconstructed — cancelling a modification is currently a one-way
+    // trip. Flag if you want a proper "cancel and restore" path instead.
+    // =========================================================================
+
+    public bool LoadExistingTool(InventorySlot cursorSlot)
+    {
+        var item = ItemRegistry.Instance.GetItem(cursorSlot.ItemId);
+        if (item == null) return false;
+        if (!ToolCrafting.TryGetRecipe(item, out var primary, out var secondary, out var materialsBySlot))
+            return false;
+
+        PrimaryFamily        = primary;
+        SecondaryFamily       = secondary;
+        DurabilityCarryOver  = cursorSlot.CurrentDurability;
+
+        for (int i = 0; i < 4; i++) _sockets[i].Clear();
+
+        var order = new[] { PartSlot.HeadA, PartSlot.HeadB, PartSlot.Handle, PartSlot.Binding };
+        for (int i = 0; i < 4; i++)
+        {
+            if (!materialsBySlot.TryGetValue(order[i], out var matId)) continue;
+
+            ToolFamily familyForSlot = (order[i] == PartSlot.HeadB && secondary.HasValue) ? secondary.Value : primary;
+            int qty = ToolCraftingRules.GetRequiredQuantity(familyForSlot, order[i]);
+
+            _sockets[i].ItemId = matId;
+            _sockets[i].Count  = qty;
+        }
+
+        cursorSlot.Clear(); // the tool itself is consumed into the bench for editing
+
+        UpdateCenterIcon();
+        RefreshAllVisuals();
+        return true;
+    }
+
     private Panel MakePartSlot(int size)
     {
         var slot = new Panel();
         slot.CustomMinimumSize = new Vector2(size, size);
         slot.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.3f, 0.3f, 0.35f)));
         return slot;
+    }
+
+    private StyleBoxFlat MakeCenterStyle(bool hover)
+    {
+        var s = new StyleBoxFlat();
+        s.BgColor         = hover ? new Color(0.2f, 0.2f, 0.24f, 0.95f) : new Color(0.15f, 0.15f, 0.18f, 0.9f);
+        s.BorderColor     = hover ? new Color(0.65f, 0.65f, 0.72f) : new Color(0.4f, 0.4f, 0.46f);
+        s.BorderWidthTop  = 2; s.BorderWidthBottom = 2;
+        s.BorderWidthLeft = 2; s.BorderWidthRight  = 2;
+        return s;
     }
 
     private StyleBoxFlat MakeSlotStyle(Color border)

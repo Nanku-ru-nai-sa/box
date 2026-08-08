@@ -11,7 +11,8 @@ public enum ToolFamily
     Axe,
     Shovel,
     Sword,
-    Hoe
+    Hoe,
+    Hammer
 }
 
 public enum PartSlot

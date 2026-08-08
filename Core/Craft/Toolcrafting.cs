@@ -75,6 +75,7 @@ public static class ToolCrafting
                 ToolType = primaryFamily.ToString(),
                 HasDurability = true,
                 MaxDurability = durability,
+                Tags = BuildRecipeTags(primaryFamily, secondaryFamily, materialsBySlot),
                 // Icon is left null for now - set once the extrusion/compositor
                 // pipeline for tool models exists.
             };
@@ -83,5 +84,74 @@ public static class ToolCrafting
         }
 
         return (itemId, durability);
+    }
+
+    // Encodes the recipe onto the item as Tags, e.g.
+    // ["recipe:primary:pickaxe", "recipe:heada:flint", "recipe:handle:stick"].
+    // This is how ToolBenchPanel.LoadExistingTool() disassembles an already-
+    // crafted tool back into its parts when you drop it on the center diamond.
+    private static string[] BuildRecipeTags(
+        ToolFamily primaryFamily,
+        ToolFamily? secondaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        var tags = new List<string> { $"recipe:primary:{primaryFamily}".ToLower() };
+
+        if (secondaryFamily.HasValue)
+            tags.Add($"recipe:secondary:{secondaryFamily.Value}".ToLower());
+
+        foreach (var kvp in materialsBySlot)
+            tags.Add($"recipe:{kvp.Key}:{kvp.Value}".ToLower());
+
+        return tags.ToArray();
+    }
+
+    // Reverses BuildRecipeTags — reads a crafted tool's Tags back out into
+    // the family + materials it was built from. Returns false if the item
+    // has no recipe tags (e.g. it isn't a crafted tool at all).
+    public static bool TryGetRecipe(
+        ItemResource item,
+        out ToolFamily primaryFamily,
+        out ToolFamily? secondaryFamily,
+        out Dictionary<PartSlot, string> materialsBySlot)
+    {
+        primaryFamily = default;
+        secondaryFamily = null;
+        materialsBySlot = new Dictionary<PartSlot, string>();
+
+        if (item?.Tags == null) return false;
+
+        bool foundPrimary = false;
+
+        foreach (var tag in item.Tags)
+        {
+            if (tag.StartsWith("recipe:primary:"))
+            {
+                if (System.Enum.TryParse<ToolFamily>(tag.Substring("recipe:primary:".Length), true, out var f))
+                {
+                    primaryFamily = f;
+                    foundPrimary = true;
+                }
+            }
+            else if (tag.StartsWith("recipe:secondary:"))
+            {
+                if (System.Enum.TryParse<ToolFamily>(tag.Substring("recipe:secondary:".Length), true, out var f))
+                    secondaryFamily = f;
+            }
+            else if (tag.StartsWith("recipe:"))
+            {
+                string rest = tag.Substring("recipe:".Length); // e.g. "heada:flint"
+                int sep = rest.IndexOf(':');
+                if (sep > 0)
+                {
+                    string slotPart = rest.Substring(0, sep);
+                    string materialPart = rest.Substring(sep + 1);
+                    if (System.Enum.TryParse<PartSlot>(slotPart, true, out var slot))
+                        materialsBySlot[slot] = materialPart;
+                }
+            }
+        }
+
+        return foundPrimary;
     }
 }

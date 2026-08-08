@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://boa03hs6s8mls"
-path="res://.godot/imported/diamond_axe.png-0e95157675cfd61085a2847cf16e7d6e.ctex"
+uid="uid://djvdokaq31iem"
+path="res://.godot/imported/shovel.png-77436aa05bd2c3793ab6adedb141badf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/chalk/diamond_axe.png"
-dest_files=["res://.godot/imported/diamond_axe.png-0e95157675cfd61085a2847cf16e7d6e.ctex"]
+source_file="res://Assets/Textures/Items/tool/chalk/shovel.png"
+dest_files=["res://.godot/imported/shovel.png-77436aa05bd2c3793ab6adedb141badf.ctex"]
 
 [params]
 

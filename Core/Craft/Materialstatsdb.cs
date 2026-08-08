@@ -1,47 +1,87 @@
-// NEW FILE
-// Put this in Scripts/Tools/MaterialStatsDb.cs
+// UPDATED FILE - replaces MaterialStatsDb.cs
 //
-// SETUP STEP (one time, in the Godot editor):
-// 1. Project -> Project Settings -> Autoload tab
-// 2. Add this script, name it "MaterialStatsDb"
-// 3. Select the MaterialStatsDb node in the Autoload list, open Inspector
-// 4. You'll see a "Materials" array - click it, add elements, each one
-//    is a MaterialStatEntry you can fill in directly (MaterialId, DurabilityPerUnit, etc)
+// No longer an Autoload/Node - just a plain static class that loads
+// res://Data/materials.json the first time anything asks for a material.
+// Edit that JSON file directly to tune numbers, same idea as your JSON
+// crafting recipes. No Project Settings setup needed at all.
 //
-// That gives you a live, editable list of every material's stats without
-// touching code - exactly what you asked for.
+// IMPORTANT: delete the OLD MaterialStatEntry.cs (the [Export]-based
+// Resource version) - it's replaced by the plain MaterialStatEntryData
+// class defined at the bottom of this file, and isn't needed anymore.
+// Also remove "MaterialStatsDb" from Project Settings -> Autoload if you
+// added it there before - it's not an Autoload anymore.
 
 using Godot;
+using System;
 using System.Collections.Generic;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
-[GlobalClass]
-public partial class MaterialStatsDb : Node
+public static class MaterialStatsDb
 {
-    public static MaterialStatsDb Instance { get; private set; }
+    // Put your materials.json here: res://Data/materials.json
+    private const string JsonPath = "res://Data/materials.json";
 
-    [Export] public MaterialStatEntry[] Materials { get; set; } = new MaterialStatEntry[0];
+    private static Dictionary<string, MaterialStatEntryData> _lookup;
 
-    private Dictionary<string, MaterialStatEntry> _lookup = new();
-
-    public override void _Ready()
+    private static void EnsureLoaded()
     {
-        Instance = this;
+        if (_lookup != null) return; // already loaded this session
+        _lookup = new Dictionary<string, MaterialStatEntryData>();
 
-        _lookup.Clear();
-        foreach (var m in Materials)
+        if (!FileAccess.FileExists(JsonPath))
         {
-            if (m != null && !string.IsNullOrEmpty(m.MaterialId))
-                _lookup[m.MaterialId] = m;
+            GD.PrintErr($"MaterialStatsDb: {JsonPath} not found. Create it - see the example in the project notes.");
+            return;
         }
 
-        GD.Print($"MaterialStatsDb loaded {_lookup.Count} materials.");
+        using var file = FileAccess.Open(JsonPath, FileAccess.ModeFlags.Read);
+        string text = file.GetAsText();
+
+        try
+        {
+            var wrapper = JsonSerializer.Deserialize<MaterialsWrapper>(text);
+            foreach (var m in wrapper.Materials)
+            {
+                if (m != null && !string.IsNullOrEmpty(m.MaterialId))
+                    _lookup[m.MaterialId] = m;
+            }
+            GD.Print($"MaterialStatsDb loaded {_lookup.Count} materials from JSON.");
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"MaterialStatsDb: failed to parse {JsonPath}: {e.Message}");
+        }
     }
 
-    public MaterialStatEntry Get(string materialId)
+    public static MaterialStatEntryData Get(string materialId)
     {
+        EnsureLoaded();
         if (_lookup.TryGetValue(materialId, out var m))
             return m;
         GD.PrintErr($"MaterialStatsDb: Material not found: {materialId}");
         return null;
     }
+
+    // Call this (e.g. from a debug key) to re-read materials.json without
+    // restarting the game - handy for tuning numbers while playtesting.
+    public static void Reload() => _lookup = null;
+
+    private class MaterialsWrapper
+    {
+        [JsonPropertyName("materials")] public List<MaterialStatEntryData> Materials { get; set; } = new();
+    }
+}
+
+// Plain data class (not a Godot Resource) - one entry per material.
+// Field names/behavior match the old MaterialStatEntry exactly.
+public class MaterialStatEntryData
+{
+    [JsonPropertyName("materialId")]        public string MaterialId { get; set; } = "";
+    [JsonPropertyName("durabilityPerUnit")] public int    DurabilityPerUnit { get; set; } = 0;
+    [JsonPropertyName("miningSpeedMod")]    public float  MiningSpeedMod { get; set; } = 1.0f;
+    [JsonPropertyName("attackDamageMod")]   public float  AttackDamageMod { get; set; } = 1.0f;
+    [JsonPropertyName("tier")]              public int    Tier { get; set; } = 0;
+    [JsonPropertyName("traitId")]           public string TraitId { get; set; } = "";
+    [JsonPropertyName("traitMagnitude")]    public float  TraitMagnitude { get; set; } = 0f;
 }

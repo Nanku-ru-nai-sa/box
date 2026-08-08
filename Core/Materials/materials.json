@@ -1,0 +1,22 @@
+{
+  "materials": [
+	{
+	  "materialId": "flint",
+	  "durabilityPerUnit": 32,
+	  "miningSpeedMod": 1.0,
+	  "attackDamageMod": 1.0,
+	  "tier": 0,
+	  "traitId": "",
+	  "traitMagnitude": 0.0
+	},
+	{
+	  "materialId": "stick",
+	  "durabilityPerUnit": 0,
+	  "miningSpeedMod": 1.0,
+	  "attackDamageMod": 1.0,
+	  "tier": 0,
+	  "traitId": "",
+	  "traitMagnitude": 0.0
+	}
+  ]
+}

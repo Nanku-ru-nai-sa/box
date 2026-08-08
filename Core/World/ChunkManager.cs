@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 public enum WorldGenType { Normal, Flat, SkyIslands, OneBlock }
 public enum WorldGenTheme { Normal, OnlyForest, OnlyDesert }
@@ -52,9 +53,10 @@ public partial class ChunkManager : Node3D
     // Ores are no longer their own block type. Each one is a Feature tag
     // ("ore:coal", "ore:iron", etc.) that gets stamped onto whatever solid
     // block generation already picked for that spot (stone, rock, dirt,
-    // gravel...). BlockRegistry/Chunk.cs render the ore as a transparent
-    // overlay texture on top of the host block's normal texture, and
-    // breaking the block drops BOTH the host block and the ore item.
+    // gravel, or now any geology-layer block...). BlockRegistry/Chunk.cs
+    // render the ore as a transparent overlay texture on top of the host
+    // block's normal texture, and breaking the block drops BOTH the host
+    // block and the ore item.
     //
     // Ore placement works like actual Minecraft: each chunk rolls a small
     // number of "vein attempts" per ore. Each attempt picks a random spot
@@ -63,47 +65,22 @@ public partial class ChunkManager : Node3D
     // up as a compact pocket, never as scattered single blocks, and it's
     // bounded/predictable by construction (no noise curve to miscalibrate).
     //
-    // Four knobs per ore, so it's fast to retune in the Inspector:
-    //   StartY        - the highest Y this ore can appear at
-    //   Depth         - how far below StartY it keeps appearing (StartY - Depth = lowest Y)
-    //   VeinSize      - roughly how many blocks are in one pocket
-    //   VeinsPerChunk - how many vein attempts get rolled per chunk (can be
-    //                   fractional - e.g. 0.25 means roughly 1 attempt every 4 chunks)
+    // Ores is a plain list now (see OreVeinDef.cs) instead of one block of
+    // four [Export] fields per ore - add/remove/reorder ores straight in
+    // the Inspector, no code changes needed. List order = claim priority
+    // when two ores' Y ranges overlap (first in the list wins that spot),
+    // so rarer ores are listed first by default, same as before.
     [ExportGroup("Ore Generation")]
-    [Export] public int CoalStartY = 128;
-    [Export] public int CoalDepth = 123;
-    [Export] public int CoalVeinSize = 16;
-    [Export] public float CoalVeinsPerChunk = 5f;
-
-    [Export] public int IronStartY = 64;
-    [Export] public int IronDepth = 59;
-    [Export] public int IronVeinSize = 9;
-    [Export] public float IronVeinsPerChunk = 3f;
-
-    [Export] public int TinStartY = 110;   // shallow/common - paired with Copper for early bronze-age crafting
-    [Export] public int TinDepth = 90;
-    [Export] public int TinVeinSize = 8;
-    [Export] public float TinVeinsPerChunk = 2.5f;
-
-    [Export] public int CopperStartY = 110;
-    [Export] public int CopperDepth = 90;
-    [Export] public int CopperVeinSize = 8;
-    [Export] public float CopperVeinsPerChunk = 2.5f;
-
-    [Export] public int GoldStartY = 32;
-    [Export] public int GoldDepth = 27;
-    [Export] public int GoldVeinSize = 7;
-    [Export] public float GoldVeinsPerChunk = 0.8f;
-
-    [Export] public int DiamondStartY = 16;
-    [Export] public int DiamondDepth = 11;
-    [Export] public int DiamondVeinSize = 6;
-    [Export] public float DiamondVeinsPerChunk = 0.25f;
-
-    [Export] public int MithrilStartY = 10;   // rarest/deepest ore - lives right down near bedrock, rarer than diamond
-    [Export] public int MithrilDepth = 5;
-    [Export] public int MithrilVeinSize = 4;
-    [Export] public float MithrilVeinsPerChunk = 0.06f;
+    [Export] public Godot.Collections.Array<OreVeinDef> Ores = new Godot.Collections.Array<OreVeinDef>
+    {
+        new OreVeinDef { OreId = "mithril", StartY = 10,  Depth = 5,   VeinSize = 4,  VeinsPerChunk = 0.06f }, // rarest/deepest - lives right down near bedrock, rarer than diamond
+        new OreVeinDef { OreId = "diamond", StartY = 16,  Depth = 11,  VeinSize = 6,  VeinsPerChunk = 0.25f },
+        new OreVeinDef { OreId = "gold",    StartY = 32,  Depth = 27,  VeinSize = 7,  VeinsPerChunk = 0.8f },
+        new OreVeinDef { OreId = "copper",  StartY = 110, Depth = 90,  VeinSize = 8,  VeinsPerChunk = 2.5f }, // paired with Tin for early bronze-age crafting
+        new OreVeinDef { OreId = "tin",     StartY = 110, Depth = 90,  VeinSize = 8,  VeinsPerChunk = 2.5f },
+        new OreVeinDef { OreId = "iron",    StartY = 64,  Depth = 59,  VeinSize = 9,  VeinsPerChunk = 3f },
+        new OreVeinDef { OreId = "coal",    StartY = 128, Depth = 123, VeinSize = 16, VeinsPerChunk = 5f },
+    };
 
     // Obsidian stays a normal standalone block (not an overlay ore) - keeps
     // its original noise-threshold placement, untouched by the rework above.
@@ -128,11 +105,23 @@ public partial class ChunkManager : Node3D
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
     private List<Vector3I> _chunksToLoad = new();
+    // Mirrors _chunksToLoad's contents for O(1) "is this queued already"
+    // checks. UpdateChunks() re-scans up to ~15x15x17 candidate positions
+    // every time the player crosses a chunk boundary - with streaming
+    // re-enabled that happens constantly, so the old List.Contains() (an
+    // O(n) scan repeated thousands of times) would have reintroduced the
+    // exact stutter this whole pass is meant to remove.
+    private HashSet<Vector3I> _chunksToLoadSet = new();
     private Vector3I _lastPlayerChunk = new Vector3I(999, 999, 999);
     private Node3D _player;
 
-    private const int ChunksPerFrame      = 4;   // used after initial load (streaming)
-    private const int ChunksPerFrameInit  = 80;
+    // How much time (in milliseconds) LoadChunk work is allowed to eat per
+    // frame, instead of a flat "load N chunks" count. A flat count either
+    // stutters on expensive chunks (lots of cave/ore/tree work) or wastes
+    // time on cheap ones (mostly air). A time budget adapts to both and to
+    // whatever machine it's running on.
+    private const double ChunkMsBudgetStreaming = 6.0;   // per frame once the world is already loaded and the player is just walking around
+    private const double ChunkMsBudgetInitial   = 40.0;  // per frame during the initial load screen - higher because there's a loading screen covering it anyway
 
     private const int WaterLevel = 100;
     private const int MaxOceanDepthBelowSeaLevel = 20; // how far below sea level natural water basins are allowed to go; anything carved out deeper than this (i.e. caves) stays dry instead of flooding
@@ -161,6 +150,69 @@ public partial class ChunkManager : Node3D
     private FastNoiseLite _rockPatchNoise = new FastNoiseLite();
     private FastNoiseLite _dirtPatchNoise = new FastNoiseLite();
     private RandomNumberGenerator _oreVeinRng = new RandomNumberGenerator(); // deterministic per-chunk RNG that rolls and places ore veins
+
+    // ---- TOPSOIL (SOIL LEVELS) ----
+    // How thick the dirt layer is under grass/sand before it turns to
+    // stone. Real terrain doesn't have a flat slab of dirt everywhere -
+    // this varies it per-column between MinTopsoilDepth and
+    // MaxTopsoilDepth using slow-moving noise, the same way Minecraft's
+    // classic 3-5 block dirt layer works.
+    [ExportGroup("Soil")]
+    [Export] public int MinTopsoilDepth = 3;
+    [Export] public int MaxTopsoilDepth = 5;
+    private FastNoiseLite _topsoilNoise = new FastNoiseLite();
+
+    // ---- GEOLOGY LAYERS ("crust" bands) ----
+    // Everything below the topsoil that ISN'T caught by the ore/gravel/
+    // rock/dirt-patch systems (see GetUndergroundBlock) used to just fall
+    // back to plain "stone" no matter how deep you dug. This splits that
+    // fallback into bands instead, one per VERTICAL CHUNK ROW (16 blocks),
+    // so digging down actually feels like passing through different
+    // layers of earth. Bedrock (worldY 0-3) is untouched - this system
+    // only ever kicks in above it.
+    //
+    // Layers[0] is the band just above bedrock, Layers[1] is the chunk
+    // row above that, and so on going up. If the world reaches higher
+    // than you've defined layers for, the topmost defined entry just
+    // repeats - so you don't have to fill in every row all the way to the
+    // surface, just as many as you care to differentiate.
+    //
+    // Each entry (see GeologyLayerDef.cs) can list 1-3 BlockIds. With 2-3,
+    // that band generates as big blobby PATCHES mixing them together
+    // (e.g. one band that's a mix of sand/clay/gravel), not scattered
+    // per-block noise. Every entry defaults to a single "stone" for now -
+    // that's zero visual change from before. Since these are real
+    // BlockIds, you can already try mixing 2-3 of the blocks that exist
+    // today (sand, clay, gravel, dirt, rock, stone) right in the
+    // Inspector to test how the patch-mixing feels before committing to
+    // any new rock textures. ("silt" isn't a registered block yet, by the
+    // way - say the word and I'll add the texture + BlockRegistry entry
+    // for it.)
+    [ExportGroup("Geology Layers")]
+    [Export] public Godot.Collections.Array<GeologyLayerDef> Layers = new Godot.Collections.Array<GeologyLayerDef>
+    {
+        new GeologyLayerDef { LayerName = "Layer 0 (just above bedrock)" },
+        new GeologyLayerDef { LayerName = "Layer 1" },
+        new GeologyLayerDef { LayerName = "Layer 2" },
+        new GeologyLayerDef { LayerName = "Layer 3" },
+        new GeologyLayerDef { LayerName = "Layer 4" },
+        new GeologyLayerDef { LayerName = "Layer 5" },
+        new GeologyLayerDef { LayerName = "Layer 6" },
+        new GeologyLayerDef { LayerName = "Layer 7" },
+    };
+    private FastNoiseLite _geologyPatchNoise = new FastNoiseLite(); // shared across all layers; each layer's own PatchScale + a per-layer coordinate offset keep them from all patching in lockstep
+
+    // ---- COLUMN CACHES ----
+    // GetSurfaceHeight() and GetTopsoilDepth() both scan/sample per (X,Z)
+    // world column. Without caching, every vertical chunk stacked in the
+    // same column (there can be 15+ of them) redoes that same work from
+    // scratch. These caches remember the result per column while at least
+    // one chunk in that column is loaded, and get cleaned up (via
+    // _columnRefCount) once the last chunk in a column unloads, so they
+    // don't grow forever as the player explores.
+    private Dictionary<Vector2I, int> _surfaceHeightCache = new();
+    private Dictionary<Vector2I, int> _topsoilDepthCache = new();
+    private Dictionary<Vector2I, int> _columnRefCount = new();
 
     public override void _Ready()
     {
@@ -292,6 +344,22 @@ public partial class ChunkManager : Node3D
         _dirtPatchNoise.Frequency = 0.055f;
         _dirtPatchNoise.Seed = Seed + 26;
 
+        // Low frequency so the dirt layer thickness drifts gently over a
+        // wide area instead of flickering block-to-block between columns.
+        _topsoilNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _topsoilNoise.Frequency = 0.04f;
+        _topsoilNoise.Seed = Seed + 27;
+
+        // Frequency left at 1.0 on purpose - each GeologyLayerDef's own
+        // PatchScale multiplies the sampled coordinates directly (see
+        // GetGeologyLayerBlockId), so this instance shouldn't also be
+        // applying its own frequency on top of that.
+        _geologyPatchNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _geologyPatchNoise.FractalType = FastNoiseLite.FractalTypeEnum.Fbm;
+        _geologyPatchNoise.FractalOctaves = 2;
+        _geologyPatchNoise.Frequency = 1.0f;
+        _geologyPatchNoise.Seed = Seed + 28;
+
         var canvasLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", canvasLayer);
 
@@ -362,9 +430,13 @@ public partial class ChunkManager : Node3D
             if (_player == null) return;
         }
 
-        // TEMP: chunk streaming-on-move disabled again for testing - causes
-        // too much lag. Only the initial set of chunks loaded at spawn will
-        // exist. Re-enable the block below once perf is sorted out further.
+        // TEMP (per request): streaming-on-move disabled again while
+        // testing the new time-budgeted loader in isolation - only the
+        // initial set of chunks loaded at spawn will exist, same as
+        // before. The budgeted loop below still runs (it's what performs
+        // the initial load), just nothing re-triggers UpdateChunks() as
+        // you walk around yet. Uncomment this block once you're ready to
+        // test streaming again:
         // Vector3I currentPlayerChunk = WorldToChunk(_player.GlobalPosition);
         // if (currentPlayerChunk != _lastPlayerChunk)
         // {
@@ -372,35 +444,40 @@ public partial class ChunkManager : Node3D
         //     UpdateChunks();
         // }
 
-         // During initial load: load as many as possible each frame (no cap).
-// After initial load: cap to ChunksPerFrame so streaming doesn't stutter.
-int cap = IsInitialLoadComplete ? ChunksPerFrame : ChunksPerFrameInit;
-int loaded = 0;
-while (_chunksToLoad.Count > 0 && loaded < cap)
-{
-    Vector3I chunkPos = _chunksToLoad[0];
-    _chunksToLoad.RemoveAt(0);
+        // Time-budgeted chunk loading: keep pulling from the queue (closest
+        // first, see UpdateChunks' sort) until either the queue is empty or
+        // we've spent our millisecond budget for this frame. This replaces
+        // the old flat "load N chunks" cap - expensive chunks (lots of
+        // cave/ore/tree generation) no longer stutter, and cheap chunks
+        // (mostly air) no longer waste frame time sitting under an
+        // artificially low count cap.
+        double msBudget = IsInitialLoadComplete ? ChunkMsBudgetStreaming : ChunkMsBudgetInitial;
+        var sw = Stopwatch.StartNew();
 
-    // Skip chunks entirely above the world height cap (pure air, nothing generates there)
-    int chunkBottomY = chunkPos.Y * Chunk.HEIGHT;
-    if (chunkBottomY >= 288) { loaded++; continue; }
+        while (_chunksToLoad.Count > 0 && sw.Elapsed.TotalMilliseconds < msBudget)
+        {
+            Vector3I chunkPos = _chunksToLoad[0];
+            _chunksToLoad.RemoveAt(0);
+            _chunksToLoadSet.Remove(chunkPos);
 
-    // Skip chunks entirely below Y=0 (nothing generates below bedrock)
-    int chunkTopY = (chunkPos.Y + 1) * Chunk.HEIGHT;
-    if (chunkTopY <= 0) { loaded++; continue; }
+            // Skip chunks entirely above the world height cap (pure air, nothing generates there)
+            int chunkBottomY = chunkPos.Y * Chunk.HEIGHT;
+            if (chunkBottomY >= 288) continue;
 
-    if (!_chunks.ContainsKey(chunkPos))
-        LoadChunk(chunkPos);
-    loaded++;
-}
+            // Skip chunks entirely below Y=0 (nothing generates below bedrock)
+            int chunkTopY = (chunkPos.Y + 1) * Chunk.HEIGHT;
+            if (chunkTopY <= 0) continue;
 
-if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
-{
-    IsInitialLoadComplete = true;
-    EmitSignal(SignalName.WorldReady);
-    GD.Print("World ready!");
-}
+            if (!_chunks.ContainsKey(chunkPos))
+                LoadChunk(chunkPos);
+        }
 
+        if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
+        {
+            IsInitialLoadComplete = true;
+            EmitSignal(SignalName.WorldReady);
+            GD.Print("World ready!");
+        }
     }
     // Chunk/terrain data is keyed to the active world ONLY - the world's
     // blocks are shared ground truth for anyone in that world, not
@@ -618,7 +695,7 @@ public Vector3? LoadPlayerPosition()
                         playerChunk.Z + z
                     );
 
-                    if (!_chunks.ContainsKey(chunkPos) && !_chunksToLoad.Contains(chunkPos))
+                    if (!_chunks.ContainsKey(chunkPos) && _chunksToLoadSet.Add(chunkPos))
                         _chunksToLoad.Add(chunkPos);
                 }
             }
@@ -660,6 +737,9 @@ public Vector3? LoadPlayerPosition()
         LoadChunkModifications(chunk, chunkPos);
         chunk.BuildMesh();
         _chunks[chunkPos] = chunk;
+
+        var columnKey = new Vector2I(chunkPos.X, chunkPos.Z);
+        _columnRefCount[columnKey] = _columnRefCount.GetValueOrDefault(columnKey, 0) + 1;
     }
 
     private void UnloadChunk(Vector3I chunkPos)
@@ -667,6 +747,39 @@ public Vector3? LoadPlayerPosition()
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk)) return;
         chunk.QueueFree();
         _chunks.Remove(chunkPos);
+
+        // Drop this column's cached surface height/topsoil depth once the
+        // last vertical chunk in it unloads, so the caches don't grow
+        // forever as the player wanders across the map. _columnRefCount
+        // is keyed by CHUNK column (chunkPos.X, chunkPos.Z) since that's
+        // what's actually loaded/unloaded one chunk at a time; the height
+        // and topsoil caches are keyed by individual WORLD block column,
+        // so cleanup sweeps the 16x16 block columns that chunk covers.
+        var columnKey = new Vector2I(chunkPos.X, chunkPos.Z);
+        if (_columnRefCount.TryGetValue(columnKey, out int count))
+        {
+            count--;
+            if (count <= 0)
+            {
+                _columnRefCount.Remove(columnKey);
+
+                int baseX = chunkPos.X * Chunk.SIZE;
+                int baseZ = chunkPos.Z * Chunk.SIZE;
+                for (int dx = 0; dx < Chunk.SIZE; dx++)
+                {
+                    for (int dz = 0; dz < Chunk.SIZE; dz++)
+                    {
+                        var worldColKey = new Vector2I(baseX + dx, baseZ + dz);
+                        _surfaceHeightCache.Remove(worldColKey);
+                        _topsoilDepthCache.Remove(worldColKey);
+                    }
+                }
+            }
+            else
+            {
+                _columnRefCount[columnKey] = count;
+            }
+        }
     }
 
     private enum Biome { Plains, Forest, Desert, Beach }
@@ -1092,12 +1205,48 @@ public Vector3? LoadPlayerPosition()
 
     private int GetSurfaceHeight(int worldX, int worldZ, int searchTop = 288, int searchBottom = 0)
     {
+        // Only the common default-range call (the one GenerateChunk and
+        // the decoration passes actually use) is cache-eligible - a
+        // custom search range means a different answer, so that path
+        // always does the real scan uncached.
+        bool cacheable = searchTop == 288 && searchBottom == 0;
+        var key = new Vector2I(worldX, worldZ);
+
+        if (cacheable && _surfaceHeightCache.TryGetValue(key, out int cached))
+            return cached;
+
+        int result = searchBottom;
         for (int y = searchTop; y >= searchBottom; y--)
         {
             if (GetDensity(worldX, y, worldZ) > 0f)
-                return y;
+            {
+                result = y;
+                break;
+            }
         }
-        return searchBottom;
+
+        if (cacheable)
+            _surfaceHeightCache[key] = result;
+
+        return result;
+    }
+
+    // Dirt/sand topsoil layer thickness for this column, in
+    // [MinTopsoilDepth, MaxTopsoilDepth]. Cached per column for the same
+    // reason GetSurfaceHeight is - it only needs to be resolved once no
+    // matter how many vertical chunks share this column.
+    private int GetTopsoilDepth(int worldX, int worldZ)
+    {
+        var key = new Vector2I(worldX, worldZ);
+        if (_topsoilDepthCache.TryGetValue(key, out int cached))
+            return cached;
+
+        float n = (_topsoilNoise.GetNoise2D(worldX, worldZ) + 1f) * 0.5f; // remap -1..1 to 0..1
+        int range = Mathf.Max(0, MaxTopsoilDepth - MinTopsoilDepth);
+        int depth = MinTopsoilDepth + Mathf.RoundToInt(n * range);
+
+        _topsoilDepthCache[key] = depth;
+        return depth;
     }
 
     private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
@@ -1120,6 +1269,7 @@ public Vector3? LoadPlayerPosition()
                 // ground surface and coated in dirt/grass - that mix-up was
                 // why caves were coming out full of dirt.
                 int trueSurfaceY = GetSurfaceHeight(worldX, worldZ);
+                int topsoilDepth = GetTopsoilDepth(worldX, worldZ);
 
                 int approxSurface = -1;
 
@@ -1179,7 +1329,12 @@ public Vector3? LoadPlayerPosition()
                         bool nearSurface = false;
 
                         int depthToAir = 0;
-                        for (int checkY = worldY; checkY <= worldY + 5; checkY++)
+                        // Scan far enough up to catch the deepest possible
+                        // topsoil depth this world could roll (was a fixed
+                        // +5 - now tracks MaxTopsoilDepth so raising that
+                        // in the Inspector doesn't silently truncate).
+                        int depthScanRange = Mathf.Max(5, MaxTopsoilDepth);
+                        for (int checkY = worldY; checkY <= worldY + depthScanRange; checkY++)
                         {
                             if (GetDensity(worldX, checkY, worldZ) <= 0f)
                             {
@@ -1200,7 +1355,7 @@ public Vector3? LoadPlayerPosition()
                         // which is exactly what was happening before.
                         bool isRealSurface = worldY >= trueSurfaceY - 6;
 
-                        if (nearSurface && depthToAir <= 4 && isRealSurface)
+                        if (nearSurface && depthToAir <= topsoilDepth && isRealSurface)
                         {
                             // Flat AND One Block worlds always use Plains,
                             // skipping the usual temp/humid/beach biome
@@ -1354,7 +1509,42 @@ public Vector3? LoadPlayerPosition()
         if (dirtVal > DirtPatchRarity)
             return new BlockState { BlockId = "dirt", BitMask = 0xFF };
 
-        return new BlockState { BlockId = "stone", BitMask = 0xFF };
+        return new BlockState { BlockId = GetGeologyLayerBlockId(worldX, worldY, worldZ), BitMask = 0xFF };
+    }
+
+    // Picks which "crust" band worldY falls into (see the Geology Layers
+    // export group above), then - if that band lists 2-3 BlockOptions -
+    // which of those options wins at this exact spot, using big blobby
+    // patches rather than per-block randomness.
+    private string GetGeologyLayerBlockId(int worldX, int worldY, int worldZ)
+    {
+        if (Layers == null || Layers.Count == 0) return "stone";
+
+        int layerIndex = Mathf.Min(worldY / Chunk.HEIGHT, Layers.Count - 1);
+        var layer = Layers[layerIndex];
+        if (layer == null || layer.BlockOptions == null || layer.BlockOptions.Length == 0)
+            return "stone";
+
+        if (layer.BlockOptions.Length == 1)
+            return layer.BlockOptions[0];
+
+        // Each layer gets its own patch pattern via a coordinate offset
+        // keyed to its index, so stacked layers with the same PatchScale
+        // don't all patch in exactly the same shape directly above each
+        // other.
+        float offset = layerIndex * 10000f;
+        float n = _geologyPatchNoise.GetNoise3D(
+            (worldX + offset) * layer.PatchScale,
+            worldY * layer.PatchScale,
+            (worldZ - offset) * layer.PatchScale);
+
+        if (layer.BlockOptions.Length == 2)
+            return n < 0f ? layer.BlockOptions[0] : layer.BlockOptions[1];
+
+        // 3 options - split into roughly equal thirds.
+        if (n < -0.33f) return layer.BlockOptions[0];
+        if (n < 0.33f) return layer.BlockOptions[1];
+        return layer.BlockOptions[2];
     }
 
     // Rolls and places every ore's veins for this chunk, rarest first (so a
@@ -1365,13 +1555,14 @@ public Vector3? LoadPlayerPosition()
     {
         _oreVeinRng.Seed = (ulong)(chunkPos.X * 92821 ^ chunkPos.Z * 68917 ^ chunkPos.Y * 50331653 ^ 0x0FE571);
 
-        TryPlaceVeinsForOre(chunk, chunkPos, "mithril", MithrilStartY, MithrilDepth, MithrilVeinSize, MithrilVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "diamond", DiamondStartY, DiamondDepth, DiamondVeinSize, DiamondVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "gold", GoldStartY, GoldDepth, GoldVeinSize, GoldVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "copper", CopperStartY, CopperDepth, CopperVeinSize, CopperVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "tin", TinStartY, TinDepth, TinVeinSize, TinVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "iron", IronStartY, IronDepth, IronVeinSize, IronVeinsPerChunk);
-        TryPlaceVeinsForOre(chunk, chunkPos, "coal", CoalStartY, CoalDepth, CoalVeinSize, CoalVeinsPerChunk);
+        // Loops over whatever's in the Ores list now - add/remove/reorder
+        // ores in the Inspector, nothing here needs to change. List order
+        // = claim priority (see OreVeinDef.cs).
+        foreach (var ore in Ores)
+        {
+            if (ore == null || string.IsNullOrEmpty(ore.OreId)) continue;
+            TryPlaceVeinsForOre(chunk, chunkPos, ore.OreId, ore.StartY, ore.Depth, ore.VeinSize, ore.VeinsPerChunk);
+        }
     }
 
     // Works out how many vein attempts this ore gets in this chunk (0 if
@@ -1422,7 +1613,13 @@ public Vector3? LoadPlayerPosition()
             if (lx >= 0 && lx < Chunk.SIZE && ly >= 0 && ly < Chunk.HEIGHT && lz >= 0 && lz < Chunk.SIZE)
             {
                 BlockState existing = chunk.GetBlock(lx, ly, lz);
-                bool eligibleHost = existing.BlockId is "stone" or "rock" or "dirt" or "gravel";
+                // Was an explicit allow-list of "stone"/"rock"/"dirt"/
+                // "gravel" - now that Geology Layers can put arbitrary
+                // BlockIds underground (sand/clay/silt/whatever you add),
+                // an allow-list would need updating every time you add a
+                // new layer block. Deny-list instead: anything solid that
+                // isn't bedrock/obsidian/water can host ore.
+                bool eligibleHost = !existing.IsAir() && existing.BlockId is not ("bedrock" or "obsidian" or "water");
                 bool alreadyOre = existing.Features != null && existing.Features.Length > 0;
                 if (eligibleHost && !alreadyOre)
                 {

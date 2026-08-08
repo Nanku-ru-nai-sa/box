@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dpq5adxr17t76"
-path="res://.godot/imported/diamond_sword.png-082e1609cf0618e846e6f37adc836a6a.ctex"
+uid="uid://dnp6nh5qu4sgf"
+path="res://.godot/imported/sandstone.png-6b505694ad327ffd049c60cbedfc34ad.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/chalk/diamond_sword.png"
-dest_files=["res://.godot/imported/diamond_sword.png-082e1609cf0618e846e6f37adc836a6a.ctex"]
+source_file="res://Assets/Textures/Blocks/sandstone.png"
+dest_files=["res://.godot/imported/sandstone.png-6b505694ad327ffd049c60cbedfc34ad.ctex"]
 
 [params]
 

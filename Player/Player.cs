@@ -419,6 +419,7 @@ public partial class Player : CharacterBody3D
         _toolBenchPanel = new ToolBenchPanel();
         _toolBenchPanel.Init(_inventory);
         _toolBenchPanel.OnSlotClicked   += HandleToolBenchSlotClicked;
+        _toolBenchPanel.OnCenterClicked += HandleToolBenchCenterClicked;
         _toolBenchPanel.OnOutputClicked += HandleToolBenchOutputClicked;
 
         float gridW    = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
@@ -1231,6 +1232,32 @@ public partial class Player : CharacterBody3D
         _craftingPanel.NotifyGridChanged();
         FireChanged();
         UpdateCursorVisual();
+    }
+
+    private void HandleToolBenchCenterClicked()
+    {
+        if (_toolBenchPanel == null) return;
+
+        // Holding something → only act if it's an already-crafted tool
+        // (recognized by having recipe tags), in which case load it in for
+        // modification. Holding anything else, ignore the click.
+        if (!_heldSlot.IsEmpty)
+        {
+            var item = ItemRegistry.Instance.GetItem(_heldSlot.ItemId);
+            if (item != null && item.HasDurability &&
+                ToolCrafting.TryGetRecipe(item, out _, out _, out _))
+            {
+                if (_toolBenchPanel.LoadExistingTool(_heldSlot))
+                {
+                    FireChanged();
+                    UpdateCursorVisual();
+                }
+            }
+            return;
+        }
+
+        // Empty cursor → open/close the tool-type picker.
+        _toolBenchPanel.ToggleFamilyPicker();
     }
 
     private void HandleToolBenchSlotClicked(int idx, MouseButton button, bool shift)
