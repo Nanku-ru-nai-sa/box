@@ -61,6 +61,7 @@ public partial class Player : CharacterBody3D
     private const int TotalSlots  = MainInvSize + HotbarSize; // 48
     private Inventory _inventory;
     private Panel[]       _invSlotPanels = new Panel[MainInvSize];
+    private ItemTooltip   _invTooltip;
     private Label[]       _invSlotLabels = new Label[MainInvSize];
 
     // ── Held / cursor ─────────────────────────────────────────────────────────
@@ -248,8 +249,19 @@ public partial class Player : CharacterBody3D
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
-        Texture2D tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+
+        // Prefer an icon already set on the ItemResource itself - crafted
+        // tools get a composited icon built at craft time (see
+        // ToolCrafting.BuildToolIcon) with no file on disk to look up.
+        var item = ItemRegistry.Instance?.GetItem(itemId);
+        Texture2D tex = item?.Icon;
+
+        if (tex == null)
+        {
+            string path = $"res://Assets/Textures/Items/{itemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
+
         _iconCache[itemId] = tex;
         return tex;
     }
@@ -329,6 +341,7 @@ public partial class Player : CharacterBody3D
             slot.MouseFilter   = Control.MouseFilterEnum.Stop;
             slot.MouseEntered += () => slot.AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), new Color(0.75f,0.75f,0.75f)));
             slot.MouseExited  += () => slot.AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.15f,0.15f,0.15f,0.85f), new Color(0.4f,0.4f,0.4f)));
+            slot.MouseExited  += () => _invTooltip?.HideTooltip();
             mainGrid.AddChild(slot);
         }
         _inventoryScreen.AddChild(mainGrid);
@@ -354,10 +367,14 @@ public partial class Player : CharacterBody3D
             int idx = i;
             slot.GuiInput    += (InputEvent ev) => OnHotbarInvSlotInput(ev, idx);
             slot.MouseEntered += ()             => OnSlotMouseEntered(MainInvSize + idx);
+            slot.MouseExited  += ()             => _invTooltip?.HideTooltip();
             slot.MouseFilter   = Control.MouseFilterEnum.Stop;
             hotbarRow.AddChild(slot);
         }
         _inventoryScreen.AddChild(hotbarRow);
+
+        _invTooltip = new ItemTooltip();
+        _inventoryScreen.AddChild(_invTooltip); // added last = renders above every slot
 
         _inventoryScreen.Visible = false;
         _inventoryLayer.CallDeferred("add_child", _inventoryScreen);
@@ -726,6 +743,28 @@ public partial class Player : CharacterBody3D
         HandleSlotInput(ev, slotIndex);
     }
 
+    // Is this item allowed to stack by Count? False for crafted tools
+    // (IsStackable=false on their ItemResource) - unknown/unregistered
+    // item ids default to stackable, matching the old blanket behavior.
+    private bool IsStackableItem(string itemId)
+    {
+        if (string.IsNullOrEmpty(itemId)) return true;
+        var item = ItemRegistry.Instance?.GetItem(itemId);
+        return item == null || item.IsStackable;
+    }
+
+    // Copies EVERYTHING about a slot's contents - ItemId, Count, and (unlike
+    // the old plain ItemId/Count-only copies scattered through this file)
+    // CurrentDurability and CustomName too. Use this instead of manually
+    // copying ItemId+Count anywhere a tool might be involved.
+    private void CopySlot(InventorySlot from, InventorySlot to)
+    {
+        to.ItemId             = from.ItemId;
+        to.Count               = from.Count;
+        to.CurrentDurability   = from.CurrentDurability;
+        to.CustomName          = from.CustomName;
+    }
+
     private void OnHotbarInvSlotInput(InputEvent ev, int hotbarIndex)
     {
         if (!_inventoryOpen) return;
@@ -760,10 +799,9 @@ public partial class Player : CharacterBody3D
         if (_heldSlot.IsEmpty)
         {
             if (slot.IsEmpty) return;
-            _heldFromSlot    = slotIndex;
-            _heldSlot.ItemId = slot.ItemId;
-            _heldSlot.Count  = slot.Count;
-            _dragOrigCount   = slot.Count;
+            _heldFromSlot  = slotIndex;
+            CopySlot(slot, _heldSlot);
+            _dragOrigCount = slot.Count;
             slot.Clear();
             _dragMode = DragMode.LmbWithItem;
             _dragVisited.Clear();
@@ -774,11 +812,10 @@ public partial class Player : CharacterBody3D
         {
             if (slot.IsEmpty)
             {
-                slot.ItemId = _heldSlot.ItemId;
-                slot.Count  = _heldSlot.Count;
+                CopySlot(_heldSlot, slot);
                 _heldSlot.Clear();
             }
-            else if (slot.ItemId == _heldSlot.ItemId)
+            else if (slot.ItemId == _heldSlot.ItemId && IsStackableItem(slot.ItemId))
             {
                 int space    = _inventory.MaxStackSize - slot.Count;
                 int transfer = Mathf.Min(space, _heldSlot.Count);
@@ -786,10 +823,24 @@ public partial class Player : CharacterBody3D
                 _heldSlot.Count -= transfer;
                 if (_heldSlot.Count <= 0) _heldSlot.Clear();
             }
+            else if (slot.ItemId == _heldSlot.ItemId && !IsStackableItem(slot.ItemId))
+            {
+                // Non-stackable (e.g. a crafted tool) - merge durability
+                // instead of stacking Count, same idea as Inventory.TryMergeTools
+                // (allowed to exceed max), only if the names also match.
+                if (slot.CustomName == _heldSlot.CustomName)
+                {
+                    slot.CurrentDurability += _heldSlot.CurrentDurability;
+                    _heldSlot.Clear();
+                }
+                // Names differ - refuse the merge, leave both as-is (held item stays on cursor).
+            }
             else
             {
-                (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
-                (slot.Count,  _heldSlot.Count)  = (_heldSlot.Count,  slot.Count);
+                (slot.ItemId, _heldSlot.ItemId)                       = (_heldSlot.ItemId, slot.ItemId);
+                (slot.Count,  _heldSlot.Count)                        = (_heldSlot.Count,  slot.Count);
+                (slot.CurrentDurability, _heldSlot.CurrentDurability) = (_heldSlot.CurrentDurability, slot.CurrentDurability);
+                (slot.CustomName, _heldSlot.CustomName)               = (_heldSlot.CustomName, slot.CustomName);
             }
             EndDrag();
         }
@@ -809,6 +860,8 @@ public partial class Player : CharacterBody3D
             int half         = Mathf.CeilToInt(slot.Count / 2f);
             _heldSlot.ItemId = slot.ItemId;
             _heldSlot.Count  = half;
+            _heldSlot.CurrentDurability = slot.CurrentDurability;
+            _heldSlot.CustomName        = slot.CustomName;
             _heldFromSlot    = slotIndex;
             slot.Count      -= half;
             if (slot.Count <= 0) slot.Clear();
@@ -826,6 +879,18 @@ public partial class Player : CharacterBody3D
         if (_heldSlot.IsEmpty) return false;
         var slot = _inventory.Slots[slotIndex];
         if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return false;
+
+        if (!IsStackableItem(_heldSlot.ItemId))
+        {
+            // Non-stackable (e.g. a tool) - there's only ever 1 of it, so
+            // "place one" only makes sense into an empty slot, taking the
+            // whole held item at once.
+            if (!slot.IsEmpty) return false;
+            CopySlot(_heldSlot, slot);
+            _heldSlot.Clear();
+            return true;
+        }
+
         if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return false;
         if (slot.IsEmpty) slot.ItemId = _heldSlot.ItemId;
         slot.Count++;
@@ -863,6 +928,20 @@ public partial class Player : CharacterBody3D
             {
                 if (_heldSlot.IsEmpty) return;
                 var slot = _inventory.Slots[slotIndex];
+
+                if (!IsStackableItem(_heldSlot.ItemId))
+                {
+                    // Non-stackable (e.g. a tool) - dragging just moves the
+                    // whole thing into whichever slot you're over, no
+                    // spreading a single item across multiple slots.
+                    if (!slot.IsEmpty) return;
+                    CopySlot(_heldSlot, slot);
+                    _heldSlot.Clear();
+                    _dragVisited.Clear();
+                    _dragVisited.Add(slotIndex);
+                    break;
+                }
+
                 if (!slot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
                 if (!slot.IsEmpty && slot.Count >= _inventory.MaxStackSize) return;
                 if (!_dragVisited.Contains(slotIndex)) _dragVisited.Add(slotIndex);
@@ -895,6 +974,16 @@ public partial class Player : CharacterBody3D
                 var slot = _inventory.Slots[slotIndex];
                 if (slot.IsEmpty) return;
                 if (!_heldSlot.IsEmpty && slot.ItemId != _heldSlot.ItemId) return;
+
+                if (!IsStackableItem(slot.ItemId))
+                {
+                    if (!_heldSlot.IsEmpty) return; // already holding one - can't collect a second
+                    CopySlot(slot, _heldSlot);
+                    slot.Clear();
+                    _dragVisited.Add(slotIndex);
+                    break;
+                }
+
                 int space = _inventory.MaxStackSize - (_heldSlot.IsEmpty ? 0 : _heldSlot.Count);
                 if (space <= 0) return;
                 _dragVisited.Add(slotIndex);
@@ -955,18 +1044,23 @@ public partial class Player : CharacterBody3D
         bool isHotbar  = slotIndex >= MainInvSize;
         int  destStart = isHotbar ? 0 : MainInvSize;
         int  destEnd   = isHotbar ? MainInvSize : TotalSlots;
-        for (int i = destStart; i < destEnd && src.Count > 0; i++)
+
+        if (IsStackableItem(src.ItemId))
         {
-            var dst = _inventory.Slots[i];
-            if (dst.IsEmpty || dst.ItemId != src.ItemId) continue;
-            int t = Mathf.Min(_inventory.MaxStackSize - dst.Count, src.Count);
-            dst.Count += t; src.Count -= t;
+            for (int i = destStart; i < destEnd && src.Count > 0; i++)
+            {
+                var dst = _inventory.Slots[i];
+                if (dst.IsEmpty || dst.ItemId != src.ItemId) continue;
+                int t = Mathf.Min(_inventory.MaxStackSize - dst.Count, src.Count);
+                dst.Count += t; src.Count -= t;
+            }
         }
         for (int i = destStart; i < destEnd && src.Count > 0; i++)
         {
             var dst = _inventory.Slots[i];
             if (!dst.IsEmpty) continue;
-            dst.ItemId = src.ItemId; dst.Count = src.Count; src.Clear();
+            CopySlot(src, dst);
+            src.Clear();
         }
         if (src.Count <= 0) src.Clear();
     }
@@ -981,8 +1075,10 @@ public partial class Player : CharacterBody3D
         {
             var s = _inventory.Slots[slotIndex];
             if (s.IsEmpty) return;
-            _heldSlot.ItemId = s.ItemId; _heldSlot.Count = s.Count; s.Clear();
+            CopySlot(s, _heldSlot);
+            s.Clear();
         }
+        if (!IsStackableItem(_heldSlot.ItemId)) { FireChanged(); UpdateCursorVisual(); return; } // no "collect more" for a tool - there's only ever 1
         if (_heldSlot.Count >= _inventory.MaxStackSize) { FireChanged(); UpdateCursorVisual(); return; }
         string id = _heldSlot.ItemId;
         for (int i = 0; i < TotalSlots && _heldSlot.Count < _inventory.MaxStackSize; i++)
@@ -1005,6 +1101,7 @@ public partial class Player : CharacterBody3D
     {
         bool isHotbar = slotIndex >= MainInvSize;
         var  src      = _inventory.Slots[slotIndex];
+
         if (up)
         {
             int fromStart = isHotbar ? 0 : MainInvSize;
@@ -1012,7 +1109,20 @@ public partial class Player : CharacterBody3D
             for (int i = fromStart; i < fromEnd; i++)
             {
                 var other = _inventory.Slots[i];
-                if (other.IsEmpty || (!src.IsEmpty && other.ItemId != src.ItemId) || src.Count >= _inventory.MaxStackSize) continue;
+                if (other.IsEmpty) continue;
+                if (!src.IsEmpty && other.ItemId != src.ItemId) continue;
+
+                if (!IsStackableItem(other.ItemId))
+                {
+                    // Non-stackable - only moves whole, and only into an
+                    // empty slot (can't "add 1 more" to an existing tool).
+                    if (!src.IsEmpty) continue;
+                    CopySlot(other, src);
+                    other.Clear();
+                    FireChanged(); return;
+                }
+
+                if (src.Count >= _inventory.MaxStackSize) continue;
                 if (src.IsEmpty) src.ItemId = other.ItemId;
                 src.Count++; other.Count--;
                 if (other.Count <= 0) other.Clear();
@@ -1022,9 +1132,27 @@ public partial class Player : CharacterBody3D
         else
         {
             if (src.IsEmpty) return;
-            int toStart = isHotbar ? 0 : MainInvSize;
-            int toEnd   = isHotbar ? MainInvSize : TotalSlots;
-            for (int i = toStart; i < toEnd; i++)
+
+            if (!IsStackableItem(src.ItemId))
+            {
+                // Non-stackable - move the whole thing into the first empty
+                // slot, don't try to merge 1 unit into a matching stack.
+                int toStart = isHotbar ? 0 : MainInvSize;
+                int toEnd   = isHotbar ? MainInvSize : TotalSlots;
+                for (int i = toStart; i < toEnd; i++)
+                {
+                    var dst = _inventory.Slots[i];
+                    if (!dst.IsEmpty) continue;
+                    CopySlot(src, dst);
+                    src.Clear();
+                    FireChanged(); return;
+                }
+                return;
+            }
+
+            int stackToStart = isHotbar ? 0 : MainInvSize;
+            int stackToEnd   = isHotbar ? MainInvSize : TotalSlots;
+            for (int i = stackToStart; i < stackToEnd; i++)
             {
                 var dst = _inventory.Slots[i];
                 if (dst.IsEmpty || dst.ItemId != src.ItemId || dst.Count >= _inventory.MaxStackSize) continue;
@@ -1032,7 +1160,7 @@ public partial class Player : CharacterBody3D
                 if (src.Count <= 0) src.Clear();
                 FireChanged(); return;
             }
-            for (int i = toStart; i < toEnd; i++)
+            for (int i = stackToStart; i < stackToEnd; i++)
             {
                 var dst = _inventory.Slots[i];
                 if (!dst.IsEmpty) continue;
@@ -1047,17 +1175,40 @@ public partial class Player : CharacterBody3D
     // ADD ITEM (hotbar first)
     // =========================================================================
 
-    private int AddItemToInventory(string itemId, int count)
+    private int AddItemToInventory(string itemId, int count, int? durability = null, string customName = "")
     {
         if (string.IsNullOrEmpty(itemId) || count <= 0) return count;
         int rem = count;
+        bool stackable = IsStackableItem(itemId);
+
         void TryAdd(int start, int end, bool stackOnly)
         {
             for (int i = start; i < end && rem > 0; i++)
             {
                 var s = _inventory.Slots[i];
-                if (stackOnly) { if (s.IsEmpty || s.ItemId != itemId) continue; int add = Mathf.Min(_inventory.MaxStackSize - s.Count, rem); s.Count += add; rem -= add; }
-                else           { if (!s.IsEmpty) continue; int add = Mathf.Min(_inventory.MaxStackSize, rem); s.ItemId = itemId; s.Count = add; rem -= add; }
+                if (stackOnly)
+                {
+                    if (!stackable) continue; // non-stackable items never merge into an existing slot
+                    if (s.IsEmpty || s.ItemId != itemId) continue;
+                    int add = Mathf.Min(_inventory.MaxStackSize - s.Count, rem);
+                    s.Count += add; rem -= add;
+                }
+                else
+                {
+                    if (!s.IsEmpty) continue;
+                    int add = stackable ? Mathf.Min(_inventory.MaxStackSize, rem) : 1;
+                    s.ItemId = itemId; s.Count = add; rem -= add;
+                    if (!stackable)
+                    {
+                        // Defaults to full durability if the caller doesn't know the
+                        // specific instance's actual remaining durability (better
+                        // than silently defaulting to 0). Pass durability explicitly
+                        // once whatever spawns the physical drop tracks it.
+                        var item = ItemRegistry.Instance?.GetItem(itemId);
+                        s.CurrentDurability = durability ?? item?.MaxDurability ?? 0;
+                        s.CustomName        = customName;
+                    }
+                }
             }
         }
         TryAdd(MainInvSize, TotalSlots, true);
@@ -1070,9 +1221,13 @@ public partial class Player : CharacterBody3D
 
     // Called by ItemPickup when the player walks close enough to collect it.
     // Returns how many items didn't fit anywhere (0 means it was fully collected).
-    public int CollectPickup(string itemId, int count)
+    // NOTE: durability/customName aren't yet threaded through from whatever
+    // spawns physical drops (ItemPickup.cs) - a dropped tool currently comes
+    // back at full durability rather than whatever it actually had when
+    // dropped. Wire real values through here once that script tracks them.
+    public int CollectPickup(string itemId, int count, int? durability = null, string customName = "")
     {
-        return AddItemToInventory(itemId, count);
+        return AddItemToInventory(itemId, count, durability, customName);
     }
 
     // Spawns a physical item drop in the world at worldPosition instead of
@@ -1117,7 +1272,17 @@ public partial class Player : CharacterBody3D
     // GLOBAL INPUT
     // =========================================================================
 
-    private void OnSlotMouseEntered(int slotIndex) { }
+    private void OnSlotMouseEntered(int slotIndex)
+    {
+        if (_invTooltip == null) return;
+        if (slotIndex < 0 || slotIndex >= _inventory.Slots.Length) { _invTooltip.HideTooltip(); return; }
+
+        var slot = _inventory.Slots[slotIndex];
+        if (slot.IsEmpty) { _invTooltip.HideTooltip(); return; }
+
+        var item = ItemRegistry.Instance.GetItem(slot.ItemId);
+        _invTooltip.ShowFor(item, GetViewport().GetMousePosition(), slot.CurrentDurability);
+    }
 
     public override void _Input(InputEvent @event)
     {
@@ -1925,8 +2090,27 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                 if (ore != null) SpawnItemDrop(ore.ItemId, 1, dropWorldPos);
             }
             chunk.SetBlock(bx, by, bz, BlockState.Air);
+            DamageHeldToolDurability();
             ResetBreak();
         }
+    }
+
+    // Loses 1 durability on the currently equipped hotbar item, if it's a
+    // tool with durability. Breaks (clears the slot) at 0.
+    private void DamageHeldToolDurability()
+    {
+        var slot = _inventory.Slots[MainInvSize + _selectedSlot];
+        if (slot.IsEmpty) return;
+
+        var item = ItemRegistry.Instance.GetItem(slot.ItemId);
+        if (item == null || !item.HasDurability) return;
+
+        slot.CurrentDurability--;
+        if (slot.CurrentDurability <= 0)
+            slot.Clear(); // tool breaks
+
+        FireChanged();
+        RefreshAllSlotVisuals();
     }
 
     private void ResetBreak()

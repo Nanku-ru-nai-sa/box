@@ -1,15 +1,9 @@
 // UPDATED FILE - replaces MaterialStatsDb.cs
 //
-// No longer an Autoload/Node - just a plain static class that loads
-// res://Data/materials.json the first time anything asks for a material.
-// Edit that JSON file directly to tune numbers, same idea as your JSON
-// crafting recipes. No Project Settings setup needed at all.
-//
-// IMPORTANT: delete the OLD MaterialStatEntry.cs (the [Export]-based
-// Resource version) - it's replaced by the plain MaterialStatEntryData
-// class defined at the bottom of this file, and isn't needed anymore.
-// Also remove "MaterialStatsDb" from Project Settings -> Autoload if you
-// added it there before - it's not an Autoload anymore.
+// Loads every *.json file inside res://Data/Materials/ - one file per
+// material, e.g. Data/Materials/flint.json, Data/Materials/stick.json.
+// Each file is just a single material's stats (no wrapper/array). Add a
+// new material by dropping in a new .json file - nothing else to touch.
 
 using Godot;
 using System;
@@ -19,8 +13,8 @@ using System.Text.Json.Serialization;
 
 public static class MaterialStatsDb
 {
-    // Put your materials.json here: res://Data/materials.json
-    private const string JsonPath = "res://Data/materials.json";
+    // Every *.json file in this folder gets loaded as one material.
+    private const string MaterialsFolder = "res://Data/Materials/";
 
     private static Dictionary<string, MaterialStatEntryData> _lookup;
 
@@ -29,28 +23,52 @@ public static class MaterialStatsDb
         if (_lookup != null) return; // already loaded this session
         _lookup = new Dictionary<string, MaterialStatEntryData>();
 
-        if (!FileAccess.FileExists(JsonPath))
+        using var dir = DirAccess.Open(MaterialsFolder);
+        if (dir == null)
         {
-            GD.PrintErr($"MaterialStatsDb: {JsonPath} not found. Create it - see the example in the project notes.");
+            GD.PrintErr($"MaterialStatsDb: folder not found: {MaterialsFolder}");
             return;
         }
 
-        using var file = FileAccess.Open(JsonPath, FileAccess.ModeFlags.Read);
+        dir.ListDirBegin();
+        string fileName = dir.GetNext();
+        while (fileName != "")
+        {
+            if (!dir.CurrentIsDir() && fileName.EndsWith(".json"))
+                LoadOneFile(MaterialsFolder + fileName, fileName);
+            fileName = dir.GetNext();
+        }
+        dir.ListDirEnd();
+
+        GD.Print($"MaterialStatsDb loaded {_lookup.Count} materials from {MaterialsFolder}");
+    }
+
+    private static void LoadOneFile(string fullPath, string fileName)
+    {
+        using var file = FileAccess.Open(fullPath, FileAccess.ModeFlags.Read);
+        if (file == null)
+        {
+            GD.PrintErr($"MaterialStatsDb: couldn't open {fullPath}");
+            return;
+        }
+
         string text = file.GetAsText();
 
         try
         {
-            var wrapper = JsonSerializer.Deserialize<MaterialsWrapper>(text);
-            foreach (var m in wrapper.Materials)
-            {
-                if (m != null && !string.IsNullOrEmpty(m.MaterialId))
-                    _lookup[m.MaterialId] = m;
-            }
-            GD.Print($"MaterialStatsDb loaded {_lookup.Count} materials from JSON.");
+            var entry = JsonSerializer.Deserialize<MaterialStatEntryData>(text);
+            if (entry == null) return;
+
+            // Falls back to the filename (minus .json) if materialId was left blank,
+            // so "flint.json" with no materialId set still works as "flint".
+            if (string.IsNullOrEmpty(entry.MaterialId))
+                entry.MaterialId = fileName.Substring(0, fileName.Length - ".json".Length);
+
+            _lookup[entry.MaterialId] = entry;
         }
         catch (Exception e)
         {
-            GD.PrintErr($"MaterialStatsDb: failed to parse {JsonPath}: {e.Message}");
+            GD.PrintErr($"MaterialStatsDb: failed to parse {fullPath}: {e.Message}");
         }
     }
 
@@ -63,18 +81,13 @@ public static class MaterialStatsDb
         return null;
     }
 
-    // Call this (e.g. from a debug key) to re-read materials.json without
-    // restarting the game - handy for tuning numbers while playtesting.
+    // Call this (e.g. from a debug key) to re-scan the Materials folder
+    // without restarting the game - handy while playtesting.
     public static void Reload() => _lookup = null;
-
-    private class MaterialsWrapper
-    {
-        [JsonPropertyName("materials")] public List<MaterialStatEntryData> Materials { get; set; } = new();
-    }
 }
 
-// Plain data class (not a Godot Resource) - one entry per material.
-// Field names/behavior match the old MaterialStatEntry exactly.
+// Plain data class (not a Godot Resource) - one JSON file deserializes
+// straight into one of these.
 public class MaterialStatEntryData
 {
     [JsonPropertyName("materialId")]        public string MaterialId { get; set; } = "";
@@ -82,6 +95,9 @@ public class MaterialStatEntryData
     [JsonPropertyName("miningSpeedMod")]    public float  MiningSpeedMod { get; set; } = 1.0f;
     [JsonPropertyName("attackDamageMod")]   public float  AttackDamageMod { get; set; } = 1.0f;
     [JsonPropertyName("tier")]              public int    Tier { get; set; } = 0;
+    // NEW - tooltip stats. miningPower: "Pixels", 1-8. cooldownSeconds: swing/use time.
+    [JsonPropertyName("miningPower")]       public int    MiningPower { get; set; } = 1;
+    [JsonPropertyName("cooldownSeconds")]   public float  CooldownSeconds { get; set; } = 1.0f;
     [JsonPropertyName("traitId")]           public string TraitId { get; set; } = "";
     [JsonPropertyName("traitMagnitude")]    public float  TraitMagnitude { get; set; } = 0f;
 }

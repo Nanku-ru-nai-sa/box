@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dy8jrrhuea3ef"
-path="res://.godot/imported/acacia_sapling.png-81df7117a9aa33ba0123a978e45a432d.ctex"
+uid="uid://beersneqnkhjv"
+path="res://.godot/imported/shale.png-40ffd13ba5d206c0ff5f0c004506744f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/acacia_sapling.png"
-dest_files=["res://.godot/imported/acacia_sapling.png-81df7117a9aa33ba0123a978e45a432d.ctex"]
+source_file="res://Assets/Textures/Blocks/shale.png"
+dest_files=["res://.godot/imported/shale.png-40ffd13ba5d206c0ff5f0c004506744f.ctex"]
 
 [params]
 

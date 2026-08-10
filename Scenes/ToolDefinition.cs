@@ -1,9 +1,18 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 // ToolDefinition — static registry of all tools and their properties.
 // To add a new tool, add a new ToolType entry and register it in BuildRegistry().
 // Hit counts: lower = faster. Hand = 6, basic tools = 4, upgrades = 3, 2, 1.
+//
+// UPDATED: GetToolType() and GetHitsToBreak() now also recognize tools
+// crafted at the Tool Bench, which aren't in the static _itemToolMap below
+// (their ids are generated at runtime, e.g. "tool_pickaxe_flint_stick").
+// Crafted tools' actual ToolSpeed stat (set from the head material's
+// MiningSpeedMod in materials.json) now scales the hit count too - a
+// material with MiningSpeedMod 1.0 mines at the same speed as before,
+// anything higher mines faster.
 
 public static class ToolDefinition
 {
@@ -14,6 +23,8 @@ public static class ToolDefinition
         Axe,
         Shovel,
         Sword,
+        Hoe,
+        Hammer,
         // Future upgrades:
         // IronPickaxe, DiamondPickaxe, etc.
     }
@@ -56,7 +67,8 @@ public static class ToolDefinition
         { "water",       ToolType.Hand },
     };
 
-    // Tool registry — hit counts per tool type
+    // Tool registry — BASE hit counts per tool type, before a crafted
+    // tool's own ToolSpeed stat is applied (see GetHitsToBreak).
     private static readonly Dictionary<ToolType, int> _toolHits = new()
     {
         { ToolType.Hand,    6 },
@@ -64,9 +76,13 @@ public static class ToolDefinition
         { ToolType.Axe,     4 },
         { ToolType.Shovel,  4 },
         { ToolType.Sword,   5 }, // sword is weak at breaking blocks
+        { ToolType.Hoe,     4 },
+        { ToolType.Hammer,  3 }, // heavier, hits harder - tune as needed
     };
 
-    // Item ID → tool type (what tool is this item?)
+    // Item ID → tool type, for hand-authored/static tool items.
+    // Tool Bench crafted tools are NOT listed here - they're recognized
+    // dynamically in GetToolType() instead, since their ids are generated.
     private static readonly Dictionary<string, ToolType> _itemToolMap = new()
     {
         { "pickaxe",         ToolType.Pickaxe },
@@ -88,11 +104,19 @@ public static class ToolDefinition
         // Hand blocks always take hand speed regardless of tool
         if (requiredTool == ToolType.Hand) return _toolHits[ToolType.Hand];
 
-        // Right tool — use that tool's hit count
-        if (heldTool == requiredTool) return _toolHits[heldTool];
-
         // Wrong tool — always hand speed
-        return _toolHits[ToolType.Hand];
+        if (heldTool != requiredTool) return _toolHits[ToolType.Hand];
+
+        int baseHits = _toolHits[heldTool];
+
+        // Crafted (Tool Bench) tools carry their own ToolSpeed multiplier -
+        // scale the base hit count by it. Static/hand-authored items (not
+        // in ItemRegistry, or ToolSpeed left at its 1f default) behave
+        // exactly as before.
+        var item = ItemRegistry.Instance?.GetItem(heldItemId);
+        float speedMod = (item != null && item.ToolSpeed > 0f) ? item.ToolSpeed : 1f;
+
+        return Mathf.Max(1, Mathf.RoundToInt(baseHits / speedMod));
     }
 
     // What tool type does this block require?
@@ -106,13 +130,25 @@ public static class ToolDefinition
     public static ToolType GetToolType(string itemId)
     {
         if (string.IsNullOrEmpty(itemId)) return ToolType.Hand;
-        return _itemToolMap.TryGetValue(itemId, out var t) ? t : ToolType.Hand;
+
+        if (_itemToolMap.TryGetValue(itemId, out var t)) return t;
+
+        // Not a static item - check if it's a Tool Bench crafted tool
+        // (ItemRegistry.RegisterRuntime sets ToolType to the family name,
+        // e.g. "Pickaxe", at craft time).
+        var item = ItemRegistry.Instance?.GetItem(itemId);
+        if (item != null && !string.IsNullOrEmpty(item.ToolType) &&
+            Enum.TryParse<ToolType>(item.ToolType, true, out var parsed))
+            return parsed;
+
+        return ToolType.Hand;
     }
 
     // Is this item a tool?
     public static bool IsTool(string itemId)
     {
-        return !string.IsNullOrEmpty(itemId) && _itemToolMap.ContainsKey(itemId);
+        if (string.IsNullOrEmpty(itemId)) return false;
+        return GetToolType(itemId) != ToolType.Hand;
     }
 
     // Register a new tool item (call from game init if adding tools dynamically)

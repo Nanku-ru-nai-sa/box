@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://hlrxvsjn5c5f"
-path="res://.godot/imported/grass_block_top_flower_small.png-2b1b571c58148a755fb066299d2ad86b.ctex"
+uid="uid://cih8ep0fx75w7"
+path="res://.godot/imported/mudstone.png-57d0123e55f2220fe88ea16c600f0e02.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/grass_block_top_flower_small.png"
-dest_files=["res://.godot/imported/grass_block_top_flower_small.png-2b1b571c58148a755fb066299d2ad86b.ctex"]
+source_file="res://Assets/Textures/Blocks/mudstone.png"
+dest_files=["res://.godot/imported/mudstone.png-57d0123e55f2220fe88ea16c600f0e02.ctex"]
 
 [params]
 

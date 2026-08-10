@@ -1,0 +1,11 @@
+{
+  "materialId": "flint",
+  "durabilityPerUnit": 32,
+  "miningSpeedMod": 1.0,
+  "attackDamageMod": 1.0,
+  "tier": 0,
+  "miningPower": 2,
+  "cooldownSeconds": 0.33,
+  "traitId": "",
+  "traitMagnitude": 0.0
+}

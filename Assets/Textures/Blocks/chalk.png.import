@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d1mv4f66ymvwk"
-path="res://.godot/imported/grass_block_top_clover.png-63b0b9928ec988e7d91e47d13f52a043.ctex"
+uid="uid://bllpvwihc1xa5"
+path="res://.godot/imported/chalk.png-9757c8a8af3a2ec3f4427f7949a394a9.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/grass_block_top_clover.png"
-dest_files=["res://.godot/imported/grass_block_top_clover.png-63b0b9928ec988e7d91e47d13f52a043.ctex"]
+source_file="res://Assets/Textures/Blocks/chalk.png"
+dest_files=["res://.godot/imported/chalk.png-9757c8a8af3a2ec3f4427f7949a394a9.ctex"]
 
 [params]
 

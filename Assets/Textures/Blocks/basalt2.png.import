@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cqxap3f1lhelg"
-path="res://.godot/imported/grass_block_top_flower_big.png-152fb38475c7f2bb09a2e669b90fa513.ctex"
+uid="uid://bk7w3mhl21cv8"
+path="res://.godot/imported/basalt2.png-1c0efe10bcc8f5635728e3c18af11d6a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/grass_block_top_flower_big.png"
-dest_files=["res://.godot/imported/grass_block_top_flower_big.png-152fb38475c7f2bb09a2e669b90fa513.ctex"]
+source_file="res://Assets/Textures/Blocks/basalt2.png"
+dest_files=["res://.godot/imported/basalt2.png-1c0efe10bcc8f5635728e3c18af11d6a.ctex"]
 
 [params]
 

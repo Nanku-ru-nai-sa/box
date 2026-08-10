@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ckgv4floi02le"
-path="res://.godot/imported/grass_block_top_clover_small.png-d7a6aaa890ceaa4a0c97c4f304ce96ef.ctex"
+uid="uid://b518k4a40issh"
+path="res://.godot/imported/silt.png-16bf29737ddb17a37e3cb51eb38b4892.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/grass_block_top_clover_small.png"
-dest_files=["res://.godot/imported/grass_block_top_clover_small.png-d7a6aaa890ceaa4a0c97c4f304ce96ef.ctex"]
+source_file="res://Assets/Textures/Blocks/silt.png"
+dest_files=["res://.godot/imported/silt.png-16bf29737ddb17a37e3cb51eb38b4892.ctex"]
 
 [params]
 

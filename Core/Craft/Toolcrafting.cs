@@ -11,6 +11,8 @@
 using Godot;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 public static class ToolCrafting
 {
@@ -63,6 +65,13 @@ public static class ToolCrafting
 
         if (!ItemRegistry.Instance.ItemExists(itemId))
         {
+            // Head material drives the tool's combat/mining stats for now -
+            // simplest reasonable rule until Binding/Handle contribute their
+            // own weighted slice (see the original Tetra-style design notes).
+            var headMat = materialsBySlot.TryGetValue(PartSlot.HeadA, out var headMatId)
+                ? MaterialStatsDb.Get(headMatId)
+                : null;
+
             var item = new ItemResource
             {
                 ItemId = itemId,
@@ -73,17 +82,166 @@ public static class ToolCrafting
                 IsEquippable = true,
                 EquipSlot = "hand",
                 ToolType = primaryFamily.ToString(),
+                ToolSpeed = headMat?.MiningSpeedMod ?? 1f,
+                ToolTier = headMat?.Tier ?? 0,
+                AttackDamage = headMat?.AttackDamageMod ?? 1f,
+                AttackSpeed = 1f, // placeholder - not derived from anything yet (no weight-class system built)
+                MiningPower = headMat?.MiningPower ?? 1,
+                CooldownSeconds = headMat?.CooldownSeconds ?? 1f,
                 HasDurability = true,
                 MaxDurability = durability,
                 Tags = BuildRecipeTags(primaryFamily, secondaryFamily, materialsBySlot),
-                // Icon is left null for now - set once the extrusion/compositor
-                // pipeline for tool models exists.
+                Icon = BuildToolIcon(primaryFamily, secondaryFamily, materialsBySlot),
             };
 
             ItemRegistry.Instance.RegisterRuntime(item);
+            PersistRecipe(itemId, primaryFamily, secondaryFamily, materialsBySlot);
         }
 
         return (itemId, durability);
+    }
+
+    // =========================================================================
+    // PERSISTENCE — crafted tools only exist as ItemResource templates in
+    // memory. On restart, ItemRegistry starts empty except for the hardcoded
+    // static items, so a saved inventory referencing e.g. "tool_pickaxe_flint_stick"
+    // points at nothing and shows no icon. Fix: persist just the RECIPE (tiny -
+    // family + materials) here, and replay every recipe at startup via
+    // LoadPersistedRecipes(), which deterministically rebuilds the exact
+    // same item (same id, same icon, same stats) before anything tries to
+    // look it up.
+    // =========================================================================
+
+    private const string RecipeSavePath = "user://crafted_tools.json";
+
+    private class RecipeRecord
+    {
+        [JsonPropertyName("itemId")]    public string ItemId { get; set; } = "";
+        [JsonPropertyName("primary")]   public string Primary { get; set; } = "";
+        [JsonPropertyName("secondary")] public string Secondary { get; set; } = null;
+        [JsonPropertyName("materials")] public Dictionary<string, string> Materials { get; set; } = new();
+    }
+
+    private class RecipeFile
+    {
+        [JsonPropertyName("recipes")] public List<RecipeRecord> Recipes { get; set; } = new();
+    }
+
+    private static void PersistRecipe(
+        string itemId,
+        ToolFamily primaryFamily,
+        ToolFamily? secondaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        RecipeFile data = LoadRecipeFile();
+
+        if (data.Recipes.Any(r => r.ItemId == itemId)) return; // already persisted
+
+        var record = new RecipeRecord
+        {
+            ItemId    = itemId,
+            Primary   = primaryFamily.ToString().ToLower(),
+            Secondary = secondaryFamily?.ToString().ToLower(),
+        };
+        foreach (var kvp in materialsBySlot)
+            record.Materials[kvp.Key.ToString().ToLower()] = kvp.Value;
+
+        data.Recipes.Add(record);
+        SaveRecipeFile(data);
+    }
+
+    private static RecipeFile LoadRecipeFile()
+    {
+        if (!Godot.FileAccess.FileExists(RecipeSavePath)) return new RecipeFile();
+
+        using var f = Godot.FileAccess.Open(RecipeSavePath, Godot.FileAccess.ModeFlags.Read);
+        string text = f.GetAsText();
+
+        try { return JsonSerializer.Deserialize<RecipeFile>(text) ?? new RecipeFile(); }
+        catch (System.Exception e)
+        {
+            GD.PrintErr($"ToolCrafting: failed to parse {RecipeSavePath}: {e.Message}");
+            return new RecipeFile();
+        }
+    }
+
+    private static void SaveRecipeFile(RecipeFile data)
+    {
+        using var f = Godot.FileAccess.Open(RecipeSavePath, Godot.FileAccess.ModeFlags.Write);
+        f.StoreString(JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    // Call this once at startup (see ItemRegistry._Ready()) BEFORE anything
+    // tries to load a saved inventory that might reference a crafted tool.
+    public static void LoadPersistedRecipes()
+    {
+        var data = LoadRecipeFile();
+        if (data.Recipes.Count == 0) return;
+
+        int rebuilt = 0;
+        foreach (var r in data.Recipes)
+        {
+            if (!System.Enum.TryParse<ToolFamily>(r.Primary, true, out var primary)) continue;
+
+            ToolFamily? secondary = null;
+            if (!string.IsNullOrEmpty(r.Secondary) && System.Enum.TryParse<ToolFamily>(r.Secondary, true, out var sec))
+                secondary = sec;
+
+            var materialsBySlot = new Dictionary<PartSlot, string>();
+            foreach (var kvp in r.Materials)
+                if (System.Enum.TryParse<PartSlot>(kvp.Key, true, out var slot))
+                    materialsBySlot[slot] = kvp.Value;
+
+            CraftTool(primary, secondary, materialsBySlot); // idempotent - just re-registers
+            rebuilt++;
+        }
+
+        GD.Print($"ToolCrafting: rebuilt {rebuilt} persisted tool recipes.");
+    }
+
+    // Composites a tool's icon from its part shape textures:
+    //   Head:   res://Assets/Textures/Items/tool/{family}/{material}_head.png
+    //   Handle: res://Assets/Textures/Items/tool/stick/{material}.png
+    // Draw order is handle first (sits behind), then head(s) on top.
+    // Returns null if none of the expected files exist yet (safe to leave
+    // unset - the UI just shows a blank icon slot until the art's in).
+    private static Texture2D BuildToolIcon(
+        ToolFamily primaryFamily,
+        ToolFamily? secondaryFamily,
+        Dictionary<PartSlot, string> materialsBySlot)
+    {
+        Image canvas = null;
+
+        void Blend(string path)
+        {
+            if (!ResourceLoader.Exists(path)) return;
+            var partTex = ResourceLoader.Load<Texture2D>(path);
+            var partImg = partTex.GetImage();
+            if (partImg == null) return;
+
+            if (canvas == null)
+                canvas = Image.CreateEmpty(partImg.GetWidth(), partImg.GetHeight(), false, Image.Format.Rgba8);
+
+            canvas.BlendRect(partImg, new Rect2I(Vector2I.Zero, partImg.GetSize()), Vector2I.Zero);
+        }
+
+        if (materialsBySlot.TryGetValue(PartSlot.Handle, out var handleMat))
+            Blend($"res://Assets/Textures/Items/tool/stick/{handleMat}.png");
+
+        if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
+            Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
+
+        if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
+            Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
+
+        if (canvas != null)
+            return ImageTexture.CreateFromImage(canvas);
+
+        // Nothing found at all (no head/handle art yet for this recipe) -
+        // fall back to the same "unknown" chalk texture the center diamond
+        // uses when no tool type is selected, rather than a blank icon.
+        const string unknownPath = "res://Assets/Textures/Items/tool/chalk/unknown.png";
+        return ResourceLoader.Exists(unknownPath) ? ResourceLoader.Load<Texture2D>(unknownPath) : null;
     }
 
     // Encodes the recipe onto the item as Tags, e.g.

@@ -51,6 +51,7 @@ public partial class ToolBenchPanel : Control
     private Panel         _centerPiece;
 
     private Panel        _outputSlot;
+    private ItemTooltip  _tooltip;
     private TextureRect  _outputTex;
     private Label        _outputLabel;
     private Label        _statusLabel;
@@ -103,6 +104,9 @@ public partial class ToolBenchPanel : Control
         BuildFamilyPicker();
         UpdateCenterIcon();
         UpdateOutputPreview();
+
+        _tooltip = new ItemTooltip();
+        AddChild(_tooltip); // added last = renders above everything, including the family picker
     }
 
     // =========================================================================
@@ -253,6 +257,12 @@ public partial class ToolBenchPanel : Control
             slot.MouseFilter   = MouseFilterEnum.Stop;
             slot.MouseEntered += () => slot.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.7f, 0.7f, 0.75f)));
             slot.MouseExited  += () => slot.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.3f, 0.3f, 0.35f)));
+            slot.MouseEntered += () =>
+            {
+                var s = _sockets[idx];
+                if (!s.IsEmpty) _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(s.ItemId), GetGlobalMousePosition());
+            };
+            slot.MouseExited += () => _tooltip?.HideTooltip();
 
             _socketRow.AddChild(slot);
             _socketPanels[i] = slot;
@@ -298,6 +308,12 @@ public partial class ToolBenchPanel : Control
         _outputSlot.AddChild(_outputTex);
         _outputSlot.GuiInput   += OnOutputInput;
         _outputSlot.MouseFilter  = MouseFilterEnum.Stop;
+        _outputSlot.MouseEntered += () =>
+        {
+            if (_currentResult != null && _currentResult.Success)
+                _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(_currentResult.ItemId), GetGlobalMousePosition());
+        };
+        _outputSlot.MouseExited += () => _tooltip?.HideTooltip();
         _socketRow.AddChild(_outputSlot);
 
         _outputLabel = new Label();
@@ -317,7 +333,7 @@ public partial class ToolBenchPanel : Control
         _statusLabel.CustomMinimumSize   = new Vector2(PanelW, 32f);
         _statusLabel.AutowrapMode        = TextServer.AutowrapMode.Word;
         _statusLabel.AddThemeFontSizeOverride("font_size", 10);
-        _statusLabel.AddThemeColorOverride("font_color", new Color(0.8f, 0.6f, 0.4f));
+        _statusLabel.AddThemeColorOverride("font_color", new Color(0.8f, 0.35f, 0.3f)); // red - shown for invalid/failed craft reasons
         _statusLabel.MouseFilter         = MouseFilterEnum.Ignore;
         _socketRow.AddChild(_statusLabel);
     }
@@ -415,8 +431,9 @@ public partial class ToolBenchPanel : Control
 
         if (_currentResult.Success)
         {
-            _outputTex.Texture = null; // no composited icon yet - see note in ToolBenchCraftResolver
-            _outputLabel.Text  = ItemRegistry.Instance.GetItem(_currentResult.ItemId)?.DisplayName ?? _currentResult.ItemId;
+            var resultItem = ItemRegistry.Instance.GetItem(_currentResult.ItemId);
+            _outputTex.Texture = resultItem?.Icon; // composited in ToolCrafting.CraftTool - null if part art is missing
+            _outputLabel.Text  = resultItem?.DisplayName ?? _currentResult.ItemId;
             _statusLabel.Text  = "";
 
             var hs = new StyleBoxFlat();

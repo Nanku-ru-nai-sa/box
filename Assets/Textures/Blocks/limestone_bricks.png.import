@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c3x3k6qmcey1c"
-path="res://.godot/imported/limestone.png-47d7fdbca7121ad222c33bad6218186f.ctex"
+uid="uid://boj7b8ap8j4uk"
+path="res://.godot/imported/limestone_bricks.png-9f9f1c9d60468cee941aa454553a8e30.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/limestone.png"
-dest_files=["res://.godot/imported/limestone.png-47d7fdbca7121ad222c33bad6218186f.ctex"]
+source_file="res://Assets/Textures/Blocks/limestone_bricks.png"
+dest_files=["res://.godot/imported/limestone_bricks.png-9f9f1c9d60468cee941aa454553a8e30.ctex"]
 
 [params]
 

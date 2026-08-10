@@ -1,3 +1,7 @@
+// UPDATED FILE - replaces ItemResource.cs
+// Added two fields for the tool tooltip: MiningPower and CooldownSeconds.
+// Everything else is unchanged from your original.
+
 using Godot;
 
 [GlobalClass]
@@ -33,6 +37,10 @@ public partial class ItemResource : Resource
     [Export] public string ToolType { get; set; } = "";
     [Export] public float ToolSpeed { get; set; } = 1f;
     [Export] public int ToolTier { get; set; } = 0;
+    // NEW - tooltip stats. "Pixels": how many blocks/voxels this tool mines
+    // per use, 1-8. CooldownSeconds: time between swings/uses.
+    [Export] public int MiningPower { get; set; } = 1;
+    [Export] public float CooldownSeconds { get; set; } = 1f;
     [Export] public bool HasDurability { get; set; } = false;
     [Export] public int MaxDurability { get; set; } = 0;
     [Export] public bool IsConsumable { get; set; } = false;
