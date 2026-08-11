@@ -42,6 +42,27 @@ public partial class BlockRegistry : Node
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
         var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
 
+        // Geology Layer rocks - fill for ChunkManager's Layers list (the
+        // geology/soil-band system). diorite/gabbro previously only had
+        // item-icon art (Items/rock/) - now using the proper tileable
+        // block-face textures added alongside the rest of this set.
+        var basaltTex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/basalt.png");
+        var graniteTex     = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/granite.png");
+        var magmaTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/magma.png");
+        var gabbroTex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gabbro.png");
+        var subBedrockTex  = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/sub_bedrock.png");
+        var dioriteTex     = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/diorite.png");
+        var deepStoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/deep_stone.png");
+        var denserStoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/denser_stone.png");
+        var slateTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/slate.png");
+        var slate2Tex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/slate2.png"); // registered but not used in Layers yet - alt texture to try later
+        var limestoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/limestone.png");
+        var shaleTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/shale.png");
+        var siltTex        = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/silt.png");
+        var mudstoneTex    = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/mudstone.png");
+        var softStoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soft_stone.png");
+        var chalkTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/chalk.png");
+
         // Ore Hint Rocks - small flat-ground pebbles, same rendering
         // mechanism as clover. Using the existing Items/ icon art instead of
         // making new dedicated rock textures.
@@ -227,6 +248,112 @@ public partial class BlockRegistry : Node
         rockCopper.IsSolid = false; rockCopper.CanChisel = false; rockCopper.IsTransparent = true; rockCopper.IsFlatGround = true; rockCopper.IsThinItem = true; rockCopper.Hardness = 0f;
         rockCopper.TextureTop = rockCopperTex; rockCopper.TextureSide = rockCopperTex; rockCopper.TextureBottom = rockCopperTex;
         Register(rockCopper);
+
+        // ---- Geology Layer rocks ----
+        // Fill for ChunkManager's Layers list. Hardness roughly climbs
+        // with rock "grade" - soft soils lowest, sedimentary next,
+        // transitional/metamorphic higher, crystalline/deep igneous
+        // highest - loosely mirroring how dirt (0.5) through obsidian
+        // (50) are already spread out above. Ordered here shallow-to-deep
+        // to match the Layers list.
+
+        var silt = new BlockResource();
+        silt.BlockId = "silt"; silt.DisplayName = "Silt";
+        silt.IsSolid = true; silt.CanChisel = true; silt.Hardness = 0.5f;
+        silt.TextureTop = siltTex; silt.TextureSide = siltTex; silt.TextureBottom = siltTex;
+        Register(silt);
+
+        var softStone = new BlockResource();
+        softStone.BlockId = "soft_stone"; softStone.DisplayName = "Soft Stone";
+        softStone.IsSolid = true; softStone.CanChisel = true; softStone.Hardness = 0.8f;
+        softStone.TextureTop = softStoneTex; softStone.TextureSide = softStoneTex; softStone.TextureBottom = softStoneTex;
+        Register(softStone);
+
+        var chalk = new BlockResource();
+        chalk.BlockId = "chalk"; chalk.DisplayName = "Chalk";
+        chalk.IsSolid = true; chalk.CanChisel = true; chalk.Hardness = 0.7f;
+        chalk.TextureTop = chalkTex; chalk.TextureSide = chalkTex; chalk.TextureBottom = chalkTex;
+        Register(chalk);
+
+        var mudstone = new BlockResource();
+        mudstone.BlockId = "mudstone"; mudstone.DisplayName = "Mudstone";
+        mudstone.IsSolid = true; mudstone.CanChisel = true; mudstone.Hardness = 0.9f;
+        mudstone.TextureTop = mudstoneTex; mudstone.TextureSide = mudstoneTex; mudstone.TextureBottom = mudstoneTex;
+        Register(mudstone);
+
+        var shale = new BlockResource();
+        shale.BlockId = "shale"; shale.DisplayName = "Shale";
+        shale.IsSolid = true; shale.CanChisel = true; shale.Hardness = 1.1f;
+        shale.TextureTop = shaleTex; shale.TextureSide = shaleTex; shale.TextureBottom = shaleTex;
+        Register(shale);
+
+        var limestone = new BlockResource();
+        limestone.BlockId = "limestone"; limestone.DisplayName = "Limestone";
+        limestone.IsSolid = true; limestone.CanChisel = true; limestone.Hardness = 1.3f;
+        limestone.TextureTop = limestoneTex; limestone.TextureSide = limestoneTex; limestone.TextureBottom = limestoneTex;
+        Register(limestone);
+
+        var slate = new BlockResource();
+        slate.BlockId = "slate"; slate.DisplayName = "Slate";
+        slate.IsSolid = true; slate.CanChisel = true; slate.Hardness = 1.6f;
+        slate.TextureTop = slateTex; slate.TextureSide = slateTex; slate.TextureBottom = slateTex;
+        Register(slate);
+
+        // Not in the Layers list yet - registered so it's ready to drop
+        // in whenever you want to try it (per your note).
+        var slate2 = new BlockResource();
+        slate2.BlockId = "slate2"; slate2.DisplayName = "Slate (Alt)";
+        slate2.IsSolid = true; slate2.CanChisel = true; slate2.Hardness = 1.6f;
+        slate2.TextureTop = slate2Tex; slate2.TextureSide = slate2Tex; slate2.TextureBottom = slate2Tex;
+        Register(slate2);
+
+        var denserStone = new BlockResource();
+        denserStone.BlockId = "denser_stone"; denserStone.DisplayName = "Denser Stone";
+        denserStone.IsSolid = true; denserStone.CanChisel = true; denserStone.Hardness = 1.7f;
+        denserStone.TextureTop = denserStoneTex; denserStone.TextureSide = denserStoneTex; denserStone.TextureBottom = denserStoneTex;
+        Register(denserStone);
+
+        var diorite = new BlockResource();
+        diorite.BlockId = "diorite"; diorite.DisplayName = "Diorite";
+        diorite.IsSolid = true; diorite.CanChisel = true; diorite.Hardness = 1.9f;
+        diorite.TextureTop = dioriteTex; diorite.TextureSide = dioriteTex; diorite.TextureBottom = dioriteTex;
+        Register(diorite);
+
+        var granite = new BlockResource();
+        granite.BlockId = "granite"; granite.DisplayName = "Granite";
+        granite.IsSolid = true; granite.CanChisel = true; granite.Hardness = 2.0f;
+        granite.TextureTop = graniteTex; granite.TextureSide = graniteTex; granite.TextureBottom = graniteTex;
+        Register(granite);
+
+        var deepStone = new BlockResource();
+        deepStone.BlockId = "deep_stone"; deepStone.DisplayName = "Deep Stone";
+        deepStone.IsSolid = true; deepStone.CanChisel = true; deepStone.Hardness = 2.1f;
+        deepStone.TextureTop = deepStoneTex; deepStone.TextureSide = deepStoneTex; deepStone.TextureBottom = deepStoneTex;
+        Register(deepStone);
+
+        var gabbro = new BlockResource();
+        gabbro.BlockId = "gabbro"; gabbro.DisplayName = "Gabbro";
+        gabbro.IsSolid = true; gabbro.CanChisel = true; gabbro.Hardness = 2.1f;
+        gabbro.TextureTop = gabbroTex; gabbro.TextureSide = gabbroTex; gabbro.TextureBottom = gabbroTex;
+        Register(gabbro);
+
+        var basalt = new BlockResource();
+        basalt.BlockId = "basalt"; basalt.DisplayName = "Basalt";
+        basalt.IsSolid = true; basalt.CanChisel = true; basalt.Hardness = 1.8f;
+        basalt.TextureTop = basaltTex; basalt.TextureSide = basaltTex; basalt.TextureBottom = basaltTex;
+        Register(basalt);
+
+        var subBedrock = new BlockResource();
+        subBedrock.BlockId = "sub_bedrock"; subBedrock.DisplayName = "Sub-Bedrock";
+        subBedrock.IsSolid = true; subBedrock.CanChisel = true; subBedrock.Hardness = 2.3f;
+        subBedrock.TextureTop = subBedrockTex; subBedrock.TextureSide = subBedrockTex; subBedrock.TextureBottom = subBedrockTex;
+        Register(subBedrock);
+
+        var magma = new BlockResource();
+        magma.BlockId = "magma"; magma.DisplayName = "Magma Rock";
+        magma.IsSolid = true; magma.CanChisel = true; magma.Hardness = 2.5f;
+        magma.TextureTop = magmaTex; magma.TextureSide = magmaTex; magma.TextureBottom = magmaTex;
+        Register(magma);
 
         GD.Print("Blocks registered.");
     }

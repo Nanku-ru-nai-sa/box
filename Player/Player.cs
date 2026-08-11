@@ -39,7 +39,7 @@ public partial class Player : CharacterBody3D
     // ── Break overlay ─────────────────────────────────────────────────────────
     private BlockBreakOverlay _breakOverlay;
     private int               _breakHitCount      = 0;
-    private int               _breakHitsNeeded    = 6;
+    private int               _breakMiningPower   = 1;
     private Vector3I          _breakTargetBlock   = new Vector3I(int.MinValue, 0, 0);
     private string            _breakTargetBlockId = "";
 
@@ -2069,11 +2069,12 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             _breakTargetBlock   = blockWorldPos;
             _breakTargetBlockId = b.BlockId;
             string heldItem = _inventory.Slots[MainInvSize + _selectedSlot].IsEmpty ? "" : _inventory.Slots[MainInvSize + _selectedSlot].ItemId;
-            _breakHitsNeeded = ToolDefinition.GetHitsToBreak(b.BlockId, heldItem);
+            _breakMiningPower = ToolDefinition.GetEffectiveMiningPower(b.BlockId, heldItem);
         }
 
         _breakHitCount++;
-        bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakHitsNeeded) ?? (_breakHitCount >= _breakHitsNeeded);
+        bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakMiningPower)
+            ?? (_breakHitCount * _breakMiningPower >= BlockBreakOverlay.TotalStages);
         if (shouldBreak)
         {
             var (drop, dropCount) = GetDrop(b.BlockId);

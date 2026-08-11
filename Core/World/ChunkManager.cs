@@ -90,6 +90,8 @@ public partial class ChunkManager : Node3D
 
     [Export] public float RockPatchRarity = 0.52f; // "rock" (cobblestone-style) patches - higher = rarer/smaller patches
     [Export] public float DirtPatchRarity = 0.60f; // rare underground dirt patches - higher = rarer/smaller patches
+    [Export] public float ClayPatchRarity = 0.58f; // underground clay patches (separate from beach clay) - higher = rarer/smaller patches
+    private FastNoiseLite _clayPatchNoise = new FastNoiseLite();
 
     // ---- ORE HINT ROCKS ----
     // Small non-block pebbles that can spawn on the grass surface, hinting
@@ -180,25 +182,23 @@ public partial class ChunkManager : Node3D
     // Each entry (see GeologyLayerDef.cs) can list 1-3 BlockIds. With 2-3,
     // that band generates as big blobby PATCHES mixing them together
     // (e.g. one band that's a mix of sand/clay/gravel), not scattered
-    // per-block noise. Every entry defaults to a single "stone" for now -
-    // that's zero visual change from before. Since these are real
-    // BlockIds, you can already try mixing 2-3 of the blocks that exist
-    // today (sand, clay, gravel, dirt, rock, stone) right in the
-    // Inspector to test how the patch-mixing feels before committing to
-    // any new rock textures. ("silt" isn't a registered block yet, by the
-    // way - say the word and I'll add the texture + BlockRegistry entry
-    // for it.)
+    // per-block noise.
+    //
+    // BlockWeights (optional, see GeologyLayerDef.cs) lets you make a
+    // layer's mix uneven instead of a straight split - e.g. {50,25,25}.
+    // Left empty below for now (even split) - add weights per-layer
+    // whenever you want to play with that.
     [ExportGroup("Geology Layers")]
     [Export] public Godot.Collections.Array<GeologyLayerDef> Layers = new Godot.Collections.Array<GeologyLayerDef>
     {
-        new GeologyLayerDef { LayerName = "Layer 0 (just above bedrock)" },
-        new GeologyLayerDef { LayerName = "Layer 1" },
-        new GeologyLayerDef { LayerName = "Layer 2" },
-        new GeologyLayerDef { LayerName = "Layer 3" },
-        new GeologyLayerDef { LayerName = "Layer 4" },
-        new GeologyLayerDef { LayerName = "Layer 5" },
-        new GeologyLayerDef { LayerName = "Layer 6" },
-        new GeologyLayerDef { LayerName = "Layer 7" },
+        new GeologyLayerDef { LayerName = "Ancient Crust",     BlockOptions = new string[] { "basalt", "granite", "magma" },        BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Layer 1",           BlockOptions = new string[] { "basalt", "gabbro", "sub_bedrock" },   BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Deep Crust",        BlockOptions = new string[] { "gabbro", "diorite", "deep_stone" },   BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Crystalline Crust", BlockOptions = new string[] { "diorite", "granite", "basalt" },      BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Transitional Rock", BlockOptions = new string[] { "slate", "denser_stone", "limestone" },BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Sedimentary Rock",  BlockOptions = new string[] { "limestone", "shale", "stone" },       BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Soft Sediment",     BlockOptions = new string[] { "silt", "stone", "mudstone" },         BlockWeights = new float[] { 33f, 33f, 33f } },
+        new GeologyLayerDef { LayerName = "Loose Earth",       BlockOptions = new string[] { "silt", "soft_stone", "chalk" },       BlockWeights = new float[] { 33f, 33f, 33f } },
     };
     private FastNoiseLite _geologyPatchNoise = new FastNoiseLite(); // shared across all layers; each layer's own PatchScale + a per-layer coordinate offset keep them from all patching in lockstep
 
@@ -343,6 +343,10 @@ public partial class ChunkManager : Node3D
         _dirtPatchNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
         _dirtPatchNoise.Frequency = 0.055f;
         _dirtPatchNoise.Seed = Seed + 26;
+
+        _clayPatchNoise.NoiseType = FastNoiseLite.NoiseTypeEnum.Perlin;
+        _clayPatchNoise.Frequency = 0.055f;
+        _clayPatchNoise.Seed = Seed + 30;
 
         // Low frequency so the dirt layer thickness drifts gently over a
         // wide area instead of flickering block-to-block between columns.
@@ -1509,6 +1513,12 @@ public Vector3? LoadPlayerPosition()
         if (dirtVal > DirtPatchRarity)
             return new BlockState { BlockId = "dirt", BitMask = 0xFF };
 
+        // Underground clay patches - previously clay only showed up at
+        // beaches. Same style as the gravel/rock/dirt patches above.
+        float clayVal = _clayPatchNoise.GetNoise3D(worldX + 7000f, worldY * 2f, worldZ - 4000f);
+        if (clayVal > ClayPatchRarity)
+            return new BlockState { BlockId = "clay", BitMask = 0xFF };
+
         return new BlockState { BlockId = GetGeologyLayerBlockId(worldX, worldY, worldZ), BitMask = 0xFF };
     }
 
@@ -1537,14 +1547,43 @@ public Vector3? LoadPlayerPosition()
             (worldX + offset) * layer.PatchScale,
             worldY * layer.PatchScale,
             (worldZ - offset) * layer.PatchScale);
+        float u = (n + 1f) * 0.5f; // remap roughly -1..1 to roughly 0..1
 
-        if (layer.BlockOptions.Length == 2)
-            return n < 0f ? layer.BlockOptions[0] : layer.BlockOptions[1];
+        return PickWeightedBlockOption(layer, u);
+    }
 
-        // 3 options - split into roughly equal thirds.
-        if (n < -0.33f) return layer.BlockOptions[0];
-        if (n < 0.33f) return layer.BlockOptions[1];
-        return layer.BlockOptions[2];
+    // Picks which BlockOptions entry wins, using BlockWeights as relative
+    // proportions (e.g. {50,25,25}) if they're set, otherwise an even
+    // split across however many options the layer has. u is expected in
+    // roughly 0..1 (see caller).
+    private string PickWeightedBlockOption(GeologyLayerDef layer, float u)
+    {
+        int count = layer.BlockOptions.Length;
+        bool weightsUsable = layer.BlockWeights != null && layer.BlockWeights.Length == count;
+
+        float total = 0f;
+        if (weightsUsable)
+        {
+            foreach (float w in layer.BlockWeights)
+                total += Mathf.Max(0f, w);
+        }
+
+        if (!weightsUsable || total <= 0f)
+        {
+            // Even split fallback - same behavior as before BlockWeights existed.
+            int bucket = Mathf.Clamp((int)(u * count), 0, count - 1);
+            return layer.BlockOptions[bucket];
+        }
+
+        float target = u * total;
+        float cumulative = 0f;
+        for (int i = 0; i < count; i++)
+        {
+            cumulative += Mathf.Max(0f, layer.BlockWeights[i]);
+            if (target <= cumulative)
+                return layer.BlockOptions[i];
+        }
+        return layer.BlockOptions[count - 1]; // float rounding safety net
     }
 
     // Rolls and places every ore's veins for this chunk, rarest first (so a
@@ -1618,8 +1657,11 @@ public Vector3? LoadPlayerPosition()
                 // BlockIds underground (sand/clay/silt/whatever you add),
                 // an allow-list would need updating every time you add a
                 // new layer block. Deny-list instead: anything solid that
-                // isn't bedrock/obsidian/water can host ore.
-                bool eligibleHost = !existing.IsAir() && existing.BlockId is not ("bedrock" or "obsidian" or "water");
+                // isn't bedrock/obsidian/water/grass can host ore. Grass
+                // is excluded on purpose - ore popping out of the grass
+                // block right at the surface looked wrong; dirt just
+                // below it is still fair game.
+                bool eligibleHost = !existing.IsAir() && existing.BlockId is not ("bedrock" or "obsidian" or "water" or "grass_block");
                 bool alreadyOre = existing.Features != null && existing.Features.Length > 0;
                 if (eligibleHost && !alreadyOre)
                 {

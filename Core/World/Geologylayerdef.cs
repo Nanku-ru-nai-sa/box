@@ -14,7 +14,9 @@ using Godot;
 //                  noise that fine-grained looks like static/salt-and-
 //                  pepper, not natural material pockets). Good for
 //                  things like "this band is a mix of sand, silt, and
-//                  clay" rather than one uniform block.
+//                  clay" rather than one uniform block. Use BlockWeights
+//                  below to make the mix uneven (e.g. 70% one, 15/15 the
+//                  other two) instead of a straight even split.
 //
 // Every BlockId here must already be registered in BlockRegistry.cs (or
 // be an existing block like "stone"/"gravel"/"clay"/"sand"/"dirt"/"rock")
@@ -29,6 +31,17 @@ public partial class GeologyLayerDef : Resource
     [Export] public string LayerName = "New Layer";
 
     [Export] public string[] BlockOptions = new string[] { "stone" };
+
+    // Relative weights for each BlockOptions entry, SAME LENGTH and SAME
+    // ORDER as BlockOptions - e.g. {50, 25, 25} or {70, 15, 15}. Don't
+    // need to add up to 100, they're normalized automatically (so {2,1,1}
+    // behaves the same as {50,25,25}). Leave this empty, or a different
+    // length than BlockOptions, for an even split - that's the default.
+    //
+    // Heads up: this steers proportions, it doesn't guarantee them down
+    // to the decimal - the patches are still noise-based, not a literal
+    // dice roll, so a "50%" option will look CLOSE to half but not exact.
+    [Export] public float[] BlockWeights = new float[] { };
 
     // Patch size for this layer, only matters with 2-3 BlockOptions.
     // LOWER = bigger/smoother patches. HIGHER = smaller, more frequent

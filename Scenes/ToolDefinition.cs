@@ -95,6 +95,26 @@ public static class ToolDefinition
     // ── Public API ────────────────────────────────────────────────────────────
 
     // How many hits does it take to break this block with this item?
+    // Pixels-per-hit for the break overlay (see BlockBreakOverlay). Same
+    // right-tool/wrong-tool gating as GetHitsToBreak, but expressed as
+    // "how many pixels does this swing advance" rather than a hit count -
+    // this is now what actually determines break speed, GetHitsToBreak is
+    // no longer used by the mining code but is left intact in case
+    // anything else still reads it.
+    public static int GetEffectiveMiningPower(string blockId, string heldItemId)
+    {
+        ToolType requiredTool = GetRequiredTool(blockId);
+        ToolType heldTool     = GetToolType(heldItemId);
+
+        // Hand-only blocks and wrong-tool swings both mine at the same
+        // baseline pace: 1 pixel per hit.
+        if (requiredTool == ToolType.Hand) return 1;
+        if (heldTool != requiredTool) return 1;
+
+        var item = ItemRegistry.Instance?.GetItem(heldItemId);
+        return (item != null && item.MiningPower > 0) ? item.MiningPower : 1;
+    }
+
     public static int GetHitsToBreak(string blockId, string heldItemId)
     {
         // Bedrock is unbreakable in Survival (handled in Player)
