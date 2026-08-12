@@ -67,14 +67,20 @@ public partial class ItemTooltip : Control
         return lbl;
     }
 
-    // Call on hover. screenPos is typically GetGlobalMousePosition() or
-    // GetViewport().GetMousePosition(). currentDurability is the specific
-    // tool INSTANCE's remaining durability (e.g. from an InventorySlot) -
-    // pass null (or omit) when there isn't a specific instance yet (like a
-    // fresh Tool Bench craft preview), which shows max/max.
-    public void ShowFor(ItemResource item, Vector2 screenPos, int? currentDurability = null)
+    private Control _anchor;
+
+    // Call on hover, passing the slot/socket Control itself (not a mouse
+    // position) - the tooltip anchors to that control and appears just
+    // below it, flipping to appear above if there isn't room below (e.g.
+    // the hotbar sits right at the bottom of the screen). currentDurability
+    // is the specific tool INSTANCE's remaining durability (e.g. from an
+    // InventorySlot) - pass null (or omit) when there isn't a specific
+    // instance yet (like a fresh Tool Bench craft preview), which shows
+    // max/max.
+    public void ShowFor(ItemResource item, Control anchor, int? currentDurability = null)
     {
         if (item == null) { HideTooltip(); return; }
+        _anchor = anchor;
 
         _titleLabel.Text = item.DisplayName;
 
@@ -102,17 +108,36 @@ public partial class ItemTooltip : Control
         }
 
         Visible = true;
-        GlobalPosition = screenPos + new Vector2(16f, 16f);
 
         // Deferred so the labels' text (set just above) has already been
-        // through a layout pass and GetCombinedMinimumSize() is accurate.
+        // through a layout pass and GetCombinedMinimumSize() is accurate -
+        // ResizeBackground both sizes the box AND positions it relative to
+        // the anchor, since it needs the real size to decide above-vs-below.
         CallDeferred(nameof(ResizeBackground));
     }
 
     private void ResizeBackground()
     {
         Vector2 contentSize = _vbox.GetCombinedMinimumSize();
-        _bg.Size = contentSize + new Vector2(16f, 12f); // 8px left/right + 6px top/bottom margins
+        Vector2 boxSize     = contentSize + new Vector2(16f, 12f); // 8px left/right + 6px top/bottom margins
+        _bg.Size = boxSize;
+
+        if (_anchor == null || !IsInstanceValid(_anchor)) return;
+
+        Vector2 anchorPos  = _anchor.GlobalPosition;
+        Vector2 anchorSize = _anchor.Size;
+        Vector2 viewport   = GetViewport().GetVisibleRect().Size;
+        const float gap = 4f;
+
+        // Centered below the slot by default; flip above it if that would
+        // run past the bottom of the screen.
+        float x      = anchorPos.X; // left edge flush with the icon's left edge - tooltip grows right/down from there, not centered
+        float yBelow = anchorPos.Y + anchorSize.Y + gap;
+        float y      = (yBelow + boxSize.Y <= viewport.Y) ? yBelow : (anchorPos.Y - boxSize.Y - gap);
+
+        x = Mathf.Clamp(x, 4f, Mathf.Max(4f, viewport.X - boxSize.X - 4f)); // keep it on-screen horizontally too
+
+        GlobalPosition = new Vector2(x, y);
     }
 
     public void HideTooltip() => Visible = false;

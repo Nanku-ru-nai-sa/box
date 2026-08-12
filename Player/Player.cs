@@ -62,6 +62,7 @@ public partial class Player : CharacterBody3D
     private Inventory _inventory;
     private Panel[]       _invSlotPanels = new Panel[MainInvSize];
     private ItemTooltip   _invTooltip;
+    private ItemTooltip   _hotbarTooltip; // separate instance for the always-on-screen HUD hotbar, so it works even when the full inventory isn't open
     private Label[]       _invSlotLabels = new Label[MainInvSize];
 
     // ── Held / cursor ─────────────────────────────────────────────────────────
@@ -245,6 +246,8 @@ public partial class Player : CharacterBody3D
     // TEXTURE LOADING
     // =========================================================================
 
+    private Texture2D _unknownItemIconTex; // fallback for any item whose real icon can't be found - loaded once, lazily
+
     private Texture2D GetItemIcon(string itemId)
     {
         if (string.IsNullOrEmpty(itemId)) return null;
@@ -260,6 +263,16 @@ public partial class Player : CharacterBody3D
         {
             string path = $"res://Assets/Textures/Items/{itemId}.png";
             tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
+
+        // Still nothing? Fall back to the "unknown item" placeholder
+        // instead of showing a blank/invisible slot - makes it obvious
+        // something's missing rather than silently disappearing.
+        if (tex == null)
+        {
+            if (_unknownItemIconTex == null)
+                _unknownItemIconTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/tool/chalk/unknown.png");
+            tex = _unknownItemIconTex;
         }
 
         _iconCache[itemId] = tex;
@@ -294,8 +307,20 @@ public partial class Player : CharacterBody3D
             _hotbarLabels[i] = slot.GetChild<Label>(1);
             container.AddChild(slot);
             _hotbarSlots[i] = slot;
+
+            // Hover tooltip - this is the persistent HUD hotbar, not the
+            // one inside the full inventory screen, so it needs its own
+            // wiring (was missing entirely before, which is why hovering
+            // it while just playing showed nothing).
+            slot.MouseFilter = Control.MouseFilterEnum.Stop;
+            int idx = i;
+            slot.MouseEntered += () => OnHudHotbarSlotMouseEntered(idx);
+            slot.MouseExited  += () => _hotbarTooltip?.HideTooltip();
         }
         _hotbarLayer.CallDeferred("add_child", container);
+
+        _hotbarTooltip = new ItemTooltip();
+        _hotbarLayer.CallDeferred("add_child", _hotbarTooltip); // added after container = renders above the slots
     }
 
     private void BuildInventoryScreen()
@@ -1281,7 +1306,32 @@ public partial class Player : CharacterBody3D
         if (slot.IsEmpty) { _invTooltip.HideTooltip(); return; }
 
         var item = ItemRegistry.Instance.GetItem(slot.ItemId);
-        _invTooltip.ShowFor(item, GetViewport().GetMousePosition(), slot.CurrentDurability);
+        _invTooltip.ShowFor(item, GetSlotControl(slotIndex), slot.CurrentDurability);
+    }
+
+    // slotIndex < MainInvSize is the main grid, the rest is the hotbar row
+    // inside the full inventory screen - mirrors how RefreshAllSlotVisuals
+    // addresses the same two arrays.
+    private Control GetSlotControl(int slotIndex)
+    {
+        return slotIndex < MainInvSize
+            ? _invSlotPanels[slotIndex]
+            : _invHotbarSlots[slotIndex - MainInvSize];
+    }
+
+    // Same idea as OnSlotMouseEntered, but for the persistent HUD hotbar
+    // (hotbarIdx is 0-based within the hotbar, not a full inventory index).
+    private void OnHudHotbarSlotMouseEntered(int hotbarIdx)
+    {
+        if (_hotbarTooltip == null) return;
+        int slotIndex = MainInvSize + hotbarIdx;
+        if (slotIndex < 0 || slotIndex >= _inventory.Slots.Length) { _hotbarTooltip.HideTooltip(); return; }
+
+        var slot = _inventory.Slots[slotIndex];
+        if (slot.IsEmpty) { _hotbarTooltip.HideTooltip(); return; }
+
+        var item = ItemRegistry.Instance.GetItem(slot.ItemId);
+        _hotbarTooltip.ShowFor(item, _hotbarSlots[hotbarIdx], slot.CurrentDurability);
     }
 
     public override void _Input(InputEvent @event)
@@ -1838,8 +1888,8 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                         else { TryPlaceBlock(); _placeTimer = 0f; }
                     }
                 }
-                if (mb.ButtonIndex == MouseButton.WheelDown) SelectHotbarSlot((_selectedSlot + 1) % HotbarSize);
-                else if (mb.ButtonIndex == MouseButton.WheelUp)  SelectHotbarSlot((_selectedSlot - 1 + HotbarSize) % HotbarSize);
+                if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) SelectHotbarSlot((_selectedSlot + 1) % HotbarSize);
+                else if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed)  SelectHotbarSlot((_selectedSlot - 1 + HotbarSize) % HotbarSize);
             }
         }
 
@@ -1877,8 +1927,14 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
             if (key.Keycode == Key.T && !_chatOpen && !_inventoryOpen && !_pauseMenu.IsOpen) OpenChat();
 
-            if (key.Keycode == Key.Space && GameModeManager.Instance?.IsCreate == true)
+            if (key.Keycode == Key.Space && GameModeManager.Instance?.IsCreate == true && !key.Echo)
             {
+                // !key.Echo matters here: holding Space to fly upward (see
+                // HandleFlyMovement) makes the OS fire repeat "pressed"
+                // events for as long as it's held. Without this check,
+                // those repeats kept re-running the double-tap check below
+                // and could re-toggle flying mid-ascent. Only a genuine
+                // fresh key-down counts as a "press" for the double-tap now.
                 double now = Time.GetTicksMsec() / 1000.0;
                 if (now - _lastJumpTime < DoubleJumpWindow) ToggleFly();
                 _lastJumpTime = now;
@@ -2138,6 +2194,18 @@ private void HandleOutputClicked(MouseButton button, bool shift)
         if (gm != null && gm.IsStory) return;
         bool consume = gm == null || !gm.IsCreate;
         if (consume && !_inventory.HasItem(_selectedBlockId, 1)) return;
+
+        // Guards against items with no real matching block (e.g. stray
+        // icon-only items like "grass"/"box" that were never wired to a
+        // BlockResource) - without this, the block would still get written
+        // into the chunk data, and the mesh builder would spam
+        // "Block not found" every time that chunk rebuilds since it can
+        // never actually resolve a texture for it.
+        if (!BlockRegistry.Instance.BlockExists(_selectedBlockId))
+        {
+            ShowFeedback($"{_selectedBlockId} can't be placed");
+            return;
+        }
 
         var col = _rayCast.GetCollider() as Node;
         if (col == null || !col.HasMeta("chunk")) return;

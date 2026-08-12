@@ -2,8 +2,10 @@ using Godot;
 using System;
 using System.Collections.Generic;
 
-// Browsable panel listing every item in the game (via ItemCatalog), with
-// category tabs and a live search box. Doesn't touch inventory logic
+// Browsable panel listing every item in the game (via ItemRegistry), with
+// category tabs (still sourced from ItemCatalog's categories.json, which
+// is purely display-grouping metadata - ItemRegistry has no concept of
+// categories) and a live search box. Doesn't touch inventory logic
 // itself — it just fires OnItemChosen and lets Player.cs decide what to
 // do with that (give it to the player). Opened with the V key while in
 // Create mode; see Player.cs's ToggleCreativeMenu().
@@ -114,24 +116,29 @@ public partial class CreativeMenu : Panel
     {
         foreach (Node child in _grid.GetChildren()) child.QueueFree();
 
-        foreach (var id in ItemCatalog.GetAllItemIds())
+        foreach (var item in ItemRegistry.Instance.GetAllItems())
         {
+            string id = item.ItemId;
+
             if (_activeCategory != ItemCatalog.AllCategory &&
                 ItemCatalog.GetCategory(id) != _activeCategory)
                 continue;
 
-            if (_searchText.Length > 0 && !id.ToLowerInvariant().Contains(_searchText))
+            if (_searchText.Length > 0 &&
+                !id.ToLowerInvariant().Contains(_searchText) &&
+                !item.DisplayName.ToLowerInvariant().Contains(_searchText))
                 continue;
 
-            _grid.AddChild(MakeItemSlot(id));
+            _grid.AddChild(MakeItemSlot(item));
         }
     }
 
-    private Panel MakeItemSlot(string itemId)
+    private Panel MakeItemSlot(ItemResource item)
     {
+        string itemId = item.ItemId;
         var slot = new Panel();
         slot.CustomMinimumSize = new Vector2(SlotSize, SlotSize);
-        slot.TooltipText       = itemId;
+        slot.TooltipText       = item.DisplayName; // was the raw itemId - now the real display name
         slot.MouseFilter       = Control.MouseFilterEnum.Stop;
         slot.AddThemeStyleboxOverride("panel",
             MakePanelStyle(new Color(0.15f, 0.15f, 0.15f, 0.85f), new Color(0.4f, 0.4f, 0.4f)));
@@ -141,7 +148,7 @@ public partial class CreativeMenu : Panel
             MakePanelStyle(new Color(0.15f, 0.15f, 0.15f, 0.85f), new Color(0.4f, 0.4f, 0.4f)));
 
         var tex = new TextureRect();
-        tex.Texture        = GetIcon(itemId);
+        tex.Texture        = GetIcon(item);
         tex.ExpandMode     = TextureRect.ExpandModeEnum.IgnoreSize;
         tex.StretchMode    = TextureRect.StretchModeEnum.KeepAspectCentered;
         tex.TextureFilter  = CanvasItem.TextureFilterEnum.Nearest;
@@ -167,12 +174,26 @@ public partial class CreativeMenu : Panel
         }
     }
 
-    private Texture2D GetIcon(string itemId)
+    // Same fallback chain as GetItemIcon in Player.cs: prefer an Icon
+    // already set on the ItemResource (crafted tools), then a matching
+    // file in Assets/Textures/Items/, then the "unknown item" placeholder
+    // rather than showing a blank slot.
+    private Texture2D GetIcon(ItemResource item)
     {
-        if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
-        Texture2D tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
-        _iconCache[itemId] = tex;
+        if (_iconCache.TryGetValue(item.ItemId, out var cached)) return cached;
+
+        Texture2D tex = item.Icon;
+
+        if (tex == null)
+        {
+            string path = $"res://Assets/Textures/Items/{item.ItemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
+
+        if (tex == null)
+            tex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/tool/chalk/unknown.png");
+
+        _iconCache[item.ItemId] = tex;
         return tex;
     }
 

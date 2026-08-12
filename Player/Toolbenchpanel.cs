@@ -260,7 +260,7 @@ public partial class ToolBenchPanel : Control
             slot.MouseEntered += () =>
             {
                 var s = _sockets[idx];
-                if (!s.IsEmpty) _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(s.ItemId), GetGlobalMousePosition());
+                if (!s.IsEmpty) _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(s.ItemId), slot);
             };
             slot.MouseExited += () => _tooltip?.HideTooltip();
 
@@ -311,7 +311,7 @@ public partial class ToolBenchPanel : Control
         _outputSlot.MouseEntered += () =>
         {
             if (_currentResult != null && _currentResult.Success)
-                _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(_currentResult.ItemId), GetGlobalMousePosition());
+                _tooltip?.ShowFor(ItemRegistry.Instance.GetItem(_currentResult.ItemId), _outputSlot);
         };
         _outputSlot.MouseExited += () => _tooltip?.HideTooltip();
         _socketRow.AddChild(_outputSlot);
