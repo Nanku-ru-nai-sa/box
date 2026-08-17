@@ -22,12 +22,24 @@ public partial class DayNightCycle : Node3D
     // TIME
     // ============================================================
 
-    // 0.00 = Midnight
-    // 0.25 = Sunrise
-    // 0.50 = Noon
-    // 0.75 = Sunset
-    // 1.00 = Midnight
-    private float _timeOfDay = 0.5f;
+    // IMPORTANT:
+    //
+    // 0.00 = Sunrise
+    // 0.25 = Noon
+    // 0.50 = Sunset
+    // 0.75 = Midnight
+    // 1.00 = Next Sunrise
+    //
+    // Time is saved with the world.
+    // New worlds begin at sunrise.
+
+    private float _timeOfDay = 0.0f;
+
+    private bool _timeLoaded = false;
+
+    private float _saveTimer = 0f;
+
+    private const float SaveIntervalSeconds = 10f;
 
     // ============================================================
     // LIGHT COLORS
@@ -77,7 +89,7 @@ public partial class DayNightCycle : Node3D
     // MOON ENERGY
     // ============================================================
 
-    // Moonlight is intentionally much weaker than sunlight.
+    // Moonlight is intentionally very weak.
     private float _moonEnergy = 0.10f;
 
     // ============================================================
@@ -85,9 +97,11 @@ public partial class DayNightCycle : Node3D
     // ============================================================
 
     private MeshInstance3D _sunMesh;
+
     private MeshInstance3D _moonMesh;
 
     private StandardMaterial3D _sunMat;
+
     private StandardMaterial3D _moonMat;
 
     private DirectionalLight3D _moonLight;
@@ -103,7 +117,7 @@ public partial class DayNightCycle : Node3D
     private ProceduralSkyMaterial _skyMaterial;
 
     // ============================================================
-    // CURRENT LIGHT FADE
+    // CURRENT CELESTIAL FADE
     // ============================================================
 
     private float _currentSunFade = 0f;
@@ -183,19 +197,16 @@ public partial class DayNightCycle : Node3D
         // SUN LIGHT
         // ========================================================
 
-        // If a DirectionalLight3D was assigned in the inspector,
-        // detach it from its old location and place it directly
-        // under this DayNightCycle.
         if (Sun != null)
         {
             Node oldParent = Sun.GetParent();
 
             if (oldParent != null)
-            {
                 oldParent.RemoveChild(Sun);
-            }
 
             AddChild(Sun);
+
+            Sun.LightEnergy = 0f;
         }
 
         // ========================================================
@@ -242,15 +253,26 @@ public partial class DayNightCycle : Node3D
         _moonLight.LightColor =
             new Color(0.55f, 0.65f, 1.0f);
 
-        _moonLight.LightEnergy = 0.0f;
+        _moonLight.LightEnergy = 0f;
 
-        _moonLight.ShadowEnabled = true;
+        _moonLight.ShadowEnabled = false;
 
         AddChild(_moonLight);
 
         // ========================================================
         // ENVIRONMENT
         // ========================================================
+
+        // We create the environment here so the sky can be
+        // controlled by this system.
+        //
+        // IMPORTANT:
+        // We do NOT create a second WorldEnvironment node.
+        // This prevents multiple environments from fighting each
+        // other and helps eliminate the strange black sky orb.
+        //
+        // If another WorldEnvironment already exists in the world,
+        // this environment should eventually be moved there.
 
         _env = new Godot.Environment();
 
@@ -268,24 +290,68 @@ public partial class DayNightCycle : Node3D
         _env.AmbientLightSource =
             Godot.Environment.AmbientSource.Sky;
 
-        // Very low base ambient.
-        // This prevents nighttime from becoming fake daylight.
-        _env.AmbientLightEnergy = 0.03f;
-
-        var worldEnv =
-            new WorldEnvironment();
-
-        worldEnv.Environment = _env;
-
-        AddChild(worldEnv);
+        _env.AmbientLightEnergy = 0.015f;
 
         // ========================================================
-        // INITIAL UPDATE
+        // LOAD SAVED TIME
         // ========================================================
+
+        // Defer this until the scene tree/autoloads are fully ready.
+        CallDeferred(nameof(LoadSavedTime));
+
+        // Initial visual update.
+        UpdateCelestialBodies();
+        UpdateLightColor();
+    }
+
+    // ============================================================
+    // LOAD SAVED TIME
+    // ============================================================
+
+    private void LoadSavedTime()
+    {
+        SaveManager saveManager =
+            GetNodeOrNull<SaveManager>(
+                "/root/SaveManager"
+            );
+
+        if (saveManager != null)
+        {
+            _timeOfDay =
+                Mathf.PosMod(
+                    saveManager.LoadWorldTime(),
+                    1f
+                );
+
+            GD.Print(
+                $"[DayNightCycle] Loaded time: " +
+                $"{_timeOfDay:0.000} " +
+                $"Game hour: {GetGameHour():0.00}"
+            );
+        }
+        else
+        {
+            _timeOfDay = 0.0f;
+
+            GD.Print(
+                "[DayNightCycle] SaveManager not found. " +
+                "Starting at sunrise."
+            );
+        }
+
+        _timeLoaded = true;
 
         UpdateCelestialBodies();
-
         UpdateLightColor();
+    }
+
+    // ============================================================
+    // EXIT TREE
+    // ============================================================
+
+    public override void _ExitTree()
+    {
+        SaveCurrentTime();
     }
 
     // ============================================================
@@ -296,11 +362,26 @@ public partial class DayNightCycle : Node3D
     {
         _frameCount++;
 
+        float deltaSeconds =
+            (float)delta;
+
+        // Save the current time periodically.
+        _saveTimer += deltaSeconds;
+
+        if (_saveTimer >= SaveIntervalSeconds)
+        {
+            _saveTimer = 0f;
+
+            SaveCurrentTime();
+        }
+
+        // Update the clock every third frame like before.
         if (_frameCount % 3 != 0)
             return;
 
         _timeOfDay +=
-            (float)delta / DayDurationSeconds;
+            deltaSeconds /
+            DayDurationSeconds;
 
         if (_timeOfDay >= 1f)
         {
@@ -310,8 +391,29 @@ public partial class DayNightCycle : Node3D
         }
 
         UpdateCelestialBodies();
-
         UpdateLightColor();
+    }
+
+    // ============================================================
+    // SAVE CURRENT TIME
+    // ============================================================
+
+    private void SaveCurrentTime()
+    {
+        if (!_timeLoaded)
+            return;
+
+        SaveManager saveManager =
+            GetNodeOrNull<SaveManager>(
+                "/root/SaveManager"
+            );
+
+        if (saveManager == null)
+            return;
+
+        saveManager.SaveWorldTime(
+            _timeOfDay
+        );
     }
 
     // ============================================================
@@ -343,7 +445,8 @@ public partial class DayNightCycle : Node3D
         float hourProgress =
             1f / 24f;
 
-        _timeOfDay += hourProgress;
+        _timeOfDay +=
+            hourProgress;
 
         if (_timeOfDay >= 1f)
         {
@@ -353,8 +456,10 @@ public partial class DayNightCycle : Node3D
         }
 
         UpdateCelestialBodies();
-
         UpdateLightColor();
+
+        // Immediately save debug changes.
+        SaveCurrentTime();
 
         GD.Print(
             $"[DayNightCycle] Debug hour advanced. " +
@@ -405,23 +510,28 @@ public partial class DayNightCycle : Node3D
         switch (GetCurrentSeason())
         {
             case SeasonManager.Season.Spring:
-                minutes = SpringDaylightMinutes;
+                minutes =
+                    SpringDaylightMinutes;
                 break;
 
             case SeasonManager.Season.Summer:
-                minutes = SummerDaylightMinutes;
+                minutes =
+                    SummerDaylightMinutes;
                 break;
 
             case SeasonManager.Season.Autumn:
-                minutes = AutumnDaylightMinutes;
+                minutes =
+                    AutumnDaylightMinutes;
                 break;
 
             case SeasonManager.Season.Winter:
-                minutes = WinterDaylightMinutes;
+                minutes =
+                    WinterDaylightMinutes;
                 break;
 
             default:
-                minutes = SpringDaylightMinutes;
+                minutes =
+                    SpringDaylightMinutes;
                 break;
         }
 
@@ -441,30 +551,32 @@ public partial class DayNightCycle : Node3D
         // ========================================================
         // SUN ORBIT
         //
-        // 0.00 = Midnight
-        // 0.25 = Sunrise
-        // 0.50 = Noon
-        // 0.75 = Sunset
-        // 1.00 = Midnight
+        // 0.00 = Sunrise
+        // 0.25 = Noon
+        // 0.50 = Sunset
+        // 0.75 = Midnight
+        // 1.00 = Sunrise
+        //
+        // This is the single source of truth for the sun position.
         // ========================================================
 
         float sunAngle =
-            _timeOfDay * Mathf.Tau -
-            Mathf.Pi / 2f;
+            _timeOfDay * Mathf.Tau;
 
         Vector3 sunPosition =
             new Vector3(
-                Mathf.Cos(sunAngle) * _orbitRadius,
-                Mathf.Sin(sunAngle) * _orbitRadius,
+                Mathf.Cos(sunAngle) *
+                    _orbitRadius,
+
+                Mathf.Sin(sunAngle) *
+                    _orbitRadius,
+
                 0f
             );
 
-        // ========================================================
-        // VISIBLE SUN
-        // ========================================================
-
         _sunMesh.GlobalPosition =
-            GlobalPosition + sunPosition;
+            GlobalPosition +
+            sunPosition;
 
         // ========================================================
         // SUN HEIGHT
@@ -473,12 +585,13 @@ public partial class DayNightCycle : Node3D
         float sunHeight =
             sunPosition.Y;
 
-        // Sun is visible above the horizon.
-        float sunFadeRange = 20f;
+        // The sun fades in/out around the horizon.
+        const float sunFadeRange = 20f;
 
         float sunFade =
             Mathf.Clamp(
-                sunHeight / sunFadeRange,
+                sunHeight /
+                sunFadeRange,
                 0f,
                 1f
             );
@@ -487,34 +600,26 @@ public partial class DayNightCycle : Node3D
             sunFade;
 
         // ========================================================
-        // SUN LIGHT POSITION + DIRECTION
+        // SUN LIGHT
         // ========================================================
 
         if (Sun != null)
         {
-            // Put the actual light at the EXACT same position
-            // as the visible sun.
+            // The directional light is placed at the same location
+            // as the visible sun and points toward the world.
             Sun.GlobalPosition =
                 _sunMesh.GlobalPosition;
 
-            // DirectionalLight3D shines along its -Z axis.
-            // Point it from the sun toward the world origin.
             Sun.LookAt(
                 GlobalPosition,
                 Vector3.Up
             );
-
-            // Sunlight is physically impossible when the sun
-            // is below the horizon.
-            Sun.LightEnergy =
-                Mathf.Max(
-                    0f,
-                    Sun.LightEnergy
-                );
         }
 
         // ========================================================
         // MOON ORBIT
+        //
+        // Exactly opposite the sun.
         // ========================================================
 
         float moonAngle =
@@ -522,17 +627,18 @@ public partial class DayNightCycle : Node3D
 
         Vector3 moonPosition =
             new Vector3(
-                Mathf.Cos(moonAngle) * _orbitRadius,
-                Mathf.Sin(moonAngle) * _orbitRadius,
+                Mathf.Cos(moonAngle) *
+                    _orbitRadius,
+
+                Mathf.Sin(moonAngle) *
+                    _orbitRadius,
+
                 0f
             );
 
-        // ========================================================
-        // VISIBLE MOON
-        // ========================================================
-
         _moonMesh.GlobalPosition =
-            GlobalPosition + moonPosition;
+            GlobalPosition +
+            moonPosition;
 
         // ========================================================
         // MOON HEIGHT
@@ -541,11 +647,12 @@ public partial class DayNightCycle : Node3D
         float moonHeight =
             moonPosition.Y;
 
-        float moonFadeRange = 20f;
+        const float moonFadeRange = 20f;
 
         float moonFade =
             Mathf.Clamp(
-                moonHeight / moonFadeRange,
+                moonHeight /
+                moonFadeRange,
                 0f,
                 1f
             );
@@ -554,24 +661,18 @@ public partial class DayNightCycle : Node3D
             moonFade;
 
         // ========================================================
-        // MOON LIGHT POSITION + DIRECTION
+        // MOON LIGHT
         // ========================================================
 
         if (_moonLight != null)
         {
-            // EXACT same position as the visible moon.
             _moonLight.GlobalPosition =
                 _moonMesh.GlobalPosition;
 
-            // Point moonlight from moon toward world.
             _moonLight.LookAt(
                 GlobalPosition,
                 Vector3.Up
             );
-
-            // Moonlight is controlled later in
-            // UpdateLightColor().
-            _moonLight.LightEnergy = 0f;
         }
 
         // ========================================================
@@ -590,7 +691,8 @@ public partial class DayNightCycle : Node3D
                 c;
 
             _sunMat.EmissionEnergyMultiplier =
-                2.0f * sunFade;
+                2.0f *
+                sunFade;
         }
 
         // ========================================================
@@ -609,7 +711,8 @@ public partial class DayNightCycle : Node3D
                 c;
 
             _moonMat.EmissionEnergyMultiplier =
-                0.8f * moonFade;
+                0.8f *
+                moonFade;
         }
 
         // ========================================================
@@ -632,105 +735,100 @@ public partial class DayNightCycle : Node3D
         float daylightSeconds =
             GetDaylightSeconds();
 
-        float sunriseSeconds =
-            Mathf.Min(
-                SunriseDurationSeconds,
-                daylightSeconds * 0.15f
-            );
-
-        float sunsetSeconds =
-            Mathf.Min(
-                SunsetDurationSeconds,
-                daylightSeconds * 0.15f
-            );
-
-        // ========================================================
-        // DAYLIGHT WINDOW
-        // ========================================================
-
         float daylightFraction =
             daylightSeconds /
             DayDurationSeconds;
 
+        // ========================================================
+        // DAYLIGHT WINDOW
+        //
+        // Sunrise is ALWAYS 0.0.
+        //
+        // Example Spring:
+        //
+        // 0.000 = Sunrise
+        // 0.333 = Noon
+        // 0.667 = Sunset
+        // 0.667 -> 1.000 = Night
+        // ========================================================
+
         float daylightStart =
-            0.5f -
-            daylightFraction / 2f;
+            0.0f;
 
         float daylightEnd =
-            0.5f +
-            daylightFraction / 2f;
+            daylightFraction;
 
         // ========================================================
         // SUNRISE
+        //
+        // Sunrise begins slightly before the physical sun reaches
+        // the horizon and finishes shortly after.
+        //
+        // Because this wraps around 1.0 -> 0.0, the helper methods
+        // handle it correctly.
         // ========================================================
 
+        float sunriseHalf =
+            Mathf.Min(
+                SunriseDurationSeconds,
+                daylightSeconds * 0.15f
+            )
+            /
+            DayDurationSeconds
+            /
+            2f;
+
         float sunriseStart =
-            daylightStart -
-            (sunriseSeconds /
-             DayDurationSeconds) / 2f;
+            Mathf.PosMod(
+                daylightStart -
+                sunriseHalf,
+                1f
+            );
 
         float sunriseMid =
-            daylightStart;
+            Mathf.PosMod(
+                daylightStart,
+                1f
+            );
 
         float sunriseEnd =
-            daylightStart +
-            (sunriseSeconds /
-             DayDurationSeconds) / 2f;
+            Mathf.PosMod(
+                daylightStart +
+                sunriseHalf,
+                1f
+            );
 
         // ========================================================
         // SUNSET
         // ========================================================
 
+        float sunsetHalf =
+            Mathf.Min(
+                SunsetDurationSeconds,
+                daylightSeconds * 0.15f
+            )
+            /
+            DayDurationSeconds
+            /
+            2f;
+
         float sunsetStart =
-            daylightEnd -
-            (sunsetSeconds /
-             DayDurationSeconds) / 2f;
+            Mathf.PosMod(
+                daylightEnd -
+                sunsetHalf,
+                1f
+            );
 
         float sunsetMid =
-            daylightEnd;
+            Mathf.PosMod(
+                daylightEnd,
+                1f
+            );
 
         float sunsetEnd =
-            daylightEnd +
-            (sunsetSeconds /
-             DayDurationSeconds) / 2f;
-
-        // ========================================================
-        // WRAP VALUES
-        // ========================================================
-
-        sunriseStart =
             Mathf.PosMod(
-                sunriseStart,
-                1f
-            );
-
-        sunriseMid =
-            Mathf.PosMod(
-                sunriseMid,
-                1f
-            );
-
-        sunriseEnd =
-            Mathf.PosMod(
-                sunriseEnd,
-                1f
-            );
-
-        sunsetStart =
-            Mathf.PosMod(
-                sunsetStart,
-                1f
-            );
-
-        sunsetMid =
-            Mathf.PosMod(
-                sunsetMid,
-                1f
-            );
-
-        sunsetEnd =
-            Mathf.PosMod(
-                sunsetEnd,
+                daylightEnd +
+                sunsetHalf,
                 1f
             );
 
@@ -738,6 +836,7 @@ public partial class DayNightCycle : Node3D
             _timeOfDay;
 
         Color lightColor;
+
         Color skyColor;
 
         float energy;
@@ -924,15 +1023,25 @@ public partial class DayNightCycle : Node3D
         // ========================================================
         // SUNLIGHT
         //
-        // IMPORTANT:
+        // THIS IS THE IMPORTANT PART.
         //
-        // The seasonal lighting calculation can NEVER create
-        // sunlight if the physical sun is below the horizon.
+        // The sun's physical height is the final authority.
+        //
+        // If the sun is below the horizon:
+        //
+        //     Sun.LightEnergy = 0
+        //
+        // No seasonal calculation can override that.
         // ========================================================
 
         float actualSunEnergy =
             energy *
             _currentSunFade;
+
+        if (_currentSunFade <= 0.001f)
+        {
+            actualSunEnergy = 0f;
+        }
 
         if (Sun != null)
         {
@@ -942,7 +1051,6 @@ public partial class DayNightCycle : Node3D
             Sun.LightEnergy =
                 actualSunEnergy;
 
-            // No sunlight at all below the horizon.
             Sun.ShadowEnabled =
                 actualSunEnergy > 0.001f;
         }
@@ -950,12 +1058,21 @@ public partial class DayNightCycle : Node3D
         // ========================================================
         // MOONLIGHT
         //
-        // Moonlight only exists while the moon is physically
-        // above the horizon.
+        // Moonlight can ONLY exist while the moon is above the
+        // horizon.
         // ========================================================
 
         if (_moonLight != null)
         {
+            float actualMoonEnergy =
+                _moonEnergy *
+                _currentMoonFade;
+
+            if (_currentMoonFade <= 0.001f)
+            {
+                actualMoonEnergy = 0f;
+            }
+
             _moonLight.LightColor =
                 new Color(
                     0.55f,
@@ -964,11 +1081,10 @@ public partial class DayNightCycle : Node3D
                 );
 
             _moonLight.LightEnergy =
-                _moonEnergy *
-                _currentMoonFade;
+                actualMoonEnergy;
 
             _moonLight.ShadowEnabled =
-                _currentMoonFade > 0.001f;
+                actualMoonEnergy > 0.001f;
         }
 
         // ========================================================
@@ -977,12 +1093,6 @@ public partial class DayNightCycle : Node3D
 
         if (_env != null)
         {
-            // The environment itself provides only a tiny amount
-            // of light at night.
-            //
-            // This prevents the world from appearing bright when
-            // neither celestial body is providing light.
-
             float ambientEnergy;
 
             if (_currentSunFade > 0.01f)
@@ -991,7 +1101,8 @@ public partial class DayNightCycle : Node3D
                     Mathf.Lerp(
                         0.12f,
                         0.35f,
-                        energy / _noonEnergy
+                        energy /
+                        _noonEnergy
                     );
             }
             else if (_currentMoonFade > 0.01f)
@@ -1073,7 +1184,8 @@ public partial class DayNightCycle : Node3D
             );
 
         return Mathf.Clamp(
-            position / range,
+            position /
+            range,
             0f,
             1f
         );

@@ -31,5 +31,18 @@ public class WorldMeta
     public string StartBonus { get; set; } = "None";
     public string Type { get; set; } = "Normal";
     public string Season { get; set; } = "Spring";
-    public bool SeasonLocked { get; set; } = false;
+
+public bool SeasonLocked { get; set; } = false;
+
+// ============================================================
+// DAY / NIGHT
+// ============================================================
+
+// 0.0   = Sunrise
+// 0.25  = Noon
+// 0.5   = Sunset
+// 0.75  = Midnight
+// 1.0   = Next Sunrise
+
+public float TimeOfDay { get; set; } = 0.0f;
 }
