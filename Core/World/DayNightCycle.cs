@@ -2,12 +2,7 @@ using Godot;
 
 public partial class DayNightCycle : Node3D
 {
-    // ============================================================
-    // SUN
-    // ============================================================
-
-    [Export]
-    public DirectionalLight3D Sun { get; set; }
+    [Export] public DirectionalLight3D Sun { get; set; }
 
     // ============================================================
     // DAY LENGTH
@@ -18,28 +13,11 @@ public partial class DayNightCycle : Node3D
     [Export]
     public float DayDurationSeconds { get; set; } = 900f;
 
-    // ============================================================
-    // TIME
-    // ============================================================
-
-    // IMPORTANT:
-    //
-    // 0.00 = Sunrise
-    // 0.25 = Noon
-    // 0.50 = Sunset
-    // 0.75 = Midnight
-    // 1.00 = Next Sunrise
-    //
-    // Time is saved with the world.
-    // New worlds begin at sunrise.
-
+    // 0.000 = Sunrise
+    // 0.250 = Noon
+    // 0.500 = Sunset
+    // 0.750 = Midnight
     private float _timeOfDay = 0.0f;
-
-    private bool _timeLoaded = false;
-
-    private float _saveTimer = 0f;
-
-    private const float SaveIntervalSeconds = 10f;
 
     // ============================================================
     // LIGHT COLORS
@@ -74,37 +52,23 @@ public partial class DayNightCycle : Node3D
         new Color(0.7f, 0.35f, 0.25f);
 
     // ============================================================
-    // SUN ENERGY
+    // LIGHT ENERGY
     // ============================================================
 
     private float _nightEnergy = 0.0f;
-
     private float _sunriseEnergy = 1.2f;
-
     private float _noonEnergy = 2.0f;
-
     private float _sunsetEnergy = 1.2f;
-
-    // ============================================================
-    // MOON ENERGY
-    // ============================================================
-
-    // Moonlight is intentionally very weak.
-    private float _moonEnergy = 0.10f;
 
     // ============================================================
     // CELESTIAL OBJECTS
     // ============================================================
 
     private MeshInstance3D _sunMesh;
-
     private MeshInstance3D _moonMesh;
 
     private StandardMaterial3D _sunMat;
-
     private StandardMaterial3D _moonMat;
-
-    private DirectionalLight3D _moonLight;
 
     private float _orbitRadius = 200f;
 
@@ -117,12 +81,10 @@ public partial class DayNightCycle : Node3D
     private ProceduralSkyMaterial _skyMaterial;
 
     // ============================================================
-    // CURRENT CELESTIAL FADE
+    // INTERNAL STATE
     // ============================================================
 
-    private float _currentSunFade = 0f;
-
-    private float _currentMoonFade = 0f;
+    private float _currentSunFade = 1f;
 
     private int _frameCount = 0;
 
@@ -133,16 +95,16 @@ public partial class DayNightCycle : Node3D
     [ExportGroup("Seasonal Daylight")]
 
     [Export]
-public float SpringDaylightMinutes { get; set; } = 10.0f;
+    public float SpringDaylightMinutes { get; set; } = 10.0f;
 
-[Export]
-public float SummerDaylightMinutes { get; set; } = 11.0f;
+    [Export]
+    public float SummerDaylightMinutes { get; set; } = 11.0f;
 
-[Export]
-public float AutumnDaylightMinutes { get; set; } = 9.0f;
+    [Export]
+    public float AutumnDaylightMinutes { get; set; } = 9.0f;
 
-[Export]
-public float WinterDaylightMinutes { get; set; } = 8.0f;
+    [Export]
+    public float WinterDaylightMinutes { get; set; } = 8.0f;
 
     [Export]
     public float SunriseDurationSeconds { get; set; } = 60f;
@@ -156,10 +118,12 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
 
     public override void _Ready()
     {
+        // Put this node into a group so the debug menu
+        // can find it.
         AddToGroup("day_night_cycle");
 
         // ========================================================
-        // SUN MESH
+        // SUN
         // ========================================================
 
         _sunMesh = new MeshInstance3D();
@@ -191,48 +155,64 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
 
         _sunMesh.MaterialOverride = _sunMat;
 
+        // Attach the actual DirectionalLight3D to the sun.
+        if (Sun != null)
+        {
+            Sun.GetParent()?.RemoveChild(Sun);
+
+            _sunMesh.AddChild(Sun);
+
+            Sun.Position =
+                Vector3.Zero;
+
+            Sun.RotationDegrees =
+                new Vector3(
+                    90f,
+                    0f,
+                    0f
+                );
+        }
+
         AddChild(_sunMesh);
 
         // ========================================================
-        // SUN LIGHT
+        // MOON
         // ========================================================
 
-        if (Sun != null)
-        {
-            Node oldParent = Sun.GetParent();
+        _moonMesh =
+            new MeshInstance3D();
 
-            if (oldParent != null)
-                oldParent.RemoveChild(Sun);
-
-            AddChild(Sun);
-
-            Sun.LightEnergy = 0f;
-        }
-
-        // ========================================================
-        // MOON MESH
-        // ========================================================
-
-        _moonMesh = new MeshInstance3D();
-
-        var moonSphere = new SphereMesh();
+        var moonSphere =
+            new SphereMesh();
 
         moonSphere.Radius = 5f;
         moonSphere.Height = 10f;
 
-        _moonMesh.Mesh = moonSphere;
+        _moonMesh.Mesh =
+            moonSphere;
 
-        _moonMat = new StandardMaterial3D();
+        _moonMat =
+            new StandardMaterial3D();
 
         _moonMat.AlbedoColor =
-            new Color(0.9f, 0.9f, 1.0f);
+            new Color(
+                0.9f,
+                0.9f,
+                1.0f
+            );
 
-        _moonMat.EmissionEnabled = true;
+        _moonMat.EmissionEnabled =
+            true;
 
         _moonMat.Emission =
-            new Color(0.8f, 0.8f, 1.0f);
+            new Color(
+                0.8f,
+                0.8f,
+                1.0f
+            );
 
-        _moonMat.EmissionEnergyMultiplier = 0.8f;
+        _moonMat.EmissionEnergyMultiplier =
+            0.8f;
 
         _moonMat.ShadingMode =
             BaseMaterial3D.ShadingModeEnum.Unshaded;
@@ -240,46 +220,23 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
         _moonMat.Transparency =
             BaseMaterial3D.TransparencyEnum.Alpha;
 
-        _moonMesh.MaterialOverride = _moonMat;
+        _moonMesh.MaterialOverride =
+            _moonMat;
 
         AddChild(_moonMesh);
-
-        // ========================================================
-        // MOON LIGHT
-        // ========================================================
-
-        _moonLight = new DirectionalLight3D();
-
-        _moonLight.LightColor =
-            new Color(0.55f, 0.65f, 1.0f);
-
-        _moonLight.LightEnergy = 0f;
-
-        _moonLight.ShadowEnabled = false;
-
-        AddChild(_moonLight);
 
         // ========================================================
         // ENVIRONMENT
         // ========================================================
 
-        // We create the environment here so the sky can be
-        // controlled by this system.
-        //
-        // IMPORTANT:
-        // We do NOT create a second WorldEnvironment node.
-        // This prevents multiple environments from fighting each
-        // other and helps eliminate the strange black sky orb.
-        //
-        // If another WorldEnvironment already exists in the world,
-        // this environment should eventually be moved there.
-
-        _env = new Godot.Environment();
+        _env =
+            new Godot.Environment();
 
         _env.BackgroundMode =
             Godot.Environment.BGMode.Sky;
 
-        _env.Sky = new Sky();
+        _env.Sky =
+            new Sky();
 
         _skyMaterial =
             new ProceduralSkyMaterial();
@@ -290,97 +247,56 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
         _env.AmbientLightSource =
             Godot.Environment.AmbientSource.Sky;
 
-        _env.AmbientLightEnergy = 0.015f;
+        _env.AmbientLightEnergy =
+            0.5f;
+
+        var worldEnv =
+            new WorldEnvironment();
+
+        worldEnv.Environment =
+            _env;
+
+        AddChild(worldEnv);
 
         // ========================================================
-        // LOAD SAVED TIME
+        // SEASON EVENTS
         // ========================================================
 
-        // Defer this until the scene tree/autoloads are fully ready.
-        CallDeferred(nameof(LoadSavedTime));
-
-        // Initial visual update.
-        UpdateCelestialBodies();
-        UpdateLightColor();
-    }
-
-    // ============================================================
-    // LOAD SAVED TIME
-    // ============================================================
-
-    private void LoadSavedTime()
-    {
-        SaveManager saveManager =
-            GetNodeOrNull<SaveManager>(
-                "/root/SaveManager"
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
             );
 
-        if (saveManager != null)
+        if (seasonManager != null)
         {
-            _timeOfDay =
-                Mathf.PosMod(
-                    saveManager.LoadWorldTime(),
-                    1f
-                );
-
-            GD.Print(
-                $"[DayNightCycle] Loaded time: " +
-                $"{_timeOfDay:0.000} " +
-                $"Game hour: {GetGameHour():0.00}"
-            );
-        }
-        else
-        {
-            _timeOfDay = 0.0f;
-
-            GD.Print(
-                "[DayNightCycle] SaveManager not found. " +
-                "Starting at sunrise."
-            );
+            seasonManager.SeasonChanged +=
+                OnSeasonChanged;
         }
 
-        _timeLoaded = true;
+        // ========================================================
+        // INITIAL UPDATE
+        // ========================================================
 
         UpdateCelestialBodies();
         UpdateLightColor();
-    }
-
-    // ============================================================
-    // EXIT TREE
-    // ============================================================
-
-    public override void _ExitTree()
-    {
-        SaveCurrentTime();
     }
 
     // ============================================================
     // PROCESS
     // ============================================================
 
-    public override void _Process(double delta)
+    public override void _Process(
+        double delta
+    )
     {
         _frameCount++;
 
-        float deltaSeconds =
-            (float)delta;
-
-        // Save the current time periodically.
-        _saveTimer += deltaSeconds;
-
-        if (_saveTimer >= SaveIntervalSeconds)
-        {
-            _saveTimer = 0f;
-
-            SaveCurrentTime();
-        }
-
-        // Update the clock every third frame like before.
+        // Update every third frame.
         if (_frameCount % 3 != 0)
             return;
 
         _timeOfDay +=
-            deltaSeconds /
+            (float)delta /
             DayDurationSeconds;
 
         if (_timeOfDay >= 1f)
@@ -395,25 +311,41 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
     }
 
     // ============================================================
-    // SAVE CURRENT TIME
+    // EXIT TREE
     // ============================================================
 
-    private void SaveCurrentTime()
+    public override void _ExitTree()
     {
-        if (!_timeLoaded)
-            return;
-
-        SaveManager saveManager =
-            GetNodeOrNull<SaveManager>(
-                "/root/SaveManager"
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
             );
 
-        if (saveManager == null)
-            return;
+        if (seasonManager != null)
+        {
+            seasonManager.SeasonChanged -=
+                OnSeasonChanged;
+        }
+    }
 
-        saveManager.SaveWorldTime(
-            _timeOfDay
+    // ============================================================
+    // SEASON CHANGE
+    // ============================================================
+
+    private void OnSeasonChanged(
+        SeasonManager.Season newSeason,
+        SeasonManager.Season oldSeason
+    )
+    {
+        GD.Print(
+            $"[DayNightCycle] Season changed: " +
+            $"{oldSeason} -> {newSeason}"
         );
+
+        // Immediately recalculate the lighting using
+        // the new season's daylight duration.
+        UpdateCelestialBodies();
+        UpdateLightColor();
     }
 
     // ============================================================
@@ -442,6 +374,7 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
 
     public void AdvanceDebugHour()
     {
+        // One in-game hour is 1/24 of a complete day.
         float hourProgress =
             1f / 24f;
 
@@ -458,13 +391,9 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
         UpdateCelestialBodies();
         UpdateLightColor();
 
-        // Immediately save debug changes.
-        SaveCurrentTime();
-
         GD.Print(
             $"[DayNightCycle] Debug hour advanced. " +
-            $"Time of day: {_timeOfDay:0.000} " +
-            $"Game hour: {GetGameHour():0.00}"
+            $"Time of day: {_timeOfDay:0.000}"
         );
     }
 
@@ -478,105 +407,111 @@ public float WinterDaylightMinutes { get; set; } = 8.0f;
     }
 
     public float GetGameHour()
-{
-    return _timeOfDay * 24f;
-}
-
-// ============================================================
-// DISPLAY TIME
-// ============================================================
-
-public int GetDisplayHour()
-{
-    float gameHour = GetGameHour();
-
-    int hour = Mathf.FloorToInt(gameHour);
-
-    return hour % 24;
-}
-
-public int GetDisplayMinute()
-{
-    float gameHour = GetGameHour();
-
-    float minute =
-        (gameHour -
-         Mathf.Floor(gameHour)) *
-        60f;
-
-    return Mathf.Clamp(
-        Mathf.FloorToInt(minute),
-        0,
-        59
-    );
-}
-
-public string GetTimeString()
-{
-    int hour =
-        GetDisplayHour();
-
-    int minute =
-        GetDisplayMinute();
-
-    string period =
-        hour >= 12
-            ? "PM"
-            : "AM";
-
-    int displayHour =
-        hour % 12;
-
-    if (displayHour == 0)
-        displayHour = 12;
-
-    return
-        $"{displayHour:00}:{minute:00} {period}";
-}
-
-public string GetTimeOfDayName()
-{
-    float hour =
-        GetGameHour();
-
-    // Sunrise
-    if (hour >= 5.0f &&
-        hour < 7.0f)
     {
-        return "SUNRISE";
+        return _timeOfDay * 24f;
     }
 
-    // Morning
-    if (hour >= 7.0f &&
-        hour < 11.0f)
+    // ============================================================
+    // DISPLAY TIME
+    // ============================================================
+
+    public int GetDisplayHour()
     {
-        return "MORNING";
+        float gameHour =
+            GetGameHour();
+
+        int hour =
+            Mathf.FloorToInt(
+                gameHour
+            );
+
+        return hour % 24;
     }
 
-    // Midday
-    if (hour >= 11.0f &&
-        hour < 14.0f)
+    public int GetDisplayMinute()
     {
-        return "MIDDAY";
+        float gameHour =
+            GetGameHour();
+
+        float minute =
+            (
+                gameHour -
+                Mathf.Floor(gameHour)
+            ) * 60f;
+
+        return Mathf.Clamp(
+            Mathf.FloorToInt(minute),
+            0,
+            59
+        );
     }
 
-    // Afternoon
-    if (hour >= 14.0f &&
-        hour < 17.0f)
+    public string GetTimeString()
     {
-        return "AFTERNOON";
+        int hour =
+            GetDisplayHour();
+
+        int minute =
+            GetDisplayMinute();
+
+        string period =
+            hour >= 12
+                ? "PM"
+                : "AM";
+
+        int displayHour =
+            hour % 12;
+
+        if (displayHour == 0)
+            displayHour = 12;
+
+        return
+            $"{displayHour:00}:{minute:00} {period}";
     }
 
-    // Sunset
-    if (hour >= 17.0f &&
-        hour < 20.0f)
+    public string GetTimeOfDayName()
     {
-        return "SUNSET";
-    }
+        float hour =
+            GetGameHour();
 
-    // Night
-    return "NIGHT";
-}
+        // Sunrise
+        if (hour >= 5.0f &&
+            hour < 7.0f)
+        {
+            return "SUNRISE";
+        }
+
+        // Morning
+        if (hour >= 7.0f &&
+            hour < 11.0f)
+        {
+            return "MORNING";
+        }
+
+        // Midday
+        if (hour >= 11.0f &&
+            hour < 14.0f)
+        {
+            return "MIDDAY";
+        }
+
+        // Afternoon
+        if (hour >= 14.0f &&
+            hour < 17.0f)
+        {
+            return "AFTERNOON";
+        }
+
+        // Sunset
+        if (hour >= 17.0f &&
+            hour < 20.0f)
+        {
+            return "SUNSET";
+        }
+
+        // Night
+        return "NIGHT";
+    }
 
     // ============================================================
     // CURRENT SEASON
@@ -645,21 +580,15 @@ public string GetTimeOfDayName()
     private void UpdateCelestialBodies()
     {
         // ========================================================
-        // SUN ORBIT
-        //
-        // 0.00 = Sunrise
-        // 0.25 = Noon
-        // 0.50 = Sunset
-        // 0.75 = Midnight
-        // 1.00 = Sunrise
-        //
-        // This is the single source of truth for the sun position.
+        // SUN
         // ========================================================
 
         float sunAngle =
-            _timeOfDay * Mathf.Tau;
+            _timeOfDay *
+            Mathf.Tau -
+            Mathf.Pi;
 
-        Vector3 sunPosition =
+        _sunMesh.GlobalPosition =
             new Vector3(
                 Mathf.Cos(sunAngle) *
                     _orbitRadius,
@@ -670,58 +599,24 @@ public string GetTimeOfDayName()
                 0f
             );
 
-        _sunMesh.GlobalPosition =
-            GlobalPosition +
-            sunPosition;
-
-        // ========================================================
-        // SUN HEIGHT
-        // ========================================================
-
-        float sunHeight =
-            sunPosition.Y;
-
-        // The sun fades in/out around the horizon.
-        const float sunFadeRange = 20f;
-
-        float sunFade =
-            Mathf.Clamp(
-                sunHeight /
-                sunFadeRange,
+        _sunMesh.Rotation =
+            new Vector3(
                 0f,
-                1f
+                0f,
+                sunAngle +
+                    Mathf.Pi / 2f
             );
 
-        _currentSunFade =
-            sunFade;
-
         // ========================================================
-        // SUN LIGHT
+        // MOON
         // ========================================================
 
-        if (Sun != null)
-        {
-            // The directional light is placed at the same location
-            // as the visible sun and points toward the world.
-            Sun.GlobalPosition =
-                _sunMesh.GlobalPosition;
-
-            Sun.LookAt(
-                GlobalPosition,
-                Vector3.Up
-            );
-        }
-
-        // ========================================================
-        // MOON ORBIT
-        //
-        // Exactly opposite the sun.
-        // ========================================================
-
+        // Moon is always opposite the sun.
         float moonAngle =
-            sunAngle + Mathf.Pi;
+            sunAngle +
+            Mathf.Pi;
 
-        Vector3 moonPosition =
+        _moonMesh.GlobalPosition =
             new Vector3(
                 Mathf.Cos(moonAngle) *
                     _orbitRadius,
@@ -732,44 +627,28 @@ public string GetTimeOfDayName()
                 0f
             );
 
-        _moonMesh.GlobalPosition =
-            GlobalPosition +
-            moonPosition;
-
         // ========================================================
-        // MOON HEIGHT
+        // SUN / MOON VISIBILITY
         // ========================================================
 
-        float moonHeight =
-            moonPosition.Y;
+        float fadeRange =
+            20f;
 
-        const float moonFadeRange = 20f;
-
-        float moonFade =
+        float sunFade =
             Mathf.Clamp(
-                moonHeight /
-                moonFadeRange,
+                _sunMesh.GlobalPosition.Y /
+                    fadeRange,
                 0f,
                 1f
             );
 
-        _currentMoonFade =
-            moonFade;
-
-        // ========================================================
-        // MOON LIGHT
-        // ========================================================
-
-        if (_moonLight != null)
-        {
-            _moonLight.GlobalPosition =
-                _moonMesh.GlobalPosition;
-
-            _moonLight.LookAt(
-                GlobalPosition,
-                Vector3.Up
+        float moonFade =
+            Mathf.Clamp(
+                _moonMesh.GlobalPosition.Y /
+                    fadeRange,
+                0f,
+                1f
             );
-        }
 
         // ========================================================
         // SUN MATERIAL
@@ -811,15 +690,14 @@ public string GetTimeOfDayName()
                 moonFade;
         }
 
-        // ========================================================
-        // VISIBILITY
-        // ========================================================
-
         _sunMesh.Visible =
             sunFade > 0f;
 
         _moonMesh.Visible =
             moonFade > 0f;
+
+        _currentSunFade =
+            sunFade;
     }
 
     // ============================================================
@@ -828,111 +706,130 @@ public string GetTimeOfDayName()
 
     private void UpdateLightColor()
     {
+        if (Sun == null)
+            return;
+
         float daylightSeconds =
             GetDaylightSeconds();
 
-        float daylightFraction =
-            daylightSeconds /
-            DayDurationSeconds;
-
-        // ========================================================
-        // DAYLIGHT WINDOW
-        //
-        // Sunrise is ALWAYS 0.0.
-        //
-        // Example Spring:
-        //
-        // 0.000 = Sunrise
-        // 0.333 = Noon
-        // 0.667 = Sunset
-        // 0.667 -> 1.000 = Night
-        // ========================================================
-
-        float daylightStart =
-            0.0f;
-
-        float daylightEnd =
-            daylightFraction;
-
-        // ========================================================
-        // SUNRISE
-        //
-        // Sunrise begins slightly before the physical sun reaches
-        // the horizon and finishes shortly after.
-        //
-        // Because this wraps around 1.0 -> 0.0, the helper methods
-        // handle it correctly.
-        // ========================================================
-
-        float sunriseHalf =
+        float sunriseSeconds =
             Mathf.Min(
                 SunriseDurationSeconds,
                 daylightSeconds * 0.15f
-            )
-            /
-            DayDurationSeconds
-            /
-            2f;
+            );
+
+        float sunsetSeconds =
+            Mathf.Min(
+                SunsetDurationSeconds,
+                daylightSeconds * 0.15f
+            );
+
+        // ========================================================
+        // DAYLIGHT WINDOW
+        // ========================================================
+
+        float daylightProgress =
+            daylightSeconds /
+            DayDurationSeconds;
+
+        float daylightStart =
+            0.5f -
+            daylightProgress / 2f;
+
+        float daylightEnd =
+            0.5f +
+            daylightProgress / 2f;
+
+        // ========================================================
+        // SUNRISE
+        // ========================================================
 
         float sunriseStart =
-            Mathf.PosMod(
-                daylightStart -
-                sunriseHalf,
-                1f
-            );
+            daylightStart -
+            (
+                sunriseSeconds /
+                DayDurationSeconds
+            ) / 2f;
 
         float sunriseMid =
-            Mathf.PosMod(
-                daylightStart,
-                1f
-            );
+            daylightStart;
 
         float sunriseEnd =
-            Mathf.PosMod(
-                daylightStart +
-                sunriseHalf,
-                1f
-            );
+            daylightStart +
+            (
+                sunriseSeconds /
+                DayDurationSeconds
+            ) / 2f;
 
         // ========================================================
         // SUNSET
         // ========================================================
 
-        float sunsetHalf =
-            Mathf.Min(
-                SunsetDurationSeconds,
-                daylightSeconds * 0.15f
-            )
-            /
-            DayDurationSeconds
-            /
-            2f;
-
         float sunsetStart =
-            Mathf.PosMod(
-                daylightEnd -
-                sunsetHalf,
-                1f
-            );
+            daylightEnd -
+            (
+                sunsetSeconds /
+                DayDurationSeconds
+            ) / 2f;
 
         float sunsetMid =
+            daylightEnd;
+
+        float sunsetEnd =
+            daylightEnd +
+            (
+                sunsetSeconds /
+                DayDurationSeconds
+            ) / 2f;
+
+        // ========================================================
+        // WRAP VALUES
+        // ========================================================
+
+        sunriseStart =
             Mathf.PosMod(
-                daylightEnd,
+                sunriseStart,
                 1f
             );
 
-        float sunsetEnd =
+        sunriseMid =
             Mathf.PosMod(
-                daylightEnd +
-                sunsetHalf,
+                sunriseMid,
+                1f
+            );
+
+        sunriseEnd =
+            Mathf.PosMod(
+                sunriseEnd,
+                1f
+            );
+
+        sunsetStart =
+            Mathf.PosMod(
+                sunsetStart,
+                1f
+            );
+
+        sunsetMid =
+            Mathf.PosMod(
+                sunsetMid,
+                1f
+            );
+
+        sunsetEnd =
+            Mathf.PosMod(
+                sunsetEnd,
                 1f
             );
 
         float t =
             _timeOfDay;
 
-        Color lightColor;
+        // ========================================================
+        // LIGHT VALUES
+        // ========================================================
 
+        Color lightColor;
         Color skyColor;
 
         float energy;
@@ -1117,107 +1014,29 @@ public string GetTimeOfDayName()
         }
 
         // ========================================================
-        // SUNLIGHT
-        //
-        // THIS IS THE IMPORTANT PART.
-        //
-        // The sun's physical height is the final authority.
-        //
-        // If the sun is below the horizon:
-        //
-        //     Sun.LightEnergy = 0
-        //
-        // No seasonal calculation can override that.
+        // DIRECTIONAL SUNLIGHT
         // ========================================================
 
-        float actualSunEnergy =
+        Sun.LightColor =
+            lightColor;
+
+        Sun.LightEnergy =
             energy *
             _currentSunFade;
 
-        if (_currentSunFade <= 0.001f)
-        {
-            actualSunEnergy = 0f;
-        }
-
-        if (Sun != null)
-        {
-            Sun.LightColor =
-                lightColor;
-
-            Sun.LightEnergy =
-                actualSunEnergy;
-
-            Sun.ShadowEnabled =
-                actualSunEnergy > 0.001f;
-        }
-
         // ========================================================
-        // MOONLIGHT
-        //
-        // Moonlight can ONLY exist while the moon is above the
-        // horizon.
-        // ========================================================
-
-        if (_moonLight != null)
-        {
-            float actualMoonEnergy =
-                _moonEnergy *
-                _currentMoonFade;
-
-            if (_currentMoonFade <= 0.001f)
-            {
-                actualMoonEnergy = 0f;
-            }
-
-            _moonLight.LightColor =
-                new Color(
-                    0.55f,
-                    0.65f,
-                    1.0f
-                );
-
-            _moonLight.LightEnergy =
-                actualMoonEnergy;
-
-            _moonLight.ShadowEnabled =
-                actualMoonEnergy > 0.001f;
-        }
-
-        // ========================================================
-        // AMBIENT ENVIRONMENT
+        // AMBIENT LIGHT
         // ========================================================
 
         if (_env != null)
         {
-            float ambientEnergy;
-
-            if (_currentSunFade > 0.01f)
-            {
-                ambientEnergy =
-                    Mathf.Lerp(
-                        0.12f,
-                        0.35f,
-                        energy /
-                        _noonEnergy
-                    );
-            }
-            else if (_currentMoonFade > 0.01f)
-            {
-                ambientEnergy =
-                    Mathf.Lerp(
-                        0.025f,
-                        0.06f,
-                        _currentMoonFade
-                    );
-            }
-            else
-            {
-                ambientEnergy =
-                    0.015f;
-            }
-
             _env.AmbientLightEnergy =
-                ambientEnergy;
+                Mathf.Lerp(
+                    0.02f,
+                    0.35f,
+                    energy /
+                    _noonEnergy
+                );
         }
 
         // ========================================================
@@ -1247,22 +1066,26 @@ public string GetTimeOfDayName()
     private bool IsBetweenWrapped(
         float value,
         float start,
-        float end)
+        float end
+    )
     {
         if (start <= end)
         {
-            return value >= start &&
-                   value < end;
+            return
+                value >= start &&
+                value < end;
         }
 
-        return value >= start ||
-               value < end;
+        return
+            value >= start ||
+            value < end;
     }
 
     private float GetWrappedProgress(
         float value,
         float start,
-        float end)
+        float end
+    )
     {
         float range =
             Mathf.PosMod(
@@ -1280,8 +1103,7 @@ public string GetTimeOfDayName()
             );
 
         return Mathf.Clamp(
-            position /
-            range,
+            position / range,
             0f,
             1f
         );
