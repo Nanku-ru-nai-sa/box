@@ -30,19 +30,38 @@ public class WorldMeta
     public string Theme { get; set; } = "Normal";
     public string StartBonus { get; set; } = "None";
     public string Type { get; set; } = "Normal";
+
+    // ============================================================
+    // SEASON
+    // ============================================================
+
+    // Stored as a string so existing world saves remain readable.
     public string Season { get; set; } = "Spring";
 
-public bool SeasonLocked { get; set; } = false;
+    public int SeasonDay { get; set; } = 1;
 
-// ============================================================
-// DAY / NIGHT
-// ============================================================
+    public int Year { get; set; } = 1;
 
-// 0.0   = Sunrise
-// 0.25  = Noon
-// 0.5   = Sunset
-// 0.75  = Midnight
-// 1.0   = Next Sunrise
+    public bool SeasonLocked { get; set; } = false;
 
-public float TimeOfDay { get; set; } = 0.0f;
+    // ============================================================
+    // ENABLED SEASONS
+    // ============================================================
+
+    public bool SpringEnabled { get; set; } = true;
+    public bool SummerEnabled { get; set; } = true;
+    public bool AutumnEnabled { get; set; } = true;
+    public bool WinterEnabled { get; set; } = true;
+
+    // ============================================================
+    // DAY / NIGHT
+    // ============================================================
+
+    // 0.0   = Sunrise
+    // 0.25  = Noon
+    // 0.5   = Sunset
+    // 0.75  = Midnight
+    // 1.0   = Next Sunrise
+
+    public float TimeOfDay { get; set; } = 0.0f;
 }

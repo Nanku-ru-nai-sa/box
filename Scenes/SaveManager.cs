@@ -8,8 +8,11 @@ public partial class SaveManager : Node
 {
     public static SaveManager Instance { get; private set; }
 
-    public const string CharactersRoot = "user://saves/characters/";
-    public const string WorldsRoot = "user://saves/worlds/";
+    public const string CharactersRoot =
+        "user://saves/characters/";
+
+    public const string WorldsRoot =
+        "user://saves/worlds/";
 
     public string ActiveCharacterId { get; private set; } = "";
     public string ActiveWorldId { get; private set; } = "";
@@ -21,28 +24,45 @@ public partial class SaveManager : Node
     {
         Instance = this;
 
-        DirAccess.MakeDirRecursiveAbsolute(CharactersRoot);
-        DirAccess.MakeDirRecursiveAbsolute(WorldsRoot);
+        DirAccess.MakeDirRecursiveAbsolute(
+            CharactersRoot
+        );
+
+        DirAccess.MakeDirRecursiveAbsolute(
+            WorldsRoot
+        );
     }
 
-    // ---------- CHARACTERS ----------
+    // ============================================================
+    // CHARACTERS
+    // ============================================================
 
     public List<CharacterMeta> ListCharacters()
     {
-        var results = new List<CharacterMeta>();
+        var results =
+            new List<CharacterMeta>();
 
-        using var dir = DirAccess.Open(CharactersRoot);
-        if (dir == null) return results;
+        using var dir =
+            DirAccess.Open(CharactersRoot);
+
+        if (dir == null)
+            return results;
 
         dir.ListDirBegin();
 
-        string name = dir.GetNext();
+        string name =
+            dir.GetNext();
 
         while (name != "")
         {
-            if (dir.CurrentIsDir() && name != "." && name != "..")
+            if (
+                dir.CurrentIsDir() &&
+                name != "." &&
+                name != ".."
+            )
             {
-                var meta = LoadCharacterMeta(name);
+                var meta =
+                    LoadCharacterMeta(name);
 
                 if (meta != null)
                     results.Add(meta);
@@ -54,14 +74,18 @@ public partial class SaveManager : Node
         dir.ListDirEnd();
 
         return results
-            .OrderByDescending(c => c.LastPlayed)
+            .OrderByDescending(
+                c => c.LastPlayed
+            )
             .ToList();
     }
 
-    public CharacterMeta LoadCharacterMeta(string characterId)
+    public CharacterMeta LoadCharacterMeta(
+        string characterId)
     {
         string path =
-            $"{CharactersRoot}{characterId}/character.json";
+            $"{CharactersRoot}" +
+            $"{characterId}/character.json";
 
         if (!FileAccess.FileExists(path))
             return null;
@@ -81,7 +105,8 @@ public partial class SaveManager : Node
         catch (Exception e)
         {
             GD.PrintErr(
-                $"character.json parse failed ({characterId}): {e.Message}"
+                $"character.json parse failed " +
+                $"({characterId}): {e.Message}"
             );
 
             return null;
@@ -100,24 +125,26 @@ public partial class SaveManager : Node
             "_" +
             DateTime.UtcNow.Ticks;
 
-        var meta = new CharacterMeta
-        {
-            Id = id,
-            DisplayName = displayName,
-            CreatedAt = DateTime.UtcNow,
-            LastPlayed = DateTime.UtcNow,
-            LockedCheatCodes = cheatCodes,
-            LockedKeepInventory = keepInventory,
-            LockedGameMode = gameMode,
-            LockedDifficulty = difficulty
-        };
+        var meta =
+            new CharacterMeta
+            {
+                Id = id,
+                DisplayName = displayName,
+                CreatedAt = DateTime.UtcNow,
+                LastPlayed = DateTime.UtcNow,
+                LockedCheatCodes = cheatCodes,
+                LockedKeepInventory = keepInventory,
+                LockedGameMode = gameMode,
+                LockedDifficulty = difficulty
+            };
 
         SaveCharacterMeta(meta);
 
         return meta;
     }
 
-    public void SaveCharacterMeta(CharacterMeta meta)
+    public void SaveCharacterMeta(
+        CharacterMeta meta)
     {
         DirAccess.MakeDirRecursiveAbsolute(
             $"{CharactersRoot}{meta.Id}/"
@@ -125,7 +152,8 @@ public partial class SaveManager : Node
 
         using var file =
             FileAccess.Open(
-                $"{CharactersRoot}{meta.Id}/character.json",
+                $"{CharactersRoot}" +
+                $"{meta.Id}/character.json",
                 FileAccess.ModeFlags.Write
             );
 
@@ -137,47 +165,70 @@ public partial class SaveManager : Node
         );
     }
 
-    public void SetActiveCharacter(string characterId)
+    public void SetActiveCharacter(
+        string characterId)
     {
-        ActiveCharacterId = characterId;
+        ActiveCharacterId =
+            characterId;
 
-        var meta = LoadCharacterMeta(characterId);
+        var meta =
+            LoadCharacterMeta(
+                characterId
+            );
 
         if (meta != null)
         {
-            meta.LastPlayed = DateTime.UtcNow;
+            meta.LastPlayed =
+                DateTime.UtcNow;
+
             SaveCharacterMeta(meta);
         }
     }
 
-    public void DeleteCharacter(string characterId)
+    public void DeleteCharacter(
+        string characterId)
     {
         DeleteDirRecursive(
             $"{CharactersRoot}{characterId}/"
         );
 
-        if (ActiveCharacterId == characterId)
+        if (ActiveCharacterId ==
+            characterId)
+        {
             ActiveCharacterId = "";
+        }
     }
 
-    // ---------- WORLDS ----------
+    // ============================================================
+    // WORLDS
+    // ============================================================
 
     public List<WorldMeta> ListWorlds()
     {
-        var results = new List<WorldMeta>();
+        var results =
+            new List<WorldMeta>();
 
-        using var dir = DirAccess.Open(WorldsRoot);
-        if (dir == null) return results;
+        using var dir =
+            DirAccess.Open(WorldsRoot);
+
+        if (dir == null)
+            return results;
 
         dir.ListDirBegin();
 
-        string name = dir.GetNext();
+        string name =
+            dir.GetNext();
 
         while (name != "")
         {
-            if (dir.CurrentIsDir() && name != "." && name != "..")
+            if (
+                dir.CurrentIsDir() &&
+                name != "." &&
+                name != ".."
+            )
             {
-                var meta = LoadWorldMeta(name);
+                var meta =
+                    LoadWorldMeta(name);
 
                 if (meta != null)
                     results.Add(meta);
@@ -189,14 +240,18 @@ public partial class SaveManager : Node
         dir.ListDirEnd();
 
         return results
-            .OrderByDescending(w => w.LastPlayed)
+            .OrderByDescending(
+                w => w.LastPlayed
+            )
             .ToList();
     }
 
-    public WorldMeta LoadWorldMeta(string worldId)
+    public WorldMeta LoadWorldMeta(
+        string worldId)
     {
         string path =
-            $"{WorldsRoot}{worldId}/world_meta.json";
+            $"{WorldsRoot}" +
+            $"{worldId}/world_meta.json";
 
         if (!FileAccess.FileExists(path))
             return null;
@@ -217,11 +272,22 @@ public partial class SaveManager : Node
             if (meta == null)
                 return null;
 
-            // Keep TimeOfDay safely between 0 and 1.
             meta.TimeOfDay =
                 Mathf.PosMod(
                     meta.TimeOfDay,
                     1.0f
+                );
+
+            meta.SeasonDay =
+                Mathf.Max(
+                    1,
+                    meta.SeasonDay
+                );
+
+            meta.Year =
+                Mathf.Max(
+                    1,
+                    meta.Year
                 );
 
             return meta;
@@ -229,14 +295,17 @@ public partial class SaveManager : Node
         catch (Exception e)
         {
             GD.PrintErr(
-                $"world_meta.json parse failed ({worldId}): {e.Message}"
+                $"world_meta.json parse failed " +
+                $"({worldId}): {e.Message}"
             );
 
             return null;
         }
     }
 
-    // ---------- CREATE WORLD ----------
+    // ============================================================
+    // CREATE WORLD
+    // ============================================================
 
     public WorldMeta CreateWorld(
         string displayName,
@@ -252,41 +321,73 @@ public partial class SaveManager : Node
             "_" +
             DateTime.UtcNow.Ticks;
 
-        var meta = new WorldMeta
-        {
-            Id = id,
-            DisplayName = displayName,
-            Seed = seed,
-            Theme = theme,
-            StartBonus = startBonus,
-            Type = type,
-            Season = season,
-            SeasonLocked = seasonLocked,
+        var meta =
+            new WorldMeta
+            {
+                Id = id,
+                DisplayName = displayName,
+                Seed = seed,
+                Theme = theme,
+                StartBonus = startBonus,
+                Type = type,
 
-            // NEW WORLD ALWAYS STARTS AT SUNRISE
-            TimeOfDay = 0.0f,
+                Season =
+                    string.IsNullOrEmpty(season)
+                        ? "Spring"
+                        : season,
 
-            CreatedAt = DateTime.UtcNow,
-            LastPlayed = DateTime.UtcNow
-        };
+                SeasonDay = 1,
+                Year = 1,
+
+                SeasonLocked =
+                    seasonLocked,
+
+                SpringEnabled = true,
+                SummerEnabled = true,
+                AutumnEnabled = true,
+                WinterEnabled = true,
+
+                // NEW WORLD STARTS AT SUNRISE
+                TimeOfDay = 0.0f,
+
+                CreatedAt =
+                    DateTime.UtcNow,
+
+                LastPlayed =
+                    DateTime.UtcNow
+            };
 
         SaveWorldMeta(meta);
 
         return meta;
     }
 
-    // ---------- SAVE WORLD ----------
+    // ============================================================
+    // SAVE WORLD
+    // ============================================================
 
-    public void SaveWorldMeta(WorldMeta meta)
+    public void SaveWorldMeta(
+        WorldMeta meta)
     {
         if (meta == null)
             return;
 
-        // Keep time safely between 0 and 1.
         meta.TimeOfDay =
             Mathf.PosMod(
                 meta.TimeOfDay,
                 1.0f
+            );
+
+        meta.SeasonDay =
+            Mathf.Max(
+                1,
+                meta.SeasonDay
+            );
+
+        meta.Year =
+            Mathf.Max(
+                1,
+                meta.Year
             );
 
         DirAccess.MakeDirRecursiveAbsolute(
@@ -295,7 +396,8 @@ public partial class SaveManager : Node
 
         using var file =
             FileAccess.Open(
-                $"{WorldsRoot}{meta.Id}/world_meta.json",
+                $"{WorldsRoot}" +
+                $"{meta.Id}/world_meta.json",
                 FileAccess.ModeFlags.Write
             );
 
@@ -307,17 +409,23 @@ public partial class SaveManager : Node
         );
     }
 
-    // ---------- ACTIVE WORLD ----------
+    // ============================================================
+    // ACTIVE WORLD
+    // ============================================================
 
-    public void SetActiveWorld(string worldId)
+    public void SetActiveWorld(
+        string worldId)
     {
-        ActiveWorldId = worldId;
+        ActiveWorldId =
+            worldId;
 
-        var meta = LoadWorldMeta(worldId);
+        var meta =
+            LoadWorldMeta(worldId);
 
         if (meta != null)
         {
-            meta.LastPlayed = DateTime.UtcNow;
+            meta.LastPlayed =
+                DateTime.UtcNow;
 
             SaveWorldMeta(meta);
         }
@@ -327,9 +435,11 @@ public partial class SaveManager : Node
     // DAY / NIGHT TIME
     // ============================================================
 
-    public void SaveWorldTime(float timeOfDay)
+    public void SaveWorldTime(
+        float timeOfDay)
     {
-        if (string.IsNullOrEmpty(ActiveWorldId))
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
         {
             GD.PrintErr(
                 "[SaveManager] Cannot save world time. " +
@@ -340,7 +450,9 @@ public partial class SaveManager : Node
         }
 
         var meta =
-            LoadWorldMeta(ActiveWorldId);
+            LoadWorldMeta(
+                ActiveWorldId
+            );
 
         if (meta == null)
         {
@@ -371,7 +483,8 @@ public partial class SaveManager : Node
 
     public float LoadWorldTime()
     {
-        if (string.IsNullOrEmpty(ActiveWorldId))
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
         {
             GD.Print(
                 "[SaveManager] No active world. " +
@@ -382,7 +495,9 @@ public partial class SaveManager : Node
         }
 
         var meta =
-            LoadWorldMeta(ActiveWorldId);
+            LoadWorldMeta(
+                ActiveWorldId
+            );
 
         if (meta == null)
         {
@@ -408,21 +523,144 @@ public partial class SaveManager : Node
         return time;
     }
 
-    // ---------- DELETE WORLD ----------
+    // ============================================================
+    // SEASON STATE
+    // ============================================================
 
-    public void DeleteWorld(string worldId)
+    public void SaveWorldSeason(
+        SeasonManager seasonManager)
+    {
+        if (seasonManager == null)
+            return;
+
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
+        {
+            GD.PrintErr(
+                "[SaveManager] Cannot save season. " +
+                "There is no active world."
+            );
+
+            return;
+        }
+
+        var meta =
+            LoadWorldMeta(
+                ActiveWorldId
+            );
+
+        if (meta == null)
+        {
+            GD.PrintErr(
+                "[SaveManager] Cannot save season. " +
+                "World metadata could not be loaded."
+            );
+
+            return;
+        }
+
+        meta.Year =
+            seasonManager.CurrentYear;
+
+        meta.Season =
+            seasonManager.GetSeasonName();
+
+        meta.SeasonDay =
+            seasonManager.CurrentDay;
+
+        meta.SeasonLocked =
+            seasonManager.SeasonLocked;
+
+        meta.SpringEnabled =
+            seasonManager.SpringEnabled;
+
+        meta.SummerEnabled =
+            seasonManager.SummerEnabled;
+
+        meta.AutumnEnabled =
+            seasonManager.AutumnEnabled;
+
+        meta.WinterEnabled =
+            seasonManager.WinterEnabled;
+
+        meta.LastPlayed =
+            DateTime.UtcNow;
+
+        SaveWorldMeta(meta);
+
+        GD.Print(
+            $"[SaveManager] Saved calendar: " +
+            $"Year {meta.Year}, " +
+            $"{meta.Season}, " +
+            $"Day {meta.SeasonDay}"
+        );
+    }
+
+    public bool LoadWorldSeason(
+        SeasonManager seasonManager)
+    {
+        if (seasonManager == null)
+            return false;
+
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
+        {
+            return false;
+        }
+
+        var meta =
+            LoadWorldMeta(
+                ActiveWorldId
+            );
+
+        if (meta == null)
+            return false;
+
+        seasonManager.LoadCalendarState(
+            meta.Year,
+            meta.Season,
+            meta.SeasonDay,
+            meta.SeasonLocked,
+            meta.SpringEnabled,
+            meta.SummerEnabled,
+            meta.AutumnEnabled,
+            meta.WinterEnabled
+        );
+
+        GD.Print(
+            $"[SaveManager] Loaded calendar: " +
+            $"Year {meta.Year}, " +
+            $"{meta.Season}, " +
+            $"Day {meta.SeasonDay}"
+        );
+
+        return true;
+    }
+
+    // ============================================================
+    // DELETE WORLD
+    // ============================================================
+
+    public void DeleteWorld(
+        string worldId)
     {
         DeleteDirRecursive(
             $"{WorldsRoot}{worldId}/"
         );
 
-        if (ActiveWorldId == worldId)
+        if (ActiveWorldId ==
+            worldId)
+        {
             ActiveWorldId = "";
+        }
     }
 
-    // ---------- HELPERS ----------
+    // ============================================================
+    // HELPERS
+    // ============================================================
 
-    private string SanitizeId(string displayName)
+    private string SanitizeId(
+        string displayName)
     {
         var clean =
             new string(
@@ -441,32 +679,45 @@ public partial class SaveManager : Node
             : clean.ToLower();
     }
 
-    private void DeleteDirRecursive(string path)
+    private void DeleteDirRecursive(
+        string path)
     {
-        using var dir = DirAccess.Open(path);
+        using var dir =
+            DirAccess.Open(path);
 
         if (dir == null)
             return;
 
         dir.ListDirBegin();
 
-        string name = dir.GetNext();
+        string name =
+            dir.GetNext();
 
         while (name != "")
         {
-            if (name != "." && name != "..")
+            if (
+                name != "." &&
+                name != ".."
+            )
             {
-                string full = path + name;
+                string full =
+                    path + name;
 
                 if (dir.CurrentIsDir())
                 {
-                    DeleteDirRecursive(full + "/");
+                    DeleteDirRecursive(
+                        full + "/"
+                    );
 
-                    DirAccess.RemoveAbsolute(full);
+                    DirAccess.RemoveAbsolute(
+                        full
+                    );
                 }
                 else
                 {
-                    DirAccess.RemoveAbsolute(full);
+                    DirAccess.RemoveAbsolute(
+                        full
+                    );
                 }
             }
 

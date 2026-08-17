@@ -539,4 +539,72 @@ public partial class SeasonManager : Node
             $"{GetSeasonName(CurrentSeason)} - " +
             $"Day {CurrentDay}/{DaysPerSeason}";
     }
+    // ============================================================
+// SAVE / LOAD
+// ============================================================
+
+public void LoadCalendarState(
+    int year,
+    string season,
+    int day,
+    bool seasonLocked,
+    bool springEnabled,
+    bool summerEnabled,
+    bool autumnEnabled,
+    bool winterEnabled)
+{
+    SpringEnabled = springEnabled;
+    SummerEnabled = summerEnabled;
+    AutumnEnabled = autumnEnabled;
+    WinterEnabled = winterEnabled;
+
+    EnsureAtLeastOneSeasonEnabled();
+
+    CurrentYear =
+        Mathf.Max(
+            1,
+            year
+        );
+
+    CurrentDay =
+        Mathf.Clamp(
+            day,
+            1,
+            DaysPerSeason
+        );
+
+    Season loadedSeason =
+        Season.Spring;
+
+    if (!string.IsNullOrEmpty(season))
+    {
+        if (!Enum.TryParse(
+            season,
+            true,
+            out loadedSeason))
+        {
+            loadedSeason =
+                Season.Spring;
+        }
+    }
+
+    if (!IsSeasonEnabled(loadedSeason))
+    {
+        loadedSeason =
+            GetFirstEnabledSeason();
+    }
+
+    CurrentSeason =
+        loadedSeason;
+
+    SeasonLocked =
+        seasonLocked;
+
+    GD.Print(
+        $"[SeasonManager] Loaded calendar: " +
+        $"Year {CurrentYear}, " +
+        $"{GetSeasonName(CurrentSeason)}, " +
+        $"Day {CurrentDay}/{DaysPerSeason}"
+    );
+}
 }
