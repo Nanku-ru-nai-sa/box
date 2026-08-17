@@ -133,16 +133,16 @@ public partial class DayNightCycle : Node3D
     [ExportGroup("Seasonal Daylight")]
 
     [Export]
-    public float SpringDaylightMinutes { get; set; } = 10.0f;
+public float SpringDaylightMinutes { get; set; } = 10.0f;
 
-    [Export]
-    public float SummerDaylightMinutes { get; set; } = 10.5f;
+[Export]
+public float SummerDaylightMinutes { get; set; } = 11.0f;
 
-    [Export]
-    public float AutumnDaylightMinutes { get; set; } = 9.5f;
+[Export]
+public float AutumnDaylightMinutes { get; set; } = 9.0f;
 
-    [Export]
-    public float WinterDaylightMinutes { get; set; } = 9.0f;
+[Export]
+public float WinterDaylightMinutes { get; set; } = 8.0f;
 
     [Export]
     public float SunriseDurationSeconds { get; set; } = 60f;
@@ -478,9 +478,105 @@ public partial class DayNightCycle : Node3D
     }
 
     public float GetGameHour()
+{
+    return _timeOfDay * 24f;
+}
+
+// ============================================================
+// DISPLAY TIME
+// ============================================================
+
+public int GetDisplayHour()
+{
+    float gameHour = GetGameHour();
+
+    int hour = Mathf.FloorToInt(gameHour);
+
+    return hour % 24;
+}
+
+public int GetDisplayMinute()
+{
+    float gameHour = GetGameHour();
+
+    float minute =
+        (gameHour -
+         Mathf.Floor(gameHour)) *
+        60f;
+
+    return Mathf.Clamp(
+        Mathf.FloorToInt(minute),
+        0,
+        59
+    );
+}
+
+public string GetTimeString()
+{
+    int hour =
+        GetDisplayHour();
+
+    int minute =
+        GetDisplayMinute();
+
+    string period =
+        hour >= 12
+            ? "PM"
+            : "AM";
+
+    int displayHour =
+        hour % 12;
+
+    if (displayHour == 0)
+        displayHour = 12;
+
+    return
+        $"{displayHour:00}:{minute:00} {period}";
+}
+
+public string GetTimeOfDayName()
+{
+    float hour =
+        GetGameHour();
+
+    // Sunrise
+    if (hour >= 5.0f &&
+        hour < 7.0f)
     {
-        return _timeOfDay * 24f;
+        return "SUNRISE";
     }
+
+    // Morning
+    if (hour >= 7.0f &&
+        hour < 11.0f)
+    {
+        return "MORNING";
+    }
+
+    // Midday
+    if (hour >= 11.0f &&
+        hour < 14.0f)
+    {
+        return "MIDDAY";
+    }
+
+    // Afternoon
+    if (hour >= 14.0f &&
+        hour < 17.0f)
+    {
+        return "AFTERNOON";
+    }
+
+    // Sunset
+    if (hour >= 17.0f &&
+        hour < 20.0f)
+    {
+        return "SUNSET";
+    }
+
+    // Night
+    return "NIGHT";
+}
 
     // ============================================================
     // CURRENT SEASON

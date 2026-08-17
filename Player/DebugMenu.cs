@@ -1,6 +1,6 @@
 using Godot;
 
-public partial class SeasonDebugMenu : CanvasLayer
+public partial class DebugMenu : CanvasLayer
 {
     private Panel _panel;
     private Label _label;
@@ -57,6 +57,7 @@ public partial class SeasonDebugMenu : CanvasLayer
             if (!_f7Held)
             {
                 _f7Held = true;
+
                 AdvanceDay();
             }
         }
@@ -74,6 +75,7 @@ public partial class SeasonDebugMenu : CanvasLayer
             if (!_f9Held)
             {
                 _f9Held = true;
+
                 ToggleSeasonLock();
             }
         }
@@ -91,6 +93,7 @@ public partial class SeasonDebugMenu : CanvasLayer
             if (!_f10Held)
             {
                 _f10Held = true;
+
                 AdvanceHour();
             }
         }
@@ -98,6 +101,10 @@ public partial class SeasonDebugMenu : CanvasLayer
         {
             _f10Held = false;
         }
+
+        // ========================================================
+        // UPDATE
+        // ========================================================
 
         UpdateDisplay();
     }
@@ -107,57 +114,74 @@ public partial class SeasonDebugMenu : CanvasLayer
     // ============================================================
 
     private void BuildMenu()
-    {
-        _panel = new Panel();
+{
+    _panel = new Panel();
 
-        _panel.Position = new Vector2(20, 20);
-        _panel.Size = new Vector2(430, 620);
+    _panel.Position =
+        new Vector2(20, 20);
 
-        AddChild(_panel);
+    _panel.Size =
+        new Vector2(400, 1000);
 
-        var style = new StyleBoxFlat();
+    AddChild(_panel);
 
-        style.BgColor = new Color(
+    // ========================================================
+    // PANEL STYLE
+    // ========================================================
+
+    var style =
+        new StyleBoxFlat();
+
+    style.BgColor =
+        new Color(
             0.03f,
             0.03f,
             0.03f,
             0.92f
         );
 
-        style.BorderWidthLeft = 2;
-        style.BorderWidthTop = 2;
-        style.BorderWidthRight = 2;
-        style.BorderWidthBottom = 2;
+    style.BorderWidthLeft = 2;
+    style.BorderWidthTop = 2;
+    style.BorderWidthRight = 2;
+    style.BorderWidthBottom = 2;
 
-        style.BorderColor = new Color(
+    style.BorderColor =
+        new Color(
             0.5f,
             0.5f,
             0.5f,
             0.9f
         );
 
-        style.CornerRadiusTopLeft = 6;
-        style.CornerRadiusTopRight = 6;
-        style.CornerRadiusBottomLeft = 6;
-        style.CornerRadiusBottomRight = 6;
+    style.CornerRadiusTopLeft = 6;
+    style.CornerRadiusTopRight = 6;
+    style.CornerRadiusBottomLeft = 6;
+    style.CornerRadiusBottomRight = 6;
 
-        _panel.AddThemeStyleboxOverride(
-            "panel",
-            style
-        );
+    _panel.AddThemeStyleboxOverride(
+        "panel",
+        style
+    );
 
-        _label = new Label();
+    // ========================================================
+    // LABEL
+    // ========================================================
 
-        _label.Position = new Vector2(20, 15);
-        _label.Size = new Vector2(390, 590);
+    _label = new Label();
 
-        _label.AddThemeFontSizeOverride(
-            "font_size",
-            18
-        );
+    _label.Position =
+        new Vector2(20, 15);
 
-        _panel.AddChild(_label);
-    }
+    _label.Size =
+        new Vector2(400, 1000);
+
+    _label.AddThemeFontSizeOverride(
+        "font_size",
+        18
+    );
+
+    _panel.AddChild(_label);
+}
 
     // ============================================================
     // UPDATE DISPLAY
@@ -165,7 +189,8 @@ public partial class SeasonDebugMenu : CanvasLayer
 
     private void UpdateDisplay()
     {
-        SeasonManager seasonManager = GetSeasonManager();
+        SeasonManager seasonManager =
+            GetSeasonManager();
 
         if (seasonManager == null)
         {
@@ -175,6 +200,10 @@ public partial class SeasonDebugMenu : CanvasLayer
 
             return;
         }
+
+        // ========================================================
+        // SEASON STATES
+        // ========================================================
 
         string spring =
             seasonManager.SpringEnabled
@@ -201,18 +230,73 @@ public partial class SeasonDebugMenu : CanvasLayer
                 ? "LOCKED"
                 : "UNLOCKED";
 
+        // ========================================================
+        // DAY / NIGHT
+        // ========================================================
+
+        DayNightCycle dayNight =
+            GetTree().GetFirstNodeInGroup(
+                "day_night_cycle"
+            ) as DayNightCycle;
+
+        string timeString =
+            "N/A";
+
+        string timeOfDayName =
+            "N/A";
+
+        string rawTime =
+            "N/A";
+
+        if (dayNight != null)
+        {
+            timeString =
+                dayNight.GetTimeString();
+
+            timeOfDayName =
+                dayNight.GetTimeOfDayName();
+
+            rawTime =
+                $"{dayNight.GetTimeOfDay():0.000}";
+        }
+
+        // ========================================================
+        // DISPLAY
+        // ========================================================
+
         _label.Text =
             "BOX DEBUG\n" +
-            "══════════════════════════════\n\n" +
+            "════════════════════════════════\n\n" +
+
+            // ====================================================
+            // TIME
+            // ====================================================
+
+            "TIME\n" +
+            $"Time:        {timeString}\n" +
+            $"Period:      {timeOfDayName}\n" +
+            $"Raw Time:    {rawTime}\n\n" +
+
+            // ====================================================
+            // CALENDAR
+            // ====================================================
 
             "CALENDAR\n" +
             $"Year:        {seasonManager.CurrentYear}\n" +
             $"Season:      {seasonManager.GetSeasonName()}\n" +
             $"Day:         {seasonManager.CurrentDay} / {seasonManager.DaysPerSeason}\n\n" +
 
+            // ====================================================
+            // MOON
+            // ====================================================
+
             "MOON\n" +
             $"Phase:       {seasonManager.GetMoonPhaseName()}\n" +
             $"Progress:    {seasonManager.GetMoonProgress() * 100f:0.0}%\n\n" +
+
+            // ====================================================
+            // SEASONS
+            // ====================================================
 
             "SEASONS\n" +
             $"Spring:      {spring}\n" +
@@ -220,8 +304,16 @@ public partial class SeasonDebugMenu : CanvasLayer
             $"Autumn:      {autumn}\n" +
             $"Winter:      {winter}\n\n" +
 
+            // ====================================================
+            // SEASON LOCK
+            // ====================================================
+
             "SEASON LOCK\n" +
             $"{lockState}\n\n" +
+
+            // ====================================================
+            // TEST CONTROLS
+            // ====================================================
 
             "TEST CONTROLS\n" +
             "F6   Close Debug Menu\n" +
@@ -236,7 +328,8 @@ public partial class SeasonDebugMenu : CanvasLayer
 
     private void AdvanceDay()
     {
-        SeasonManager seasonManager = GetSeasonManager();
+        SeasonManager seasonManager =
+            GetSeasonManager();
 
         if (seasonManager == null)
             return;
@@ -260,7 +353,8 @@ public partial class SeasonDebugMenu : CanvasLayer
         if (dayNight == null)
         {
             GD.Print(
-                "[SeasonDebugMenu] DayNightCycle not found in group 'day_night_cycle'."
+                "[DebugMenu] DayNightCycle not found " +
+                "in group 'day_night_cycle'."
             );
 
             return;
@@ -277,7 +371,8 @@ public partial class SeasonDebugMenu : CanvasLayer
 
     private void ToggleSeasonLock()
     {
-        SeasonManager seasonManager = GetSeasonManager();
+        SeasonManager seasonManager =
+            GetSeasonManager();
 
         if (seasonManager == null)
             return;

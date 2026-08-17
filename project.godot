@@ -27,7 +27,7 @@ BlockDropManager="*uid://ch8cl10j1ad4x"
 OreRegistry="*uid://coclp16v2cgix"
 KeybindsManager="*uid://clp0yawxdmmcv"
 SeasonManager="*uid://cq7eljlq8rtvi"
-SeasonDebugMenu="*uid://bvc38hkm70b7n"
+DebugMenu="*uid://bvc38hkm70b7n"
 
 [display]
 
