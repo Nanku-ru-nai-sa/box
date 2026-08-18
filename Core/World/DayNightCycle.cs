@@ -19,17 +19,8 @@ public partial class DayNightCycle : Node3D
     // ============================================================
 
     // 0.000 = Sunrise
-    // 0.250 = Solar Noon ONLY when day/night are equal.
-    // 0.500 = Sunset ONLY when day/night are equal.
-    //
-    // With seasonal daylight:
-    //
-    // Spring: 10 min day / 5 min night
-    // Summer: 11 min day / 4 min night
-    // Autumn:  9 min day / 6 min night
-    // Winter:  8 min day / 7 min night
-    //
-    // 0.000 = Sunrise
+    // 0.250 = Day
+    // 0.500 = Sunset ONLY when daylight is 50%
     // 1.000 = Next Sunrise
 
     private float _timeOfDay = 0.0f;
@@ -134,31 +125,10 @@ public partial class DayNightCycle : Node3D
         AddToGroup("day_night_cycle");
 
         // ========================================================
-        // LOAD SAVED WORLD TIME
+        // LOAD SAVED WORLD STATE
         // ========================================================
 
-        if (SaveManager.Instance != null)
-        {
-            _timeOfDay =
-                Mathf.PosMod(
-                    SaveManager.Instance.LoadWorldTime(),
-                    1.0f
-                );
-
-            GD.Print(
-                $"[DayNightCycle] Starting at saved time: " +
-                $"{_timeOfDay:0.000} ({GetTimeString()})"
-            );
-        }
-        else
-        {
-            _timeOfDay = 0.0f;
-
-            GD.Print(
-                "[DayNightCycle] No SaveManager found. " +
-                "Starting at sunrise."
-            );
-        }
+        LoadSavedWorldState();
 
         // ========================================================
         // SUN VISUAL
@@ -295,7 +265,6 @@ public partial class DayNightCycle : Node3D
         _env.AmbientLightSource =
             Godot.Environment.AmbientSource.Sky;
 
-        // Slightly brighter night.
         _env.AmbientLightEnergy =
             0.035f;
 
@@ -331,6 +300,79 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
+    // LOAD SAVED WORLD STATE
+    // ============================================================
+
+    private void LoadSavedWorldState()
+    {
+        if (SaveManager.Instance == null)
+        {
+            _timeOfDay = 0.0f;
+
+            GD.Print(
+                "[DayNightCycle] No SaveManager found. " +
+                "Starting at sunrise."
+            );
+
+            return;
+        }
+
+        // --------------------------------------------------------
+        // LOAD TIME
+        // --------------------------------------------------------
+
+        _timeOfDay =
+            Mathf.PosMod(
+                SaveManager.Instance.LoadWorldTime(),
+                1.0f
+            );
+
+        GD.Print(
+            $"[DayNightCycle] Starting at saved time: " +
+            $"{_timeOfDay:0.000} ({GetTimeString()})"
+        );
+
+        // --------------------------------------------------------
+        // LOAD CALENDAR
+        // --------------------------------------------------------
+
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
+            );
+
+        if (seasonManager != null)
+        {
+            bool loaded =
+                SaveManager.Instance.LoadWorldSeason(
+                    seasonManager
+                );
+
+            if (loaded)
+            {
+                GD.Print(
+                    $"[DayNightCycle] Loaded calendar: " +
+                    $"{seasonManager.GetCalendarString()}"
+                );
+            }
+            else
+            {
+                GD.Print(
+                    "[DayNightCycle] No saved calendar found. " +
+                    "Using SeasonManager defaults."
+                );
+            }
+        }
+        else
+        {
+            GD.Print(
+                "[DayNightCycle] SeasonManager not found. " +
+                "Calendar state was not loaded."
+            );
+        }
+    }
+
+    // ============================================================
     // PROCESS
     // ============================================================
 
@@ -344,12 +386,6 @@ public partial class DayNightCycle : Node3D
         // ========================================================
         // TIME ADVANCEMENT
         // ========================================================
-        //
-        // One complete normalized cycle is always one full
-        // 15-minute real-time day.
-        //
-        // The seasonal daylight settings control where the
-        // sunrise/sunset occur inside that cycle.
 
         _timeOfDay +=
             (float)delta /
@@ -360,7 +396,8 @@ public partial class DayNightCycle : Node3D
             _timeOfDay -= 1f;
 
             AdvanceCalendarDay();
-            SaveCurrentWorldTime();
+
+            SaveCurrentWorldState();
         }
 
         UpdateCelestialBodies();
@@ -384,7 +421,7 @@ public partial class DayNightCycle : Node3D
                 OnSeasonChanged;
         }
 
-        SaveCurrentWorldTime();
+        SaveCurrentWorldState();
     }
 
     // ============================================================
@@ -443,7 +480,7 @@ public partial class DayNightCycle : Node3D
         UpdateCelestialBodies();
         UpdateLightColor();
 
-        SaveCurrentWorldTime();
+        SaveCurrentWorldState();
 
         GD.Print(
             $"[DayNightCycle] Debug hour advanced. " +
@@ -453,7 +490,41 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
-    // SAVE TIME
+    // SAVE WORLD STATE
+    // ============================================================
+
+    private void SaveCurrentWorldState()
+    {
+        if (SaveManager.Instance == null)
+            return;
+
+        // --------------------------------------------------------
+        // SAVE TIME
+        // --------------------------------------------------------
+
+        SaveManager.Instance.SaveWorldTime(
+            _timeOfDay
+        );
+
+        // --------------------------------------------------------
+        // SAVE CALENDAR
+        // --------------------------------------------------------
+
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
+            );
+
+        if (seasonManager != null)
+        {
+            SaveManager.Instance.SaveWorldSeason(
+                seasonManager
+            );
+        }
+    }
+
+    // ============================================================
+    // SAVE TIME ONLY
     // ============================================================
 
     private void SaveCurrentWorldTime()
@@ -685,17 +756,6 @@ public partial class DayNightCycle : Node3D
 
         if (sunUp)
         {
-            // ====================================================
-            // DAYTIME SUN
-            // ====================================================
-            //
-            // 0.0 = Sunrise
-            // 0.5 = Solar Noon
-            // 1.0 = Sunset
-            //
-            // This guarantees the sun rises at the exact moment
-            // our normalized clock reaches 0.0.
-
             float daylightPosition =
                 _timeOfDay /
                 Mathf.Max(
@@ -723,12 +783,6 @@ public partial class DayNightCycle : Node3D
         }
         else
         {
-            // ====================================================
-            // NIGHT SUN
-            // ====================================================
-            //
-            // Keep the sun below the horizon.
-
             float nightProgress =
                 (
                     _timeOfDay -
@@ -746,9 +800,6 @@ public partial class DayNightCycle : Node3D
                     0f,
                     1f
                 );
-
-            // Start just below sunset and travel underneath
-            // the world until sunrise.
 
             float nightAngle =
                 Mathf.Lerp(
@@ -807,11 +858,6 @@ public partial class DayNightCycle : Node3D
         // ========================================================
         // MOON
         // ========================================================
-        //
-        // The moon is ALWAYS exactly opposite the sun.
-        //
-        // This prevents the moon from drifting into an incorrect
-        // position or appearing in the sky during sunrise.
 
         _moonMesh.GlobalPosition =
             -_sunMesh.GlobalPosition;
@@ -926,8 +972,6 @@ public partial class DayNightCycle : Node3D
 
         if (!sunUp)
         {
-            // No sun = no directional sunlight.
-
             lightColor =
                 _nightColor;
 
@@ -1103,10 +1147,6 @@ public partial class DayNightCycle : Node3D
         {
             if (!sunUp)
             {
-                // Tiny amount of night visibility.
-                //
-                // Moon does NOT control this.
-
                 _env.AmbientLightEnergy =
                     0.015f;
             }

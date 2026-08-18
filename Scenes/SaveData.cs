@@ -35,23 +35,20 @@ public class WorldMeta
     // SEASON
     // ============================================================
 
-    // Stored as a string so existing world saves remain readable.
     public string Season { get; set; } = "Spring";
 
-    public int SeasonDay { get; set; } = 1;
-
-    public int Year { get; set; } = 1;
-
     public bool SeasonLocked { get; set; } = false;
-
-    // ============================================================
-    // ENABLED SEASONS
-    // ============================================================
 
     public bool SpringEnabled { get; set; } = true;
     public bool SummerEnabled { get; set; } = true;
     public bool AutumnEnabled { get; set; } = true;
     public bool WinterEnabled { get; set; } = true;
+
+    // Current day within the season.
+    public int SeasonDay { get; set; } = 1;
+
+    // Current year.
+    public int Year { get; set; } = 1;
 
     // ============================================================
     // DAY / NIGHT
