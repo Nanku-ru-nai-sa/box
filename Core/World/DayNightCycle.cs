@@ -18,10 +18,24 @@ public partial class DayNightCycle : Node3D
     // TIME OF DAY
     // ============================================================
 
+    // IMPORTANT:
+    //
+    // _timeOfDay is NOT directly the displayed clock.
+    //
+    // It represents progress from:
+    //
     // 0.000 = Sunrise
-    // 0.250 = Day
-    // 0.500 = Sunset ONLY when daylight is 50%
     // 1.000 = Next Sunrise
+    //
+    // The displayed clock is converted separately so that:
+    //
+    // Sunrise = 6:00 AM
+    // Noon    = 12:00 PM
+    // Sunset  = 6:00 PM
+    // Midnight = 12:00 AM
+    //
+    // Seasonal daylight changes how quickly the clock moves
+    // through the daytime and nighttime portions.
 
     private float _timeOfDay = 0.0f;
 
@@ -467,13 +481,28 @@ public partial class DayNightCycle : Node3D
 
     public void AdvanceDebugHour()
     {
-        _timeOfDay +=
-            1f / 24f;
+        // Advance exactly one displayed game hour.
+        //
+        // We convert the current clock to a game hour,
+        // add one hour, then convert it back into our
+        // sunrise-based normalized clock.
 
-        if (_timeOfDay >= 1f)
+        float currentHour =
+            GetGameHour();
+
+        currentHour += 1f;
+
+        if (currentHour >= 30f)
+            currentHour -= 24f;
+
+        _timeOfDay =
+            GameHourToNormalizedTime(
+                currentHour
+            );
+
+        // Sunrise = beginning of the calendar day.
+        if (Mathf.IsZeroApprox(_timeOfDay))
         {
-            _timeOfDay -= 1f;
-
             AdvanceCalendarDay();
         }
 
@@ -498,17 +527,9 @@ public partial class DayNightCycle : Node3D
         if (SaveManager.Instance == null)
             return;
 
-        // --------------------------------------------------------
-        // SAVE TIME
-        // --------------------------------------------------------
-
         SaveManager.Instance.SaveWorldTime(
             _timeOfDay
         );
-
-        // --------------------------------------------------------
-        // SAVE CALENDAR
-        // --------------------------------------------------------
 
         SeasonManager seasonManager =
             GetNodeOrNull<SeasonManager>(
@@ -546,9 +567,133 @@ public partial class DayNightCycle : Node3D
         return _timeOfDay;
     }
 
+    // ============================================================
+    // CONVERT NORMALIZED TIME -> GAME CLOCK
+    // ============================================================
+
     public float GetGameHour()
     {
-        return _timeOfDay * 24f;
+        float daylightProgress =
+            GetDaylightProgress();
+
+        // --------------------------------------------------------
+        // DAYTIME
+        // --------------------------------------------------------
+        //
+        // 0.0 normalized = 6 AM
+        // daylightProgress = 6 PM
+        //
+        // Therefore:
+        //
+        // normalized 0.0 -> 6
+        // normalized daylightProgress -> 18
+
+        if (_timeOfDay < daylightProgress)
+        {
+            float daylightPosition =
+                _timeOfDay /
+                Mathf.Max(
+                    daylightProgress,
+                    0.0001f
+                );
+
+            return Mathf.Lerp(
+                6f,
+                18f,
+                daylightPosition
+            );
+        }
+
+        // --------------------------------------------------------
+        // NIGHTTIME
+        // --------------------------------------------------------
+        //
+        // daylightProgress = 6 PM
+        // 1.0 = next 6 AM
+        //
+        // Therefore:
+        //
+        // sunset -> 18
+        // midnight -> 24
+        // next sunrise -> 30
+        //
+        // We allow 24-30 internally because the calendar day
+        // begins at sunrise.
+
+        float nightProgress =
+            (
+                _timeOfDay -
+                daylightProgress
+            ) /
+            Mathf.Max(
+                1f -
+                daylightProgress,
+                0.0001f
+            );
+
+        return Mathf.Lerp(
+            18f,
+            30f,
+            nightProgress
+        );
+    }
+
+    // ============================================================
+    // CONVERT GAME CLOCK -> NORMALIZED TIME
+    // ============================================================
+
+    private float GameHourToNormalizedTime(
+        float gameHour)
+    {
+        float daylightProgress =
+            GetDaylightProgress();
+
+        // --------------------------------------------------------
+        // 6 AM -> 6 PM
+        // --------------------------------------------------------
+
+        if (gameHour >= 6f &&
+            gameHour < 18f)
+        {
+            float daylightPosition =
+                (
+                    gameHour -
+                    6f
+                ) / 12f;
+
+            return
+                daylightPosition *
+                daylightProgress;
+        }
+
+        // --------------------------------------------------------
+        // 6 PM -> NEXT 6 AM
+        // --------------------------------------------------------
+
+        float normalizedNightHour;
+
+        if (gameHour >= 18f)
+        {
+            normalizedNightHour =
+                gameHour - 18f;
+        }
+        else
+        {
+            // 12 AM through 6 AM
+            normalizedNightHour =
+                gameHour + 6f;
+        }
+
+        float nightProgress =
+            normalizedNightHour /
+            12f;
+
+        return
+            daylightProgress +
+            (
+                nightProgress *
+                (1f - daylightProgress)
+            );
     }
 
     // ============================================================
@@ -564,6 +709,8 @@ public partial class DayNightCycle : Node3D
             Mathf.FloorToInt(
                 gameHour
             );
+
+        // Convert internal 24-30 range into normal 0-23 clock.
 
         return hour % 24;
     }
@@ -609,28 +756,44 @@ public partial class DayNightCycle : Node3D
             $"{displayHour:00}:{minute:00} {period}";
     }
 
+    // ============================================================
+    // TIME OF DAY NAME
+    // ============================================================
+
     public string GetTimeOfDayName()
     {
-        float daylightProgress =
-            GetDaylightProgress();
-
         float hour =
             GetGameHour();
 
-        float daylightHour =
-            daylightProgress * 24f;
+        // Convert 24-30 internal range into the normal
+        // 0-6 AM range for comparisons.
 
-        if (hour < 2f)
+        if (hour >= 24f)
+            hour -= 24f;
+
+        if (hour >= 5f &&
+            hour < 8f)
+        {
             return "SUNRISE";
+        }
 
-        if (hour < daylightHour * 0.5f)
+        if (hour >= 8f &&
+            hour < 12f)
+        {
             return "MORNING";
+        }
 
-        if (hour < daylightHour * 0.75f)
+        if (hour >= 12f &&
+            hour < 17f)
+        {
             return "AFTERNOON";
+        }
 
-        if (hour < daylightHour)
+        if (hour >= 17f &&
+            hour < 20f)
+        {
             return "SUNSET";
+        }
 
         return "NIGHT";
     }
@@ -922,9 +1085,6 @@ public partial class DayNightCycle : Node3D
 
             _moonMat.AlbedoColor =
                 c;
-
-            // Visual glow only.
-            // Absolutely no world illumination.
 
             _moonMat.EmissionEnergyMultiplier =
                 0.15f *
