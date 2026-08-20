@@ -18,11 +18,58 @@ public partial class DebugMenu : CanvasLayer
 
         BuildMenu();
 
+        // Always start hidden.
+        _visible = false;
         _panel.Visible = false;
     }
 
     public override void _Process(double delta)
     {
+        // ========================================================
+        // WORLD CHECK
+        // ========================================================
+        //
+        // The Debug Menu is only available when a DayNightCycle
+        // exists in the active world.
+        //
+        // Main menu = no DayNightCycle = debug menu unavailable.
+        // ========================================================
+
+        DayNightCycle dayNight =
+            GetDayNightCycle();
+
+        bool inWorld =
+            dayNight != null &&
+            IsInstanceValid(dayNight) &&
+            dayNight.IsInsideTree();
+
+        // ========================================================
+        // NOT IN A WORLD
+        // ========================================================
+
+        if (!inWorld)
+        {
+            // Force the debug menu closed.
+            if (_visible)
+            {
+                _visible = false;
+                _panel.Visible = false;
+
+                GD.Print(
+                    "[DebugMenu] Closed - no active world."
+                );
+            }
+
+            // Reset key states so returning to a world
+            // doesn't accidentally trigger a key press.
+            _f6Held = false;
+            _f7Held = false;
+            _f9Held = false;
+            _f10Held = false;
+
+            return;
+        }
+
         // ========================================================
         // F6 - OPEN / CLOSE DEBUG MENU
         // ========================================================
@@ -34,16 +81,24 @@ public partial class DebugMenu : CanvasLayer
                 _f6Held = true;
 
                 _visible = !_visible;
-                _panel.Visible = _visible;
+
+                _panel.Visible =
+                    _visible;
 
                 if (_visible)
+                {
                     UpdateDisplay();
+                }
             }
         }
         else
         {
             _f6Held = false;
         }
+
+        // ========================================================
+        // MENU CLOSED
+        // ========================================================
 
         if (!_visible)
             return;
@@ -101,6 +156,10 @@ public partial class DebugMenu : CanvasLayer
         {
             _f10Held = false;
         }
+
+        // ========================================================
+        // UPDATE DISPLAY
+        // ========================================================
 
         UpdateDisplay();
     }
@@ -177,16 +236,32 @@ public partial class DebugMenu : CanvasLayer
 
     private void UpdateDisplay()
     {
-        SeasonManager seasonManager =
-            GetSeasonManager();
+        // --------------------------------------------------------
+        // Make absolutely sure we're still in a world.
+        // --------------------------------------------------------
 
         DayNightCycle dayNight =
             GetDayNightCycle();
 
+        if (dayNight == null ||
+            !IsInstanceValid(dayNight) ||
+            !dayNight.IsInsideTree())
+        {
+            _visible = false;
+
+            if (IsInstanceValid(_panel))
+                _panel.Visible = false;
+
+            return;
+        }
+
+        SeasonManager seasonManager =
+            GetSeasonManager();
+
         if (seasonManager == null)
         {
             _label.Text =
-                "BOX DEBUG\n\n" +
+                "BOX BUG\n\n" +
                 "SeasonManager not found.";
 
             return;
@@ -419,6 +494,9 @@ public partial class DebugMenu : CanvasLayer
 
     private SeasonManager GetSeasonManager()
     {
+        if (!IsInsideTree())
+            return null;
+
         return GetNodeOrNull<SeasonManager>(
             "/root/SeasonManager"
         );
@@ -430,8 +508,15 @@ public partial class DebugMenu : CanvasLayer
 
     private DayNightCycle GetDayNightCycle()
     {
-        return GetTree().GetFirstNodeInGroup(
-            "day_night_cycle"
-        ) as DayNightCycle;
+        if (!IsInsideTree())
+            return null;
+
+        Node node =
+            GetTree()
+                .GetFirstNodeInGroup(
+                    "day_night_cycle"
+                );
+
+        return node as DayNightCycle;
     }
 }

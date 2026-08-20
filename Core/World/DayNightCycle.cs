@@ -137,6 +137,7 @@ public partial class DayNightCycle : Node3D
     public override void _Ready()
     {
         AddToGroup("day_night_cycle");
+        AddToGroup("season_manager");
 
         // ========================================================
         // LOAD SAVED WORLD STATE
@@ -803,17 +804,31 @@ public partial class DayNightCycle : Node3D
     // ============================================================
 
     private SeasonManager.Season GetCurrentSeason()
-    {
-        SeasonManager seasonManager =
-            GetNodeOrNull<SeasonManager>(
-                "/root/SeasonManager"
-            );
+{
+    if (!IsInsideTree())
+        return SeasonManager.Season.Spring;
 
-        if (seasonManager == null)
-            return SeasonManager.Season.Spring;
+    // Look for the SeasonManager autoload safely.
+    var root = GetTree().Root;
 
+    if (root == null)
+        return SeasonManager.Season.Spring;
+
+    var seasonManager =
+        root.GetNodeOrNull<SeasonManager>("SeasonManager");
+
+    if (seasonManager != null)
         return seasonManager.CurrentSeason;
-    }
+
+    // Fallback: find it by group if the autoload isn't directly available.
+    var found =
+        GetTree().GetFirstNodeInGroup("season_manager");
+
+    if (found is SeasonManager manager)
+        return manager.CurrentSeason;
+
+    return SeasonManager.Season.Spring;
+}
 
     // ============================================================
     // DAYLIGHT LENGTH

@@ -7,11 +7,9 @@ public partial class SeasonManager : Node
     // BOX SEASON SETTINGS
     // ============================================================
 
-    // How many in-game days each season lasts.
     [Export]
     public int DaysPerSeason { get; set; } = 20;
 
-    // Number of seasons in the Box calendar.
     public const int SeasonsPerYear = 4;
 
     // ============================================================
@@ -39,8 +37,6 @@ public partial class SeasonManager : Node
     [Export]
     public int CurrentYear { get; private set; } = 1;
 
-    // Prevents the seasonal calendar from advancing.
-    // The DayNightCycle continues running normally.
     [Export]
     public bool SeasonLocked { get; private set; } = false;
 
@@ -61,39 +57,21 @@ public partial class SeasonManager : Node
     public bool WinterEnabled { get; set; } = true;
 
     // ============================================================
-    // CALENDAR SIGNALS
+    // SIGNALS
     // ============================================================
 
-    // Fired whenever the calendar advances to a new day.
-    //
-    // Example:
-    // Spring Day 4 -> Spring Day 5
-    //
-    // newDay = 5
-    // currentSeason = Spring
     [Signal]
     public delegate void DayChangedEventHandler(
         int newDay,
         Season currentSeason
     );
 
-    // Fired whenever the season changes.
-    //
-    // Example:
-    // Spring -> Summer
-    //
-    // newSeason = Summer
-    // oldSeason = Spring
     [Signal]
     public delegate void SeasonChangedEventHandler(
         Season newSeason,
         Season oldSeason
     );
 
-    // Fired whenever a new year begins.
-    //
-    // Example:
-    // Year 1 -> Year 2
     [Signal]
     public delegate void YearChangedEventHandler(
         int newYear
@@ -103,49 +81,34 @@ public partial class SeasonManager : Node
     // TESTING
     // ============================================================
 
-    // Set this to true while testing if you want to manually
-    // advance the calendar without waiting for DayNightCycle.
     [Export]
     public bool DebugMode { get; set; } = false;
 
     // ============================================================
-    // INITIALIZATION
+    // READY
     // ============================================================
 
     public override void _Ready()
     {
-        DaysPerSeason =
-            Mathf.Max(
-                1,
-                DaysPerSeason
-            );
+        DaysPerSeason = Mathf.Max(1, DaysPerSeason);
 
-        // Make sure at least one season is enabled.
         EnsureAtLeastOneSeasonEnabled();
 
-        // Make sure the starting season is valid.
         if (!IsSeasonEnabled(CurrentSeason))
         {
-            CurrentSeason =
-                GetNextEnabledSeason(
-                    CurrentSeason
-                );
+            CurrentSeason = GetNextEnabledSeason(CurrentSeason);
         }
 
-        // Make sure the starting day is valid.
-        CurrentDay =
-            Mathf.Clamp(
-                CurrentDay,
-                1,
-                DaysPerSeason
-            );
+        CurrentDay = Mathf.Clamp(
+            CurrentDay,
+            1,
+            DaysPerSeason
+        );
 
-        // Make sure the starting year is valid.
-        CurrentYear =
-            Mathf.Max(
-                1,
-                CurrentYear
-            );
+        CurrentYear = Mathf.Max(
+            1,
+            CurrentYear
+        );
 
         GD.Print(
             $"[SeasonManager] Starting Year {CurrentYear}, " +
@@ -158,10 +121,6 @@ public partial class SeasonManager : Node
     // DAY ADVANCEMENT
     // ============================================================
 
-    /// <summary>
-    /// Advances the seasonal calendar by one full in-game day.
-    /// DayNightCycle calls this when its clock reaches midnight.
-    /// </summary>
     public void AdvanceDay()
     {
         if (SeasonLocked)
@@ -176,9 +135,9 @@ public partial class SeasonManager : Node
 
         CurrentDay++;
 
-        // ========================================================
+        // --------------------------------------------------------
         // NORMAL DAY
-        // ========================================================
+        // --------------------------------------------------------
 
         if (CurrentDay <= DaysPerSeason)
         {
@@ -193,9 +152,9 @@ public partial class SeasonManager : Node
             return;
         }
 
-        // ========================================================
+        // --------------------------------------------------------
         // SEASON ENDED
-        // ========================================================
+        // --------------------------------------------------------
 
         CurrentDay = 1;
 
@@ -208,22 +167,16 @@ public partial class SeasonManager : Node
 
     private void AdvanceToNextEnabledSeason()
     {
-        Season oldSeason =
-            CurrentSeason;
+        Season oldSeason = CurrentSeason;
 
         Season nextSeason =
-            GetNextEnabledSeason(
-                CurrentSeason
-            );
+            GetNextEnabledSeason(CurrentSeason);
 
-        // ========================================================
+        // --------------------------------------------------------
         // YEAR WRAP
-        // ========================================================
+        // --------------------------------------------------------
 
-        if (IsYearWrap(
-            oldSeason,
-            nextSeason
-        ))
+        if (IsYearWrap(oldSeason, nextSeason))
         {
             CurrentYear++;
 
@@ -233,17 +186,15 @@ public partial class SeasonManager : Node
             );
 
             GD.Print(
-                $"[SeasonManager] New Year: " +
-                $"{CurrentYear}"
+                $"[SeasonManager] New Year: {CurrentYear}"
             );
         }
 
-        // ========================================================
+        // --------------------------------------------------------
         // CHANGE SEASON
-        // ========================================================
+        // --------------------------------------------------------
 
-        CurrentSeason =
-            nextSeason;
+        CurrentSeason = nextSeason;
 
         EmitSignal(
             SignalName.SeasonChanged,
@@ -251,7 +202,6 @@ public partial class SeasonManager : Node
             (int)oldSeason
         );
 
-        // A new season always begins on Day 1.
         EmitDayChanged();
 
         GD.Print(
@@ -265,9 +215,7 @@ public partial class SeasonManager : Node
     // ENABLED SEASON LOGIC
     // ============================================================
 
-    public bool IsSeasonEnabled(
-        Season season
-    )
+    public bool IsSeasonEnabled(Season season)
     {
         return season switch
         {
@@ -279,13 +227,8 @@ public partial class SeasonManager : Node
         };
     }
 
-    private Season GetNextEnabledSeason(
-        Season current
-    )
+    private Season GetNextEnabledSeason(Season current)
     {
-        // Try the next three seasons.
-        // Disabled seasons are automatically skipped.
-
         for (int i = 1; i <= SeasonsPerYear; i++)
         {
             Season candidate =
@@ -298,18 +241,14 @@ public partial class SeasonManager : Node
                 return candidate;
         }
 
-        // Should never happen because at least one season
-        // is guaranteed to be enabled.
         return current;
     }
 
     private bool IsYearWrap(
         Season oldSeason,
-        Season newSeason
-    )
+        Season newSeason)
     {
-        // Normal four-season cycle:
-        //
+        // Normal cycle:
         // Winter -> Spring = new year
 
         if (oldSeason == Season.Winter &&
@@ -318,8 +257,7 @@ public partial class SeasonManager : Node
             return true;
         }
 
-        // If seasons are disabled, determine whether we've
-        // wrapped around to the first enabled season.
+        // Handle disabled seasons.
 
         Season firstEnabled =
             GetFirstEnabledSeason();
@@ -350,7 +288,6 @@ public partial class SeasonManager : Node
             !AutumnEnabled &&
             !WinterEnabled)
         {
-            // Never allow an impossible calendar.
             SpringEnabled = true;
         }
     }
@@ -369,15 +306,12 @@ public partial class SeasonManager : Node
     }
 
     // ============================================================
-    // LOCK
+    // SEASON LOCK
     // ============================================================
 
-    public void SetSeasonLocked(
-        bool locked
-    )
+    public void SetSeasonLocked(bool locked)
     {
-        SeasonLocked =
-            locked;
+        SeasonLocked = locked;
 
         GD.Print(
             $"[SeasonManager] Season lock: " +
@@ -387,22 +321,14 @@ public partial class SeasonManager : Node
 
     public void ToggleSeasonLock()
     {
-        SetSeasonLocked(
-            !SeasonLocked
-        );
+        SetSeasonLocked(!SeasonLocked);
     }
 
     // ============================================================
     // MANUAL SEASON CONTROL
     // ============================================================
 
-    /// <summary>
-    /// Immediately changes the current season.
-    /// Useful for debug tools and future gameplay systems.
-    /// </summary>
-    public void SetSeason(
-        Season newSeason
-    )
+    public void SetSeason(Season newSeason)
     {
         if (!IsSeasonEnabled(newSeason))
         {
@@ -415,10 +341,9 @@ public partial class SeasonManager : Node
             return;
         }
 
-        Season oldSeason =
-            CurrentSeason;
+        Season oldSeason = CurrentSeason;
 
-        // Nothing to do if we're already in this season.
+        // Already in this season.
         if (oldSeason == newSeason)
         {
             CurrentDay = 1;
@@ -428,14 +353,9 @@ public partial class SeasonManager : Node
             return;
         }
 
-        CurrentSeason =
-            newSeason;
-
+        CurrentSeason = newSeason;
         CurrentDay = 1;
 
-        // Manual season changes do not automatically
-        // change the year. The normal calendar handles
-        // year progression.
         EmitSignal(
             SignalName.SeasonChanged,
             (int)CurrentSeason,
@@ -455,30 +375,44 @@ public partial class SeasonManager : Node
     // ============================================================
     // MOON
     // ============================================================
+    //
+    // One complete moon cycle = one complete season.
+    //
+    // Day 1  = New Moon
+    // Day 2  = Waxing Crescent
+    // Day 4  = First Quarter
+    // Day 7  = Waxing Gibbous
+    // Day 10 = Full Moon
+    // Day 13 = Waning Gibbous
+    // Day 15 = Last Quarter
+    // Day 18 = Waning Crescent
+    // Day 20 = New Moon
+    //
+    // This means the moon naturally progresses through one full
+    // cycle during the 20 days of each season.
 
-    /// <summary>
-    /// Returns the moon's progress through the current season.
-    ///
-    /// 0.0 = beginning/new moon
-    /// 1.0 = end/new moon
-    /// </summary>
     public float GetMoonProgress()
     {
-        if (DaysPerSeason <= 0)
+        if (DaysPerSeason <= 1)
             return 0f;
 
-        return
+        // Day 1 = 0.0
+        // Day 20 = 1.0
+        //
+        // Using DaysPerSeason - 1 makes the final day complete
+        // the entire moon cycle instead of stopping at 0.95.
+
+        return Mathf.Clamp(
             (CurrentDay - 1) /
-            (float)DaysPerSeason;
+            (float)(DaysPerSeason - 1),
+            0f,
+            1f
+        );
     }
 
-    /// <summary>
-    /// Returns a readable moon phase name.
-    /// </summary>
     public string GetMoonPhaseName()
     {
-        float progress =
-            GetMoonProgress();
+        float progress = GetMoonProgress();
 
         if (progress < 0.0625f)
             return "New Moon";
@@ -513,14 +447,10 @@ public partial class SeasonManager : Node
 
     public string GetSeasonName()
     {
-        return GetSeasonName(
-            CurrentSeason
-        );
+        return GetSeasonName(CurrentSeason);
     }
 
-    public string GetSeasonName(
-        Season season
-    )
+    public string GetSeasonName(Season season)
     {
         return season switch
         {
@@ -539,72 +469,86 @@ public partial class SeasonManager : Node
             $"{GetSeasonName(CurrentSeason)} - " +
             $"Day {CurrentDay}/{DaysPerSeason}";
     }
+
     // ============================================================
-// SAVE / LOAD
-// ============================================================
+    // SAVE / LOAD
+    // ============================================================
 
-public void LoadCalendarState(
-    int year,
-    string season,
-    int day,
-    bool seasonLocked,
-    bool springEnabled,
-    bool summerEnabled,
-    bool autumnEnabled,
-    bool winterEnabled)
-{
-    SpringEnabled = springEnabled;
-    SummerEnabled = summerEnabled;
-    AutumnEnabled = autumnEnabled;
-    WinterEnabled = winterEnabled;
+    public void LoadCalendarState(
+        int year,
+        string season,
+        int day,
+        bool seasonLocked,
+        bool springEnabled,
+        bool summerEnabled,
+        bool autumnEnabled,
+        bool winterEnabled)
+    {
+        // --------------------------------------------------------
+        // Enabled seasons
+        // --------------------------------------------------------
 
-    EnsureAtLeastOneSeasonEnabled();
+        SpringEnabled = springEnabled;
+        SummerEnabled = summerEnabled;
+        AutumnEnabled = autumnEnabled;
+        WinterEnabled = winterEnabled;
 
-    CurrentYear =
-        Mathf.Max(
+        EnsureAtLeastOneSeasonEnabled();
+
+        // --------------------------------------------------------
+        // Year
+        // --------------------------------------------------------
+
+        CurrentYear = Mathf.Max(
             1,
             year
         );
 
-    CurrentDay =
-        Mathf.Clamp(
+        // --------------------------------------------------------
+        // Season
+        // --------------------------------------------------------
+
+        Season loadedSeason = Season.Spring;
+
+        if (!string.IsNullOrEmpty(season))
+        {
+            if (!Enum.TryParse(
+                season,
+                true,
+                out loadedSeason))
+            {
+                loadedSeason = Season.Spring;
+            }
+        }
+
+        if (!IsSeasonEnabled(loadedSeason))
+        {
+            loadedSeason = GetFirstEnabledSeason();
+        }
+
+        CurrentSeason = loadedSeason;
+
+        // --------------------------------------------------------
+        // Day
+        // --------------------------------------------------------
+
+        CurrentDay = Mathf.Clamp(
             day,
             1,
             DaysPerSeason
         );
 
-    Season loadedSeason =
-        Season.Spring;
+        // --------------------------------------------------------
+        // Lock
+        // --------------------------------------------------------
 
-    if (!string.IsNullOrEmpty(season))
-    {
-        if (!Enum.TryParse(
-            season,
-            true,
-            out loadedSeason))
-        {
-            loadedSeason =
-                Season.Spring;
-        }
+        SeasonLocked = seasonLocked;
+
+        GD.Print(
+            $"[SeasonManager] Loaded calendar: " +
+            $"Year {CurrentYear}, " +
+            $"{GetSeasonName(CurrentSeason)}, " +
+            $"Day {CurrentDay}/{DaysPerSeason}"
+        );
     }
-
-    if (!IsSeasonEnabled(loadedSeason))
-    {
-        loadedSeason =
-            GetFirstEnabledSeason();
-    }
-
-    CurrentSeason =
-        loadedSeason;
-
-    SeasonLocked =
-        seasonLocked;
-
-    GD.Print(
-        $"[SeasonManager] Loaded calendar: " +
-        $"Year {CurrentYear}, " +
-        $"{GetSeasonName(CurrentSeason)}, " +
-        $"Day {CurrentDay}/{DaysPerSeason}"
-    );
-}
 }

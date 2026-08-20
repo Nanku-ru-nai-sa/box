@@ -89,6 +89,9 @@ public partial class Player : CharacterBody3D
     private CanvasLayer _inventoryLayer;
     private CanvasLayer _cursorLayer;
     private PauseMenu   _pauseMenu;
+    // Calendar HUD
+    private CalendarPanel _calendarPanel;
+    private CanvasLayer _calendarLayer;
 
     // ── Crafting ──────────────────────────────────────────────────────────────
     private CraftingPanel _craftingPanel;
@@ -221,6 +224,7 @@ public partial class Player : CharacterBody3D
         }
 
         BuildStatsHud();
+        BuildCalendarPanel();
         _equipmentPanel.Init(_stats);
 
         Input.MouseMode = Input.MouseModeEnum.Captured;
@@ -422,6 +426,16 @@ public partial class Player : CharacterBody3D
         _cursorPanel.AddChild(_cursorTex);
         _cursorPanel.AddChild(_cursorLabel);
         _cursorLayer.CallDeferred("add_child", _cursorPanel);
+    }
+
+    private void BuildCalendarPanel()
+    {
+        _calendarLayer = new CanvasLayer();
+        _calendarLayer.Layer = 12;
+        GetTree().Root.CallDeferred("add_child", _calendarLayer);
+
+        _calendarPanel = new CalendarPanel();
+        _calendarLayer.CallDeferred("add_child", _calendarPanel);
     }
 
     private void BuildCraftingPanel()

@@ -28,6 +28,7 @@ OreRegistry="*uid://coclp16v2cgix"
 KeybindsManager="*uid://clp0yawxdmmcv"
 SeasonManager="*uid://cq7eljlq8rtvi"
 DebugMenu="*uid://bvc38hkm70b7n"
+WeatherManager="*uid://b4i6iusryejsp"
 
 [display]
 
