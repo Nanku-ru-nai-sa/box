@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 public partial class DayNightCycle : Node3D
 {
@@ -9,33 +10,12 @@ public partial class DayNightCycle : Node3D
     // DAY / NIGHT
     // ============================================================
 
-    // Total real-time length of one complete in-game day.
-    // 15 minutes = 900 seconds.
     [Export]
     public float DayDurationSeconds { get; set; } = 900f;
 
     // ============================================================
     // TIME OF DAY
     // ============================================================
-
-    // IMPORTANT:
-    //
-    // _timeOfDay is NOT directly the displayed clock.
-    //
-    // It represents progress from:
-    //
-    // 0.000 = Sunrise
-    // 1.000 = Next Sunrise
-    //
-    // The displayed clock is converted separately so that:
-    //
-    // Sunrise = 6:00 AM
-    // Noon    = 12:00 PM
-    // Sunset  = 6:00 PM
-    // Midnight = 12:00 AM
-    //
-    // Seasonal daylight changes how quickly the clock moves
-    // through the daytime and nighttime portions.
 
     private float _timeOfDay = 0.0f;
 
@@ -82,16 +62,80 @@ public partial class DayNightCycle : Node3D
     private float _sunsetEnergy = 1.2f;
 
     // ============================================================
-    // CELESTIAL OBJECTS
+    // SUN
     // ============================================================
 
-    private MeshInstance3D _sunMesh;
-    private MeshInstance3D _moonMesh;
+    private Node3D _sunCube;
 
-    private StandardMaterial3D _sunMat;
-    private StandardMaterial3D _moonMat;
+    private MeshInstance3D _sunFront;
+    private MeshInstance3D _sunBack;
+    private MeshInstance3D _sunLeft;
+    private MeshInstance3D _sunRight;
+    private MeshInstance3D _sunTop;
+    private MeshInstance3D _sunBottom;
+
+    private StandardMaterial3D _sunFrontMat;
+    private StandardMaterial3D _sunBackMat;
+    private StandardMaterial3D _sunLeftMat;
+    private StandardMaterial3D _sunRightMat;
+    private StandardMaterial3D _sunTopMat;
+    private StandardMaterial3D _sunBottomMat;
+
+    private AnimatableBody3D _sunCollision;
+    private CollisionShape3D _sunCollisionShape;
+
+    private float _sunSize = 16f;
+    private float _moonSize = 10f;
+
+    // ============================================================
+    // MOON
+    // ============================================================
+
+    // IMPORTANT:
+    // The moon visual now lives INSIDE the AnimatableBody3D.
+    // The body itself moves through the sky.
+    private AnimatableBody3D _moonCollision;
+
+    private CollisionShape3D _moonCollisionShape;
+
+    private Node3D _moonCube;
+
+    private MeshInstance3D _moonFront;
+    private MeshInstance3D _moonBack;
+    private MeshInstance3D _moonLeft;
+    private MeshInstance3D _moonRight;
+    private MeshInstance3D _moonTop;
+    private MeshInstance3D _moonBottom;
+
+    private StandardMaterial3D _moonFrontMat;
+    private StandardMaterial3D _moonBackMat;
+    private StandardMaterial3D _moonLeftMat;
+    private StandardMaterial3D _moonRightMat;
+    private StandardMaterial3D _moonTopMat;
+    private StandardMaterial3D _moonBottomMat;
+    private bool _sunHarvested = false;
+    private bool _moonHarvested = false;
+    
+
+    private bool _wasSunVisible = false;
+    private bool _wasMoonVisible = false;
+
+    
+    private bool _sunBroken = false;
+private bool _moonBroken = false;
+
+    // ============================================================
+    // ORBIT
+    // ============================================================
 
     private float _orbitRadius = 200f;
+
+    // ============================================================
+    // CELESTIAL TEXTURE PATH
+    // ============================================================
+
+    private const string CelestialTexturePath =
+        "res://Assets/Textures/Celestial/";
 
     // ============================================================
     // ENVIRONMENT
@@ -99,12 +143,6 @@ public partial class DayNightCycle : Node3D
 
     private Godot.Environment _env;
     private ProceduralSkyMaterial _skyMaterial;
-
-    // ============================================================
-    // DEBUG
-    // ============================================================
-
-    private int _frameCount = 0;
 
     // ============================================================
     // SEASONAL DAYLIGHT
@@ -131,63 +169,205 @@ public partial class DayNightCycle : Node3D
     public float SunsetDurationSeconds { get; set; } = 60f;
 
     // ============================================================
-    // READY
+    // PHYSICS MOON TARGET
     // ============================================================
+
+    // This is the position the moon should occupy during physics.
+    // The AnimatableBody3D is moved directly to this position.
+    private Vector3 _targetMoonPosition = Vector3.Zero;
 
     public override void _Ready()
     {
         AddToGroup("day_night_cycle");
-        AddToGroup("season_manager");
-
-        // ========================================================
-        // LOAD SAVED WORLD STATE
-        // ========================================================
 
         LoadSavedWorldState();
 
-        // ========================================================
-        // SUN VISUAL
-        // ========================================================
+        CreateSun();
+        CreateMoon();
+        CreateEnvironment();
 
-        _sunMesh =
-            new MeshInstance3D();
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
+            );
 
-        var sunSphere =
-            new SphereMesh();
+        if (seasonManager != null)
+        {
+            seasonManager.SeasonChanged +=
+                OnSeasonChanged;
 
-        sunSphere.Radius = 8f;
-        sunSphere.Height = 16f;
+            seasonManager.DayChanged +=
+                OnDayChanged;
+        }
 
-        _sunMesh.Mesh =
-            sunSphere;
+        UpdateCelestialBodies();
+        UpdateLightColor();
 
-        _sunMat =
-            new StandardMaterial3D();
+        // Force the initial moon physics position immediately.
+        UpdateMoonPhysicsPosition();
+    }
 
-        _sunMat.AlbedoColor =
-            new Color(1.0f, 0.9f, 0.2f);
+    // ============================================================
+    // CREATE SUN
+    // ============================================================
 
-        _sunMat.EmissionEnabled =
-            true;
+    private void CreateSun()
+    {
+        _sunCollision =
+    new AnimatableBody3D();
 
-        _sunMat.Emission =
-            new Color(1.0f, 0.8f, 0.1f);
+_sunCollision.Name =
+    "SunCollision";
 
-        _sunMat.EmissionEnergyMultiplier =
-            2.0f;
+_sunCollision.CollisionLayer = 1;
+_sunCollision.CollisionMask = 1;
+_sunCollision.SyncToPhysics = true;
 
-        _sunMat.ShadingMode =
-            BaseMaterial3D.ShadingModeEnum.Unshaded;
+AddChild(_sunCollision);
 
-        _sunMat.Transparency =
-            BaseMaterial3D.TransparencyEnum.Alpha;
+_sunCube = new Node3D();
 
-        _sunMesh.MaterialOverride =
-            _sunMat;
+_sunCube.Name =
+    "SunCube";
 
-        // ========================================================
-        // ATTACH SUN LIGHT
-        // ========================================================
+_sunCollision.AddChild(_sunCube);
+
+        Texture2D front =
+            LoadSunTexture("sun_front.png");
+
+        Texture2D back =
+            LoadSunTexture("sun_back.png");
+
+        Texture2D left =
+            LoadSunTexture("sun_left.png");
+
+        Texture2D right =
+            LoadSunTexture("sun_right.png");
+
+        Texture2D top =
+            LoadSunTexture("sun_top.png");
+
+        Texture2D bottom =
+            LoadSunTexture("sun_bottom.png");
+
+        _sunFrontMat =
+            CreateSunMaterial(front);
+
+        _sunBackMat =
+            CreateSunMaterial(back);
+
+        _sunLeftMat =
+            CreateSunMaterial(left);
+
+        _sunRightMat =
+            CreateSunMaterial(right);
+
+        _sunTopMat =
+            CreateSunMaterial(top);
+
+        _sunBottomMat =
+            CreateSunMaterial(bottom);
+
+        _sunFront =
+            CreateSunFace(
+                "SunFront",
+                _sunFrontMat,
+                new Vector3(
+                    0f,
+                    0f,
+                    _sunSize / 2f
+                ),
+                Vector3.Zero
+            );
+
+        _sunBack =
+            CreateSunFace(
+                "SunBack",
+                _sunBackMat,
+                new Vector3(
+                    0f,
+                    0f,
+                    -_sunSize / 2f
+                ),
+                new Vector3(
+                    0f,
+                    Mathf.Pi,
+                    0f
+                )
+            );
+
+        _sunLeft =
+            CreateSunFace(
+                "SunLeft",
+                _sunLeftMat,
+                new Vector3(
+                    -_sunSize / 2f,
+                    0f,
+                    0f
+                ),
+                new Vector3(
+                    0f,
+                    -Mathf.Pi / 2f,
+                    0f
+                )
+            );
+
+        _sunRight =
+            CreateSunFace(
+                "SunRight",
+                _sunRightMat,
+                new Vector3(
+                    _sunSize / 2f,
+                    0f,
+                    0f
+                ),
+                new Vector3(
+                    0f,
+                    Mathf.Pi / 2f,
+                    0f
+                )
+            );
+
+        _sunTop =
+            CreateSunFace(
+                "SunTop",
+                _sunTopMat,
+                new Vector3(
+                    0f,
+                    _sunSize / 2f,
+                    0f
+                ),
+                new Vector3(
+                    -Mathf.Pi / 2f,
+                    0f,
+                    0f
+                )
+            );
+
+        _sunBottom =
+            CreateSunFace(
+                "SunBottom",
+                _sunBottomMat,
+                new Vector3(
+                    0f,
+                    -_sunSize / 2f,
+                    0f
+                ),
+                new Vector3(
+                    Mathf.Pi / 2f,
+                    0f,
+                    0f
+                )
+            );
+
+        _sunCube.Rotation =
+            new Vector3(
+                0f,
+                Mathf.Pi / 4f,
+                0f
+            );
+
+        CreateSunCollision();
 
         if (Sun != null)
         {
@@ -197,71 +377,632 @@ public partial class DayNightCycle : Node3D
             if (parent != null)
                 parent.RemoveChild(Sun);
 
-            _sunMesh.AddChild(Sun);
+            _sunCube.AddChild(Sun);
 
             Sun.Position =
                 Vector3.Zero;
         }
 
-        AddChild(_sunMesh);
+        GD.Print(
+            "[DayNightCycle] Created physical textured sun cube."
+        );
+    }
 
-        // ========================================================
-        // MOON VISUAL
-        // ========================================================
+    // ============================================================
+    // CREATE SUN COLLISION
+    // ============================================================
 
-        _moonMesh =
-            new MeshInstance3D();
+    private void CreateSunCollision()
+{
+    _sunCollisionShape =
+        new CollisionShape3D();
 
-        var moonSphere =
-            new SphereMesh();
+    _sunCollisionShape.Name =
+        "SunCollisionShape";
 
-        moonSphere.Radius = 5f;
-        moonSphere.Height = 10f;
+    var box =
+        new BoxShape3D();
 
-        _moonMesh.Mesh =
-            moonSphere;
+    box.Size =
+        new Vector3(
+            _sunSize,
+            _sunSize,
+            _sunSize
+        );
 
-        _moonMat =
+    _sunCollisionShape.Shape =
+        box;
+
+    _sunCollision.AddChild(
+        _sunCollisionShape
+    );
+
+    _sunCollisionShape.Rotation =
+    new Vector3(
+        0f,
+        Mathf.Pi / 4f,
+        0f
+    );
+}
+
+    // ============================================================
+    // LOAD SUN TEXTURE
+    // ============================================================
+
+    private Texture2D LoadSunTexture(
+        string fileName)
+    {
+        string path =
+            CelestialTexturePath +
+            fileName;
+
+        Texture2D texture =
+            GD.Load<Texture2D>(path);
+
+        if (texture == null)
+        {
+            GD.PrintErr(
+                $"[DayNightCycle] Sun texture not found: {path}"
+            );
+
+            return null;
+        }
+
+        return texture;
+    }
+
+    // ============================================================
+    // CREATE SUN MATERIAL
+    // ============================================================
+
+    private StandardMaterial3D CreateSunMaterial(
+        Texture2D texture)
+    {
+        var material =
             new StandardMaterial3D();
 
-        _moonMat.AlbedoColor =
-            new Color(
-                0.8f,
-                0.8f,
-                0.9f
-            );
-
-        // Moon is visual ONLY.
-        // It never illuminates the world.
-
-        _moonMat.EmissionEnabled =
-            true;
-
-        _moonMat.Emission =
-            new Color(
-                0.45f,
-                0.45f,
-                0.6f
-            );
-
-        _moonMat.EmissionEnergyMultiplier =
-            0.15f;
-
-        _moonMat.ShadingMode =
+        material.ShadingMode =
             BaseMaterial3D.ShadingModeEnum.Unshaded;
 
-        _moonMat.Transparency =
+        material.EmissionEnabled =
+            true;
+
+        material.Emission =
+            new Color(
+                1.0f,
+                0.85f,
+                0.25f
+            );
+
+        material.EmissionEnergyMultiplier =
+            2.0f;
+
+        material.TextureFilter =
+            BaseMaterial3D.TextureFilterEnum.Nearest;
+
+        material.CullMode =
+            BaseMaterial3D.CullModeEnum.Disabled;
+
+        material.Transparency =
             BaseMaterial3D.TransparencyEnum.Alpha;
 
-        _moonMesh.MaterialOverride =
-            _moonMat;
+        if (texture != null)
+            material.AlbedoTexture = texture;
 
-        AddChild(_moonMesh);
+        return material;
+    }
+
+    // ============================================================
+    // CREATE SUN FACE
+    // ============================================================
+
+    private MeshInstance3D CreateSunFace(
+        string faceName,
+        StandardMaterial3D material,
+        Vector3 position,
+        Vector3 rotation)
+    {
+        var face =
+            new MeshInstance3D();
+
+        face.Name =
+            faceName;
+
+        var quad =
+            new QuadMesh();
+
+        quad.Size =
+            new Vector2(
+                _sunSize,
+                _sunSize
+            );
+
+        face.Mesh =
+            quad;
+
+        face.Position =
+            position;
+
+        face.Rotation =
+            rotation;
+
+        face.MaterialOverride =
+            material;
+
+        _sunCube.AddChild(face);
+
+        return face;
+    }
+
+    // ============================================================
+    // CREATE MOON
+    // ============================================================
+
+    private void CreateMoon()
+    {
+        // ========================================================
+        // CREATE PHYSICS BODY FIRST
+        // ========================================================
+
+        _moonCollision =
+            new AnimatableBody3D();
+
+        _moonCollision.Name =
+            "MoonCollision";
+
+        _moonCollision.CollisionLayer = 1;
+        _moonCollision.CollisionMask = 1;
+
+        // IMPORTANT:
+        // Physics movement is synchronized to the physics engine.
+        _moonCollision.SyncToPhysics = true;
+
+        AddChild(_moonCollision);
 
         // ========================================================
-        // ENVIRONMENT
+        // CREATE COLLISION SHAPE
         // ========================================================
 
+        _moonCollisionShape =
+            new CollisionShape3D();
+
+        _moonCollisionShape.Name =
+            "MoonCollisionShape";
+
+        var box =
+            new BoxShape3D();
+
+        box.Size =
+            new Vector3(
+                _moonSize,
+                _moonSize,
+                _moonSize
+            );
+
+        _moonCollisionShape.Shape =
+            box;
+
+        _moonCollision.AddChild(
+            _moonCollisionShape
+        );
+        _moonCollisionShape.Rotation =
+    new Vector3(
+        0f,
+        Mathf.Pi / 4f,
+        0f
+    );
+
+        // ========================================================
+        // CREATE VISUAL MOON INSIDE PHYSICS BODY
+        // ========================================================
+
+        _moonCube =
+            new Node3D();
+
+        _moonCube.Name =
+            "MoonCube";
+
+        _moonCollision.AddChild(
+            _moonCube
+        );
+
+        // IMPORTANT:
+        // MoonCube is now LOCAL to MoonCollision.
+        // It never moves independently from the collision body.
+        _moonCube.Position =
+            Vector3.Zero;
+
+        _moonCube.Rotation =
+    Vector3.Zero;
+
+_moonCollision.Rotation =
+    new Vector3(
+        0f,
+        Mathf.Pi / 4f,
+        0f
+    );
+
+_moonCollision.Rotation =
+    new Vector3(
+        0f,
+        Mathf.Pi / 4f,
+        0f
+    );
+
+        // ========================================================
+        // LOAD TEXTURES
+        // ========================================================
+
+        Texture2D front =
+            LoadMoonTexture("moon_front.png");
+
+        Texture2D back =
+            LoadMoonTexture("moon_back.png");
+
+        Texture2D left =
+            LoadMoonTexture("moon_left.png");
+
+        Texture2D right =
+            LoadMoonTexture("moon_right.png");
+
+        Texture2D top =
+            LoadMoonTexture("moon_top.png");
+
+        Texture2D bottom =
+            LoadMoonTexture("moon_bottom.png");
+
+        // ========================================================
+        // MATERIALS
+        // ========================================================
+
+        _moonFrontMat =
+            CreateMoonMaterial(front);
+
+        _moonBackMat =
+            CreateMoonMaterial(back);
+
+        _moonLeftMat =
+            CreateMoonMaterial(left);
+
+        _moonRightMat =
+            CreateMoonMaterial(right);
+
+        _moonTopMat =
+            CreateMoonMaterial(top);
+
+        _moonBottomMat =
+            CreateMoonMaterial(bottom);
+
+        // ========================================================
+        // FACES
+        // ========================================================
+
+        _moonFront =
+            CreateMoonFace(
+                "MoonFront",
+                _moonFrontMat,
+                new Vector3(
+                    0f,
+                    0f,
+                    _moonSize / 2f
+                ),
+                Vector3.Zero
+            );
+
+        _moonBack =
+            CreateMoonFace(
+                "MoonBack",
+                _moonBackMat,
+                new Vector3(
+                    0f,
+                    0f,
+                    -_moonSize / 2f
+                ),
+                new Vector3(
+                    0f,
+                    Mathf.Pi,
+                    0f
+                )
+            );
+
+        _moonLeft =
+            CreateMoonFace(
+                "MoonLeft",
+                _moonLeftMat,
+                new Vector3(
+                    -_moonSize / 2f,
+                    0f,
+                    0f
+                ),
+                new Vector3(
+                    0f,
+                    -Mathf.Pi / 2f,
+                    0f
+                )
+            );
+
+        _moonRight =
+            CreateMoonFace(
+                "MoonRight",
+                _moonRightMat,
+                new Vector3(
+                    _moonSize / 2f,
+                    0f,
+                    0f
+                ),
+                new Vector3(
+                    0f,
+                    Mathf.Pi / 2f,
+                    0f
+                )
+            );
+
+        _moonTop =
+            CreateMoonFace(
+                "MoonTop",
+                _moonTopMat,
+                new Vector3(
+                    0f,
+                    _moonSize / 2f,
+                    0f
+                ),
+                new Vector3(
+                    -Mathf.Pi / 2f,
+                    0f,
+                    0f
+                )
+            );
+
+        _moonBottom =
+            CreateMoonFace(
+                "MoonBottom",
+                _moonBottomMat,
+                new Vector3(
+                    0f,
+                    -_moonSize / 2f,
+                    0f
+                ),
+                new Vector3(
+                    Mathf.Pi / 2f,
+                    0f,
+                    0f
+                )
+            );
+
+        // Start with collision disabled until
+        // UpdateCelestialBodies determines visibility.
+        _moonCollisionShape.Disabled = true;
+
+        GD.Print(
+            "[DayNightCycle] Created physical textured moon cube."
+        );
+    }
+
+    // ============================================================
+    // LOAD MOON TEXTURE
+    // ============================================================
+
+    private Texture2D LoadMoonTexture(
+        string fileName)
+    {
+        string path =
+            CelestialTexturePath +
+            fileName;
+
+        Texture2D texture =
+            GD.Load<Texture2D>(path);
+
+        if (texture == null)
+        {
+            GD.PrintErr(
+                $"[DayNightCycle] Moon texture not found: {path}"
+            );
+
+            return null;
+        }
+
+        return texture;
+    }
+
+    // ============================================================
+    // CREATE MOON MATERIAL
+    // ============================================================
+
+    private StandardMaterial3D CreateMoonMaterial(
+        Texture2D texture)
+    {
+        var material =
+            new StandardMaterial3D();
+
+        material.ShadingMode =
+            BaseMaterial3D.ShadingModeEnum.Unshaded;
+
+        material.EmissionEnabled =
+            false;
+
+        material.TextureFilter =
+            BaseMaterial3D.TextureFilterEnum.Nearest;
+
+        material.CullMode =
+            BaseMaterial3D.CullModeEnum.Disabled;
+
+        material.Transparency =
+            BaseMaterial3D.TransparencyEnum.Alpha;
+
+        material.AlbedoColor =
+            new Color(
+                0.8f,
+                0.8f,
+                0.85f,
+                1f
+            );
+
+        if (texture != null)
+            material.AlbedoTexture =
+                texture;
+
+        return material;
+    }
+
+    // ============================================================
+    // CREATE MOON FACE
+    // ============================================================
+
+    private MeshInstance3D CreateMoonFace(
+        string faceName,
+        StandardMaterial3D material,
+        Vector3 position,
+        Vector3 rotation)
+    {
+        var face =
+            new MeshInstance3D();
+
+        face.Name =
+            faceName;
+
+        var quad =
+            new QuadMesh();
+
+        quad.Size =
+            new Vector2(
+                _moonSize,
+                _moonSize
+            );
+
+        face.Mesh =
+            quad;
+
+        face.Position =
+            position;
+
+        face.Rotation =
+            rotation;
+
+        face.MaterialOverride =
+            material;
+
+        _moonCube.AddChild(face);
+
+        return face;
+    }
+
+public void HarvestCelestial(bool isSun)
+{
+    if (isSun)
+    {
+        _sunHarvested = true;
+
+        if (_sunCube != null)
+            _sunCube.Visible = false;
+
+        if (_sunCollisionShape != null)
+            _sunCollisionShape.Disabled = true;
+
+        GD.Print("[DayNightCycle] Sun harvested.");
+    }
+    else
+    {
+        _moonHarvested = true;
+
+        if (_moonCube != null)
+            _moonCube.Visible = false;
+
+        if (_moonCollisionShape != null)
+            _moonCollisionShape.Disabled = true;
+
+        GD.Print("[DayNightCycle] Moon harvested.");
+    }
+}
+public void ResetCelestialHarvest()
+{
+    // =========================================================
+    // RESET SUN
+    // =========================================================
+
+    _sunBroken = false;
+
+    if (_sunFront != null)
+        _sunFront.Visible = true;
+
+    if (_sunBack != null)
+        _sunBack.Visible = true;
+
+    if (_sunLeft != null)
+        _sunLeft.Visible = true;
+
+    if (_sunRight != null)
+        _sunRight.Visible = true;
+
+    if (_sunTop != null)
+        _sunTop.Visible = true;
+
+    if (_sunBottom != null)
+        _sunBottom.Visible = true;
+
+    if (_sunCollisionShape != null)
+        _sunCollisionShape.Disabled = false;
+
+    if (_sunCollision != null)
+    {
+        _sunCollision.CollisionLayer = 1;
+        _sunCollision.CollisionMask = 1;
+    }
+
+    // =========================================================
+    // RESET MOON
+    // =========================================================
+
+    _moonBroken = false;
+
+    // Restore the moon cube itself.
+    if (_moonCube != null)
+        _moonCube.Visible = true;
+
+    // Restore every moon face in case individual faces were
+    // hidden when the moon was broken.
+    if (_moonFront != null)
+        _moonFront.Visible = true;
+
+    if (_moonBack != null)
+        _moonBack.Visible = true;
+
+    if (_moonLeft != null)
+        _moonLeft.Visible = true;
+
+    if (_moonRight != null)
+        _moonRight.Visible = true;
+
+    if (_moonTop != null)
+        _moonTop.Visible = true;
+
+    if (_moonBottom != null)
+        _moonBottom.Visible = true;
+
+    // Restore moon collision.
+    if (_moonCollisionShape != null)
+        _moonCollisionShape.Disabled = false;
+
+    if (_moonCollision != null)
+    {
+        _moonCollision.CollisionLayer = 1;
+        _moonCollision.CollisionMask = 1;
+    }
+
+    // Make sure the moon is immediately placed at its
+    // correct position for the current time.
+    UpdateMoonPhysicsPosition();
+
+    GD.Print(
+        "[DayNightCycle] Sun and Moon harvest reset."
+    );
+}
+
+    // ============================================================
+    // CREATE ENVIRONMENT
+    // ============================================================
+
+    private void CreateEnvironment()
+    {
         _env =
             new Godot.Environment();
 
@@ -290,28 +1031,6 @@ public partial class DayNightCycle : Node3D
             _env;
 
         AddChild(worldEnv);
-
-        // ========================================================
-        // SEASON EVENTS
-        // ========================================================
-
-        SeasonManager seasonManager =
-            GetNodeOrNull<SeasonManager>(
-                "/root/SeasonManager"
-            );
-
-        if (seasonManager != null)
-        {
-            seasonManager.SeasonChanged +=
-                OnSeasonChanged;
-        }
-
-        // ========================================================
-        // INITIAL UPDATE
-        // ========================================================
-
-        UpdateCelestialBodies();
-        UpdateLightColor();
     }
 
     // ============================================================
@@ -322,7 +1041,8 @@ public partial class DayNightCycle : Node3D
     {
         if (SaveManager.Instance == null)
         {
-            _timeOfDay = 0.0f;
+            _timeOfDay =
+                0.0f;
 
             GD.Print(
                 "[DayNightCycle] No SaveManager found. " +
@@ -331,10 +1051,6 @@ public partial class DayNightCycle : Node3D
 
             return;
         }
-
-        // --------------------------------------------------------
-        // LOAD TIME
-        // --------------------------------------------------------
 
         _timeOfDay =
             Mathf.PosMod(
@@ -346,10 +1062,6 @@ public partial class DayNightCycle : Node3D
             $"[DayNightCycle] Starting at saved time: " +
             $"{_timeOfDay:0.000} ({GetTimeString()})"
         );
-
-        // --------------------------------------------------------
-        // LOAD CALENDAR
-        // --------------------------------------------------------
 
         SeasonManager seasonManager =
             GetNodeOrNull<SeasonManager>(
@@ -370,20 +1082,6 @@ public partial class DayNightCycle : Node3D
                     $"{seasonManager.GetCalendarString()}"
                 );
             }
-            else
-            {
-                GD.Print(
-                    "[DayNightCycle] No saved calendar found. " +
-                    "Using SeasonManager defaults."
-                );
-            }
-        }
-        else
-        {
-            GD.Print(
-                "[DayNightCycle] SeasonManager not found. " +
-                "Calendar state was not loaded."
-            );
         }
     }
 
@@ -391,17 +1089,9 @@ public partial class DayNightCycle : Node3D
     // PROCESS
     // ============================================================
 
-    public override void _Process(double delta)
+    public override void _Process(
+        double delta)
     {
-        _frameCount++;
-
-        if (_frameCount % 3 != 0)
-            return;
-
-        // ========================================================
-        // TIME ADVANCEMENT
-        // ========================================================
-
         _timeOfDay +=
             (float)delta /
             DayDurationSeconds;
@@ -415,28 +1105,855 @@ public partial class DayNightCycle : Node3D
             SaveCurrentWorldState();
         }
 
+        // Visuals and lighting can update every render frame.
         UpdateCelestialBodies();
         UpdateLightColor();
     }
 
     // ============================================================
-    // EXIT TREE
+    // PHYSICS PROCESS
     // ============================================================
 
-    public override void _ExitTree()
+    public override void _PhysicsProcess(
+        double delta)
     {
-        SeasonManager seasonManager =
-            GetNodeOrNull<SeasonManager>(
-                "/root/SeasonManager"
-            );
+        if (_moonCollision == null)
+            return;
 
-        if (seasonManager != null)
+        // --------------------------------------------------------
+        // THE IMPORTANT FIX
+        // --------------------------------------------------------
+        //
+        // The moon's AnimatableBody3D is now the actual moving
+        // object.
+        //
+        // We do NOT copy MoonCube -> MoonCollision anymore.
+        //
+        // MoonCube is a child of MoonCollision, so both visual
+        // and collision move together perfectly on the physics
+        // timestep.
+        //
+
+        UpdateMoonPhysicsPosition();
+    }
+
+    // ============================================================
+    // UPDATE MOON PHYSICS POSITION
+    // ============================================================
+
+    private void UpdateMoonPhysicsPosition()
+    {
+        if (_moonCollision == null)
+            return;
+
+        float daylightProgress =
+            GetDaylightProgress();
+
+        bool sunUp =
+            IsSunUp();
+
+        Vector3 moonPosition;
+
+        // ========================================================
+        // SUN POSITION CALCULATION
+        // ========================================================
+
+        Vector3 sunPosition;
+
+        if (sunUp)
         {
-            seasonManager.SeasonChanged -=
-                OnSeasonChanged;
+            float daylightPosition =
+                _timeOfDay /
+                Mathf.Max(
+                    daylightProgress,
+                    0.0001f
+                );
+
+            float sunAngle =
+                Mathf.Pi -
+                (
+                    daylightPosition *
+                    Mathf.Pi
+                );
+
+            sunPosition =
+                new Vector3(
+                    Mathf.Cos(
+                        sunAngle
+                    ) *
+                    _orbitRadius,
+
+                    Mathf.Sin(
+                        sunAngle
+                    ) *
+                    _orbitRadius,
+
+                    0f
+                );
+        }
+        else
+        {
+            float nightProgress =
+                (
+                    _timeOfDay -
+                    daylightProgress
+                ) /
+                Mathf.Max(
+                    1f -
+                    daylightProgress,
+                    0.0001f
+                );
+
+            nightProgress =
+                Mathf.Clamp(
+                    nightProgress,
+                    0f,
+                    1f
+                );
+
+            float nightAngle =
+                Mathf.Lerp(
+                    0f,
+                    Mathf.Pi,
+                    nightProgress
+                );
+
+            sunPosition =
+                new Vector3(
+                    Mathf.Cos(
+                        nightAngle
+                    ) *
+                    _orbitRadius,
+
+                    -Mathf.Abs(
+                        Mathf.Sin(
+                            nightAngle
+                        ) *
+                        _orbitRadius
+                    ) - 1f,
+
+                    0f
+                );
         }
 
-        SaveCurrentWorldState();
+        // ========================================================
+        // MOON IS OPPOSITE THE SUN
+        // ========================================================
+
+        moonPosition =
+            -sunPosition;
+
+        _targetMoonPosition =
+            moonPosition;
+
+        // ========================================================
+        // MOVE THE PHYSICAL MOON
+        // ========================================================
+
+        _moonCollision.GlobalPosition =
+            _targetMoonPosition;
+
+        // ========================================================
+        // KEEP MOON VISUAL ROTATION FIXED
+        // ========================================================
+
+        if (_moonCube != null)
+{
+    _moonCube.Position =
+        Vector3.Zero;
+}
+    }
+// ============================================================
+// BREAK CELESTIAL BODY
+// ============================================================
+
+public void BreakCelestialBody(string celestialId)
+{
+    if (celestialId == "sun")
+{
+    _sunBroken = true;
+
+    // Hide every Sun visual face.
+    if (_sunFront != null)
+        _sunFront.Visible = false;
+
+    if (_sunBack != null)
+        _sunBack.Visible = false;
+
+    if (_sunLeft != null)
+        _sunLeft.Visible = false;
+
+    if (_sunRight != null)
+        _sunRight.Visible = false;
+
+    if (_sunTop != null)
+        _sunTop.Visible = false;
+
+    if (_sunBottom != null)
+        _sunBottom.Visible = false;
+
+    // Disable Sun collision.
+    if (_sunCollisionShape != null)
+        _sunCollisionShape.Disabled = true;
+
+    if (_sunCollision != null)
+    {
+        _sunCollision.CollisionLayer = 0;
+        _sunCollision.CollisionMask = 0;
+    }
+
+    GD.Print(
+        "[DayNightCycle] Sun broken until next sunrise."
+    );
+    }
+    else if (celestialId == "moon")
+    {
+        _moonBroken = true;
+
+        // Hide every moon visual face.
+if (_moonFront != null)
+    _moonFront.Visible = false;
+
+if (_moonBack != null)
+    _moonBack.Visible = false;
+
+if (_moonLeft != null)
+    _moonLeft.Visible = false;
+
+if (_moonRight != null)
+    _moonRight.Visible = false;
+
+if (_moonTop != null)
+    _moonTop.Visible = false;
+
+if (_moonBottom != null)
+    _moonBottom.Visible = false;
+
+        if (_moonCollisionShape != null)
+            _moonCollisionShape.Disabled = true;
+
+        if (_moonCollision != null)
+        {
+            _moonCollision.CollisionLayer = 0;
+            _moonCollision.CollisionMask = 0;
+        }
+
+        GD.Print(
+            "[DayNightCycle] Moon broken until next moonrise."
+        );
+    }
+}
+    // ============================================================
+    // UPDATE CELESTIAL BODIES
+    // ============================================================
+
+    private void UpdateCelestialBodies()
+    {
+        if (_sunCube == null ||
+            _moonCollision == null ||
+            _moonCube == null)
+            return;
+
+        float daylightProgress =
+            GetDaylightProgress();
+
+        bool sunUp =
+            IsSunUp();
+
+        Vector3 sunPosition;
+
+        // ========================================================
+        // SUN POSITION
+        // ========================================================
+
+        if (sunUp)
+        {
+            float daylightPosition =
+                _timeOfDay /
+                Mathf.Max(
+                    daylightProgress,
+                    0.0001f
+                );
+
+            float sunAngle =
+                Mathf.Pi -
+                (
+                    daylightPosition *
+                    Mathf.Pi
+                );
+
+            sunPosition =
+                new Vector3(
+                    Mathf.Cos(
+                        sunAngle
+                    ) *
+                    _orbitRadius,
+
+                    Mathf.Sin(
+                        sunAngle
+                    ) *
+                    _orbitRadius,
+
+                    0f
+                );
+        }
+        else
+        {
+            float nightProgress =
+                (
+                    _timeOfDay -
+                    daylightProgress
+                ) /
+                Mathf.Max(
+                    1f -
+                    daylightProgress,
+                    0.0001f
+                );
+
+            nightProgress =
+                Mathf.Clamp(
+                    nightProgress,
+                    0f,
+                    1f
+                );
+
+            float nightAngle =
+                Mathf.Lerp(
+                    0f,
+                    Mathf.Pi,
+                    nightProgress
+                );
+
+            sunPosition =
+                new Vector3(
+                    Mathf.Cos(
+                        nightAngle
+                    ) *
+                    _orbitRadius,
+
+                    -Mathf.Abs(
+                        Mathf.Sin(
+                            nightAngle
+                        ) *
+                        _orbitRadius
+                    ) - 1f,
+
+                    0f
+                );
+        }
+
+        // ========================================================
+        // SUN POSITION
+        // ========================================================
+
+        _sunCollision.GlobalPosition =
+    sunPosition;
+
+        // ========================================================
+        // SUN LIGHT ROTATION
+        // ========================================================
+
+        if (Sun != null)
+        {
+            Vector3 direction =
+                (
+                    Vector3.Zero -
+                    _sunCube.GlobalPosition
+                ).Normalized();
+
+            if (
+                _sunCube.GlobalPosition.LengthSquared()
+                > 0.0001f
+            )
+            {
+                Vector3 target =
+                    _sunCube.GlobalPosition +
+                    direction;
+
+                if (
+                    !_sunCube.GlobalPosition
+                        .IsEqualApprox(target)
+                )
+                {
+                    Vector3 up =
+                        Vector3.Forward;
+
+                    if (
+                        Mathf.Abs(
+                            direction.Dot(up)
+                        ) > 0.98f
+                    )
+                    {
+                        up =
+                            Vector3.Right;
+                    }
+
+                    Sun.LookAt(
+                        target,
+                        up
+                    );
+                }
+            }
+        }
+
+        // ========================================================
+        // MOON POSITION
+        // ========================================================
+        //
+        // IMPORTANT:
+        // We do NOT move MoonCube here anymore.
+        //
+        // The AnimatableBody3D is moved in _PhysicsProcess().
+        // MoonCube follows automatically because it is its child.
+        //
+
+        Vector3 moonPosition =
+            -sunPosition;
+
+        _targetMoonPosition =
+            moonPosition;
+
+        // ========================================================
+        // MOON VISUAL ROTATION
+        // ========================================================
+
+        _moonCube.Position =
+            Vector3.Zero;
+
+        _moonCube.Rotation =
+            new Vector3(
+                0f,
+                Mathf.Pi / 4f,
+                0f
+            );
+
+        // ========================================================
+        // HEIGHT
+        // ========================================================
+
+        float sunHeight =
+            _sunCube.GlobalPosition.Y /
+            _orbitRadius;
+
+        float moonHeight =
+            _targetMoonPosition.Y /
+            _orbitRadius;
+
+        // ========================================================
+        // SUN FADE
+        // ========================================================
+
+        float sunFade =
+            Mathf.Clamp(
+                sunHeight * 10f,
+                0f,
+                1f
+            );
+
+        // ========================================================
+        // MOON FADE
+        // ========================================================
+
+        float moonFade =
+            Mathf.Clamp(
+                (moonHeight + 0.02f) * 10f,
+                0f,
+                1f
+            );
+
+        // ========================================================
+        // SUN MATERIAL ALPHA
+        // ========================================================
+
+        UpdateSunMaterialAlpha(
+            _sunFrontMat,
+            sunFade
+        );
+
+        UpdateSunMaterialAlpha(
+            _sunBackMat,
+            sunFade
+        );
+
+        UpdateSunMaterialAlpha(
+            _sunLeftMat,
+            sunFade
+        );
+
+        UpdateSunMaterialAlpha(
+            _sunRightMat,
+            sunFade
+        );
+
+        UpdateSunMaterialAlpha(
+            _sunTopMat,
+            sunFade
+        );
+
+        UpdateSunMaterialAlpha(
+            _sunBottomMat,
+            sunFade
+        );
+
+        // ========================================================
+        // MOON MATERIAL ALPHA
+        // ========================================================
+
+        UpdateMoonMaterialAlpha(
+            _moonFrontMat,
+            moonFade
+        );
+
+        UpdateMoonMaterialAlpha(
+            _moonBackMat,
+            moonFade
+        );
+
+        UpdateMoonMaterialAlpha(
+            _moonLeftMat,
+            moonFade
+        );
+
+        UpdateMoonMaterialAlpha(
+            _moonRightMat,
+            moonFade
+        );
+
+        UpdateMoonMaterialAlpha(
+            _moonTopMat,
+            moonFade
+        );
+
+        UpdateMoonMaterialAlpha(
+            _moonBottomMat,
+            moonFade
+        );
+
+        // ========================================================
+// VISIBILITY
+// ========================================================
+
+// Respawn harvested celestial bodies when they rise again.
+bool sunVisibleNow =
+    sunFade > 0.001f;
+
+bool moonVisibleNow =
+    moonFade > 0.001f;
+
+if (sunVisibleNow && !_wasSunVisible)
+    _sunHarvested = false;
+
+if (moonVisibleNow && !_wasMoonVisible)
+    _moonHarvested = false;
+
+_wasSunVisible = sunVisibleNow;
+_wasMoonVisible = moonVisibleNow;
+
+_sunCube.Visible =
+    sunVisibleNow &&
+    !_sunHarvested;
+
+_moonCube.Visible =
+    moonVisibleNow &&
+    !_moonHarvested;
+
+        // ========================================================
+        // COLLISION VISIBILITY
+        // ========================================================
+
+        if (_sunCollisionShape != null)
+        {
+            _sunCollisionShape.Disabled =
+                !_sunCube.Visible;
+        }
+
+        if (_moonCollisionShape != null)
+        {
+            _moonCollisionShape.Disabled =
+                !_moonCube.Visible;
+        }
+    }
+
+    // ============================================================
+    // UPDATE SUN MATERIAL ALPHA
+    // ============================================================
+
+    private void UpdateSunMaterialAlpha(
+        StandardMaterial3D material,
+        float alpha)
+    {
+        if (material == null)
+            return;
+
+        Color color =
+            material.AlbedoColor;
+
+        color.A =
+            alpha;
+
+        material.AlbedoColor =
+            color;
+
+        material.EmissionEnergyMultiplier =
+            2.0f *
+            alpha;
+    }
+
+    // ============================================================
+    // UPDATE MOON MATERIAL ALPHA
+    // ============================================================
+
+    private void UpdateMoonMaterialAlpha(
+        StandardMaterial3D material,
+        float alpha)
+    {
+        if (material == null)
+            return;
+
+        Color color =
+            material.AlbedoColor;
+
+        color.A =
+            alpha;
+
+        material.AlbedoColor =
+            color;
+    }
+
+    // ============================================================
+    // LIGHT / SKY
+    // ============================================================
+
+    private void UpdateLightColor()
+    {
+        if (Sun == null)
+            return;
+
+        bool sunUp =
+            IsSunUp();
+
+        float daylightProgress =
+            GetDaylightProgress();
+
+        float daylightPosition =
+            sunUp
+                ? _timeOfDay /
+                  Mathf.Max(
+                      daylightProgress,
+                      0.0001f
+                  )
+                : 0f;
+
+        Color lightColor;
+        Color skyColor;
+        float energy;
+
+        if (!sunUp)
+        {
+            lightColor =
+                _nightColor;
+
+            skyColor =
+                _nightSky;
+
+            energy =
+                0f;
+        }
+        else
+        {
+            float daylightSeconds =
+                GetDaylightSeconds();
+
+            float sunriseLength =
+                SunriseDurationSeconds /
+                daylightSeconds;
+
+            float sunsetLength =
+                SunsetDurationSeconds /
+                daylightSeconds;
+
+            sunriseLength =
+                Mathf.Clamp(
+                    sunriseLength,
+                    0.01f,
+                    0.25f
+                );
+
+            sunsetLength =
+                Mathf.Clamp(
+                    sunsetLength,
+                    0.01f,
+                    0.25f
+                );
+
+            if (
+                daylightPosition <
+                sunriseLength
+            )
+            {
+                float t =
+                    daylightPosition /
+                    sunriseLength;
+
+                lightColor =
+                    _nightColor.Lerp(
+                        _sunriseColor,
+                        t
+                    );
+
+                skyColor =
+                    _nightSky.Lerp(
+                        _sunriseSky,
+                        t
+                    );
+
+                energy =
+                    Mathf.Lerp(
+                        _nightEnergy,
+                        _sunriseEnergy,
+                        t
+                    );
+            }
+            else if (
+                daylightPosition >
+                1f -
+                sunsetLength
+            )
+            {
+                float t =
+                    (
+                        daylightPosition -
+                        (
+                            1f -
+                            sunsetLength
+                        )
+                    ) /
+                    sunsetLength;
+
+                lightColor =
+                    _noonColor.Lerp(
+                        _sunsetColor,
+                        t
+                    );
+
+                skyColor =
+                    _noonSky.Lerp(
+                        _sunsetSky,
+                        t
+                    );
+
+                energy =
+                    Mathf.Lerp(
+                        _noonEnergy,
+                        _sunsetEnergy,
+                        t
+                    );
+            }
+            else
+            {
+                float noonDistance =
+                    Mathf.Abs(
+                        daylightPosition -
+                        0.5f
+                    ) *
+                    2f;
+
+                float noonFactor =
+                    1f -
+                    Mathf.Clamp(
+                        noonDistance,
+                        0f,
+                        1f
+                    );
+
+                lightColor =
+                    _sunriseColor.Lerp(
+                        _noonColor,
+                        noonFactor
+                    );
+
+                skyColor =
+                    _sunriseSky.Lerp(
+                        _noonSky,
+                        noonFactor
+                    );
+
+                energy =
+                    Mathf.Lerp(
+                        _sunriseEnergy,
+                        _noonEnergy,
+                        noonFactor
+                    );
+            }
+        }
+
+        // ========================================================
+        // NIGHT = ZERO SUNLIGHT
+        // ========================================================
+
+        if (!sunUp)
+        {
+            energy =
+                0f;
+
+            lightColor =
+                _nightColor;
+        }
+
+        Sun.LightColor =
+            lightColor;
+
+        Sun.LightEnergy =
+            energy;
+
+        // ========================================================
+        // AMBIENT
+        // ========================================================
+
+        if (_env != null)
+        {
+            if (!sunUp)
+            {
+                _env.AmbientLightEnergy =
+                    0.015f;
+            }
+            else
+            {
+                float ambientFactor =
+                    Mathf.Clamp(
+                        energy /
+                        _noonEnergy,
+                        0f,
+                        1f
+                    );
+
+                _env.AmbientLightEnergy =
+                    Mathf.Lerp(
+                        0.02f,
+                        0.35f,
+                        ambientFactor
+                    );
+            }
+        }
+
+        // ========================================================
+        // SKY
+        // ========================================================
+
+        if (_skyMaterial != null)
+        {
+            _skyMaterial.SkyTopColor =
+                skyColor;
+
+            _skyMaterial.SkyHorizonColor =
+                skyColor;
+
+            _skyMaterial.GroundBottomColor =
+                skyColor;
+
+            _skyMaterial.GroundHorizonColor =
+                skyColor;
+        }
     }
 
     // ============================================================
@@ -457,67 +1974,162 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
+    // DAY CHANGE
+    // ============================================================
+
+   private void OnDayChanged(
+    int newDay,
+    SeasonManager.Season currentSeason)
+{
+    // Update the Sun and Moon for the new calendar day first.
+    UpdateCelestialBodies();
+
+    // New calendar day = harvested celestial bodies reset.
+    _sunBroken = false;
+    _moonBroken = false;
+
+    // Restore Sun visuals.
+    if (_sunFront != null)
+        _sunFront.Visible = true;
+
+    if (_sunBack != null)
+        _sunBack.Visible = true;
+
+    if (_sunLeft != null)
+        _sunLeft.Visible = true;
+
+    if (_sunRight != null)
+        _sunRight.Visible = true;
+
+    if (_sunTop != null)
+        _sunTop.Visible = true;
+
+    if (_sunBottom != null)
+        _sunBottom.Visible = true;
+
+    // Restore Sun collision.
+    if (_sunCollisionShape != null)
+        _sunCollisionShape.Disabled = false;
+
+    if (_sunCollision != null)
+    {
+        _sunCollision.CollisionLayer = 1;
+        _sunCollision.CollisionMask = 1;
+    }
+
+    // Restore Moon visual.
+    if (_moonCube != null)
+        _moonCube.Visible = true;
+
+    // Restore Moon collision.
+    if (_moonCollisionShape != null)
+        _moonCollisionShape.Disabled = false;
+
+    if (_moonCollision != null)
+    {
+        _moonCollision.CollisionLayer = 1;
+        _moonCollision.CollisionMask = 1;
+    }
+
+    GD.Print(
+        $"[DayNightCycle] NEW DAY {newDay} - Sun and Moon reset."
+    );
+}
+
+    // ============================================================
     // ADVANCE CALENDAR DAY
     // ============================================================
 
     private void AdvanceCalendarDay()
+{
+    GD.Print("========================================");
+    GD.Print("[DayNightCycle] ADVANCE CALENDAR DAY CALLED");
+    GD.Print("========================================");
+
+    if (Godot.Engine.IsEditorHint())
+        return;
+
+    SeasonManager seasonManager =
+        GetNodeOrNull<SeasonManager>(
+            "/root/SeasonManager"
+        );
+
+    if (seasonManager != null)
     {
-        if (Godot.Engine.IsEditorHint())
-            return;
+        GD.Print(
+            $"[DayNightCycle] Before AdvanceDay: " +
+            $"Day {seasonManager.CurrentDay}, " +
+            $"{seasonManager.GetSeasonName()}"
+        );
 
-        SeasonManager seasonManager =
-            GetNodeOrNull<SeasonManager>(
-                "/root/SeasonManager"
-            );
+        seasonManager.AdvanceDay();
 
-        if (seasonManager != null)
-        {
-            seasonManager.AdvanceDay();
-        }
+        GD.Print(
+            $"[DayNightCycle] After AdvanceDay: " +
+            $"Day {seasonManager.CurrentDay}, " +
+            $"{seasonManager.GetSeasonName()}"
+        );
     }
+    else
+    {
+        GD.PrintErr(
+            "[DayNightCycle] Could not find /root/SeasonManager!"
+        );
+    }
+}
 
     // ============================================================
     // DEBUG: ADVANCE ONE HOUR
     // ============================================================
 
     public void AdvanceDebugHour()
-    {
-        // Advance exactly one displayed game hour.
-        //
-        // We convert the current clock to a game hour,
-        // add one hour, then convert it back into our
-        // sunrise-based normalized clock.
+{
+    float currentHour =
+        GetGameHour();
 
-        float currentHour =
-            GetGameHour();
+    currentHour += 1f;
 
-        currentHour += 1f;
+    // Our game clock runs from 6:00 AM to 6:00 AM.
+    // 30.0 means the next sunrise / new game day.
+    bool newDay =
+        currentHour >= 30f;
 
-        if (currentHour >= 30f)
-            currentHour -= 24f;
+    if (newDay)
+        currentHour -= 24f;
 
-        _timeOfDay =
-            GameHourToNormalizedTime(
-                currentHour
-            );
-
-        // Sunrise = beginning of the calendar day.
-        if (Mathf.IsZeroApprox(_timeOfDay))
-        {
-            AdvanceCalendarDay();
-        }
-
-        UpdateCelestialBodies();
-        UpdateLightColor();
-
-        SaveCurrentWorldState();
-
-        GD.Print(
-            $"[DayNightCycle] Debug hour advanced. " +
-            $"Time of day: {_timeOfDay:0.000} " +
-            $"({GetTimeString()})"
+    _timeOfDay =
+        GameHourToNormalizedTime(
+            currentHour
         );
+
+    // ---------------------------------------------------------
+    // NEW GAME DAY
+    // ---------------------------------------------------------
+
+    if (newDay)
+    {
+        GD.Print(
+            "[DayNightCycle] New game day reached."
+        );
+
+        AdvanceCalendarDay();
     }
+
+    UpdateCelestialBodies();
+    UpdateLightColor();
+
+    // Immediately synchronize the physics bodies after
+    // manually changing the time.
+    UpdateMoonPhysicsPosition();
+
+    SaveCurrentWorldState();
+
+    GD.Print(
+        $"[DayNightCycle] Debug hour advanced. " +
+        $"Time of day: {_timeOfDay:0.000} " +
+        $"({GetTimeString()})"
+    );
+}
 
     // ============================================================
     // SAVE WORLD STATE
@@ -546,20 +2158,6 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
-    // SAVE TIME ONLY
-    // ============================================================
-
-    private void SaveCurrentWorldTime()
-    {
-        if (SaveManager.Instance == null)
-            return;
-
-        SaveManager.Instance.SaveWorldTime(
-            _timeOfDay
-        );
-    }
-
-    // ============================================================
     // CURRENT TIME
     // ============================================================
 
@@ -569,25 +2167,13 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
-    // CONVERT NORMALIZED TIME -> GAME CLOCK
+    // NORMALIZED -> GAME CLOCK
     // ============================================================
 
     public float GetGameHour()
     {
         float daylightProgress =
             GetDaylightProgress();
-
-        // --------------------------------------------------------
-        // DAYTIME
-        // --------------------------------------------------------
-        //
-        // 0.0 normalized = 6 AM
-        // daylightProgress = 6 PM
-        //
-        // Therefore:
-        //
-        // normalized 0.0 -> 6
-        // normalized daylightProgress -> 18
 
         if (_timeOfDay < daylightProgress)
         {
@@ -604,22 +2190,6 @@ public partial class DayNightCycle : Node3D
                 daylightPosition
             );
         }
-
-        // --------------------------------------------------------
-        // NIGHTTIME
-        // --------------------------------------------------------
-        //
-        // daylightProgress = 6 PM
-        // 1.0 = next 6 AM
-        //
-        // Therefore:
-        //
-        // sunset -> 18
-        // midnight -> 24
-        // next sunrise -> 30
-        //
-        // We allow 24-30 internally because the calendar day
-        // begins at sunrise.
 
         float nightProgress =
             (
@@ -640,7 +2210,7 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
-    // CONVERT GAME CLOCK -> NORMALIZED TIME
+    // GAME CLOCK -> NORMALIZED
     // ============================================================
 
     private float GameHourToNormalizedTime(
@@ -648,10 +2218,6 @@ public partial class DayNightCycle : Node3D
     {
         float daylightProgress =
             GetDaylightProgress();
-
-        // --------------------------------------------------------
-        // 6 AM -> 6 PM
-        // --------------------------------------------------------
 
         if (gameHour >= 6f &&
             gameHour < 18f)
@@ -667,22 +2233,19 @@ public partial class DayNightCycle : Node3D
                 daylightProgress;
         }
 
-        // --------------------------------------------------------
-        // 6 PM -> NEXT 6 AM
-        // --------------------------------------------------------
-
         float normalizedNightHour;
 
         if (gameHour >= 18f)
         {
             normalizedNightHour =
-                gameHour - 18f;
+                gameHour -
+                18f;
         }
         else
         {
-            // 12 AM through 6 AM
             normalizedNightHour =
-                gameHour + 6f;
+                gameHour +
+                6f;
         }
 
         float nightProgress =
@@ -693,7 +2256,10 @@ public partial class DayNightCycle : Node3D
             daylightProgress +
             (
                 nightProgress *
-                (1f - daylightProgress)
+                (
+                    1f -
+                    daylightProgress
+                )
             );
     }
 
@@ -711,8 +2277,6 @@ public partial class DayNightCycle : Node3D
                 gameHour
             );
 
-        // Convert internal 24-30 range into normal 0-23 clock.
-
         return hour % 24;
     }
 
@@ -724,11 +2288,16 @@ public partial class DayNightCycle : Node3D
         float minute =
             (
                 gameHour -
-                Mathf.Floor(gameHour)
-            ) * 60f;
+                Mathf.Floor(
+                    gameHour
+                )
+            ) *
+            60f;
 
         return Mathf.Clamp(
-            Mathf.FloorToInt(minute),
+            Mathf.FloorToInt(
+                minute
+            ),
             0,
             59
         );
@@ -766,35 +2335,24 @@ public partial class DayNightCycle : Node3D
         float hour =
             GetGameHour();
 
-        // Convert 24-30 internal range into the normal
-        // 0-6 AM range for comparisons.
-
         if (hour >= 24f)
             hour -= 24f;
 
         if (hour >= 5f &&
             hour < 8f)
-        {
             return "SUNRISE";
-        }
 
         if (hour >= 8f &&
             hour < 12f)
-        {
             return "MORNING";
-        }
 
         if (hour >= 12f &&
             hour < 17f)
-        {
             return "AFTERNOON";
-        }
 
         if (hour >= 17f &&
             hour < 20f)
-        {
             return "SUNSET";
-        }
 
         return "NIGHT";
     }
@@ -804,31 +2362,40 @@ public partial class DayNightCycle : Node3D
     // ============================================================
 
     private SeasonManager.Season GetCurrentSeason()
-{
-    if (!IsInsideTree())
+    {
+        if (!IsInsideTree())
+            return SeasonManager.Season.Spring;
+
+        SceneTree tree =
+            GetTree();
+
+        if (tree == null)
+            return SeasonManager.Season.Spring;
+
+        Node root =
+            tree.Root;
+
+        if (root == null)
+            return SeasonManager.Season.Spring;
+
+        Node managerNode =
+            root.GetNodeOrNull(
+                "SeasonManager"
+            );
+
+        if (managerNode is SeasonManager seasonManager)
+            return seasonManager.CurrentSeason;
+
+        var found =
+            tree.GetFirstNodeInGroup(
+                "season_manager"
+            );
+
+        if (found is SeasonManager manager)
+            return manager.CurrentSeason;
+
         return SeasonManager.Season.Spring;
-
-    // Look for the SeasonManager autoload safely.
-    var root = GetTree().Root;
-
-    if (root == null)
-        return SeasonManager.Season.Spring;
-
-    var seasonManager =
-        root.GetNodeOrNull<SeasonManager>("SeasonManager");
-
-    if (seasonManager != null)
-        return seasonManager.CurrentSeason;
-
-    // Fallback: find it by group if the autoload isn't directly available.
-    var found =
-        GetTree().GetFirstNodeInGroup("season_manager");
-
-    if (found is SeasonManager manager)
-        return manager.CurrentSeason;
-
-    return SeasonManager.Season.Spring;
-}
+    }
 
     // ============================================================
     // DAYLIGHT LENGTH
@@ -915,452 +2482,25 @@ public partial class DayNightCycle : Node3D
     }
 
     // ============================================================
-    // CELESTIAL BODIES
+    // EXIT TREE
     // ============================================================
 
-    private void UpdateCelestialBodies()
+    public override void _ExitTree()
     {
-        float daylightProgress =
-            GetDaylightProgress();
-
-        bool sunUp =
-            IsSunUp();
-
-        // ========================================================
-        // SUN
-        // ========================================================
-
-        Vector3 sunPosition;
-
-        if (sunUp)
-        {
-            float daylightPosition =
-                _timeOfDay /
-                Mathf.Max(
-                    daylightProgress,
-                    0.0001f
-                );
-
-            float sunAngle =
-                Mathf.Pi -
-                (
-                    daylightPosition *
-                    Mathf.Pi
-                );
-
-            sunPosition =
-                new Vector3(
-                    Mathf.Cos(sunAngle) *
-                        _orbitRadius,
-
-                    Mathf.Sin(sunAngle) *
-                        _orbitRadius,
-
-                    0f
-                );
-        }
-        else
-        {
-            float nightProgress =
-                (
-                    _timeOfDay -
-                    daylightProgress
-                ) /
-                Mathf.Max(
-                    1f -
-                    daylightProgress,
-                    0.0001f
-                );
-
-            nightProgress =
-                Mathf.Clamp(
-                    nightProgress,
-                    0f,
-                    1f
-                );
-
-            float nightAngle =
-                Mathf.Lerp(
-                    0f,
-                    Mathf.Pi,
-                    nightProgress
-                );
-
-            sunPosition =
-                new Vector3(
-                    Mathf.Cos(nightAngle) *
-                        _orbitRadius,
-
-                    -Mathf.Abs(
-                        Mathf.Sin(nightAngle) *
-                        _orbitRadius
-                    ) - 1f,
-
-                    0f
-                );
-        }
-
-        _sunMesh.GlobalPosition =
-            sunPosition;
-
-        // ========================================================
-        // SUN LIGHT ROTATION
-        // ========================================================
-
-        if (Sun != null)
-        {
-            Vector3 direction =
-                (
-                    Vector3.Zero -
-                    _sunMesh.GlobalPosition
-                ).Normalized();
-
-            Vector3 up =
-                Vector3.Forward;
-
-            if (Mathf.Abs(
-                direction.Dot(up)
-            ) > 0.98f)
-            {
-                up =
-                    Vector3.Right;
-            }
-
-            Sun.LookAt(
-                _sunMesh.GlobalPosition +
-                direction,
-                up
-            );
-        }
-
-        // ========================================================
-        // MOON
-        // ========================================================
-
-        _moonMesh.GlobalPosition =
-            -_sunMesh.GlobalPosition;
-
-        // ========================================================
-        // VISIBILITY
-        // ========================================================
-
-        float sunHeight =
-            _sunMesh.GlobalPosition.Y /
-            _orbitRadius;
-
-        float moonHeight =
-            _moonMesh.GlobalPosition.Y /
-            _orbitRadius;
-
-        float sunFade =
-            Mathf.Clamp(
-                sunHeight * 10f,
-                0f,
-                1f
+        SeasonManager seasonManager =
+            GetNodeOrNull<SeasonManager>(
+                "/root/SeasonManager"
             );
 
-        float moonFade =
-            Mathf.Clamp(
-                moonHeight * 10f,
-                0f,
-                1f
-            );
-
-        // ========================================================
-        // SUN MATERIAL
-        // ========================================================
-
-        if (_sunMat != null)
+        if (seasonManager != null)
         {
-            Color c =
-                _sunMat.AlbedoColor;
+            seasonManager.SeasonChanged -=
+                OnSeasonChanged;
 
-            c.A =
-                sunFade;
-
-            _sunMat.AlbedoColor =
-                c;
-
-            _sunMat.EmissionEnergyMultiplier =
-                2.0f *
-                sunFade;
+            seasonManager.DayChanged -=
+                OnDayChanged;
         }
 
-        // ========================================================
-        // MOON MATERIAL
-        // ========================================================
-
-        if (_moonMat != null)
-        {
-            Color c =
-                _moonMat.AlbedoColor;
-
-            c.A =
-                moonFade;
-
-            _moonMat.AlbedoColor =
-                c;
-
-            _moonMat.EmissionEnergyMultiplier =
-                0.15f *
-                moonFade;
-        }
-
-        _sunMesh.Visible =
-            sunFade > 0.001f;
-
-        _moonMesh.Visible =
-            moonFade > 0.001f;
-    }
-
-    // ============================================================
-    // LIGHT / SKY
-    // ============================================================
-
-    private void UpdateLightColor()
-    {
-        if (Sun == null)
-            return;
-
-        bool sunUp =
-            IsSunUp();
-
-        float daylightProgress =
-            GetDaylightProgress();
-
-        float daylightPosition =
-            sunUp
-                ? _timeOfDay /
-                  Mathf.Max(
-                      daylightProgress,
-                      0.0001f
-                  )
-                : 0f;
-
-        Color lightColor;
-        Color skyColor;
-        float energy;
-
-        // ========================================================
-        // NIGHT
-        // ========================================================
-
-        if (!sunUp)
-        {
-            lightColor =
-                _nightColor;
-
-            skyColor =
-                _nightSky;
-
-            energy =
-                0f;
-        }
-
-        // ========================================================
-        // DAY
-        // ========================================================
-
-        else
-        {
-            float daylightSeconds =
-                GetDaylightSeconds();
-
-            float sunriseLength =
-                SunriseDurationSeconds /
-                daylightSeconds;
-
-            float sunsetLength =
-                SunsetDurationSeconds /
-                daylightSeconds;
-
-            sunriseLength =
-                Mathf.Clamp(
-                    sunriseLength,
-                    0.01f,
-                    0.25f
-                );
-
-            sunsetLength =
-                Mathf.Clamp(
-                    sunsetLength,
-                    0.01f,
-                    0.25f
-                );
-
-            // ====================================================
-            // SUNRISE
-            // ====================================================
-
-            if (daylightPosition <
-                sunriseLength)
-            {
-                float t =
-                    daylightPosition /
-                    sunriseLength;
-
-                lightColor =
-                    _nightColor.Lerp(
-                        _sunriseColor,
-                        t
-                    );
-
-                skyColor =
-                    _nightSky.Lerp(
-                        _sunriseSky,
-                        t
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _nightEnergy,
-                        _sunriseEnergy,
-                        t
-                    );
-            }
-
-            // ====================================================
-            // SUNSET
-            // ====================================================
-
-            else if (
-                daylightPosition >
-                1f - sunsetLength)
-            {
-                float t =
-                    (
-                        daylightPosition -
-                        (1f - sunsetLength)
-                    ) /
-                    sunsetLength;
-
-                lightColor =
-                    _noonColor.Lerp(
-                        _sunsetColor,
-                        t
-                    );
-
-                skyColor =
-                    _noonSky.Lerp(
-                        _sunsetSky,
-                        t
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _noonEnergy,
-                        _sunsetEnergy,
-                        t
-                    );
-            }
-
-            // ====================================================
-            // NORMAL DAY
-            // ====================================================
-
-            else
-            {
-                float noonDistance =
-                    Mathf.Abs(
-                        daylightPosition -
-                        0.5f
-                    ) * 2f;
-
-                float noonFactor =
-                    1f -
-                    Mathf.Clamp(
-                        noonDistance,
-                        0f,
-                        1f
-                    );
-
-                lightColor =
-                    _sunriseColor.Lerp(
-                        _noonColor,
-                        noonFactor
-                    );
-
-                skyColor =
-                    _sunriseSky.Lerp(
-                        _noonSky,
-                        noonFactor
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _sunriseEnergy,
-                        _noonEnergy,
-                        noonFactor
-                    );
-            }
-        }
-
-        // ========================================================
-        // FINAL SUNLIGHT SAFETY
-        // ========================================================
-
-        if (!sunUp)
-        {
-            energy =
-                0f;
-
-            lightColor =
-                _nightColor;
-        }
-
-        Sun.LightColor =
-            lightColor;
-
-        Sun.LightEnergy =
-            energy;
-
-        // ========================================================
-        // AMBIENT
-        // ========================================================
-
-        if (_env != null)
-        {
-            if (!sunUp)
-            {
-                _env.AmbientLightEnergy =
-                    0.015f;
-            }
-            else
-            {
-                float ambientFactor =
-                    Mathf.Clamp(
-                        energy /
-                        _noonEnergy,
-                        0f,
-                        1f
-                    );
-
-                _env.AmbientLightEnergy =
-                    Mathf.Lerp(
-                        0.02f,
-                        0.35f,
-                        ambientFactor
-                    );
-            }
-        }
-
-        // ========================================================
-        // SKY
-        // ========================================================
-
-        if (_skyMaterial != null)
-        {
-            _skyMaterial.SkyTopColor =
-                skyColor;
-
-            _skyMaterial.SkyHorizonColor =
-                skyColor;
-
-            _skyMaterial.GroundBottomColor =
-                skyColor;
-
-            _skyMaterial.GroundHorizonColor =
-                skyColor;
-        }
+        SaveCurrentWorldState();
     }
 }

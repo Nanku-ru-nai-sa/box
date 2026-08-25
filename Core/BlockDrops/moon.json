@@ -1,0 +1,11 @@
+{
+  "block": "moon",
+  "drops": [
+    {
+      "item": "moon_shard",
+      "chance": 1,
+      "min": 3,
+      "max": 12
+    }
+  ]
+}

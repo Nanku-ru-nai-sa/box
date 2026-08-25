@@ -56,6 +56,11 @@ public override void _Ready()
     AddChild(_transparentMeshInstance);
 }
 
+public void SetChunkManager(ChunkManager chunkManager)
+{
+    _chunkManager = chunkManager;
+}
+
 public void Initialize(Vector3I chunkPosition)
 {
     ChunkPosition = chunkPosition;
@@ -1176,5 +1181,46 @@ private bool IsAirAt(int x, int y, int z)
     surface.AddVertex(verts[2]);
     surface.SetUV(uvs[3]);
     surface.AddVertex(verts[3]);
+}
+public void ExplodeAtWorld(Vector3I center, int radius = 3)
+{
+    if (_chunkManager == null)
+    {
+        GD.PrintErr("[Bomb] ChunkManager reference is null.");
+        return;
+    }
+
+    int radiusSquared = radius * radius;
+
+    for (int x = center.X - radius; x <= center.X + radius; x++)
+    {
+        for (int y = center.Y - radius; y <= center.Y + radius; y++)
+        {
+            for (int z = center.Z - radius; z <= center.Z + radius; z++)
+            {
+                int dx = x - center.X;
+                int dy = y - center.Y;
+                int dz = z - center.Z;
+
+                if ((dx * dx) + (dy * dy) + (dz * dz) > radiusSquared)
+                    continue;
+
+                Vector3I worldPos = new Vector3I(x, y, z);
+
+                BlockState block = _chunkManager.GetBlockAtWorld(worldPos);
+
+                if (block.IsAir())
+                    continue;
+
+                if (block.BlockId == "bedrock")
+                    continue;
+
+                _chunkManager.SetBlockAtWorld(
+                    worldPos,
+                    BlockState.Air
+                );
+            }
+        }
+    }
 }
 }

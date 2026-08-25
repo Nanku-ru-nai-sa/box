@@ -735,6 +735,7 @@ public Vector3? LoadPlayerPosition()
         if (_chunks.ContainsKey(chunkPos)) return;
 
         var chunk = new Chunk();
+        chunk.SetChunkManager(this);
         AddChild(chunk);
         chunk.Initialize(chunkPos);
         GenerateChunk(chunk, chunkPos);
@@ -1997,6 +1998,8 @@ public Vector3? LoadPlayerPosition()
 
         return chunk.GetBlock(localX, localY, localZ);
     }
+
+
 
     public void SetBlockAtWorld(Vector3I worldPos, BlockState state)
     {

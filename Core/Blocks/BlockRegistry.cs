@@ -41,6 +41,7 @@ public partial class BlockRegistry : Node
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
         var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
+        var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
 
         // Geology Layer rocks - fill for ChunkManager's Layers list (the
         // geology/soil-band system). diorite/gabbro previously only had
@@ -354,6 +355,19 @@ public partial class BlockRegistry : Node
         magma.IsSolid = true; magma.CanChisel = true; magma.Hardness = 2.5f;
         magma.TextureTop = magmaTex; magma.TextureSide = magmaTex; magma.TextureBottom = magmaTex;
         Register(magma);
+
+        var bomb = new BlockResource();
+bomb.BlockId = "bomb";
+bomb.DisplayName = "Bomb";
+bomb.IsSolid = true;
+bomb.CanChisel = false;
+bomb.IsTransparent = false;
+bomb.CanRotate = false;
+bomb.Hardness = 1.0f;
+bomb.TextureTop = bombTex;
+bomb.TextureSide = bombTex;
+bomb.TextureBottom = bombTex;
+Register(bomb);
 
         GD.Print("Blocks registered.");
     }

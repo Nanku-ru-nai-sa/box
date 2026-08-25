@@ -24,36 +24,73 @@ public static class ItemCatalog
     private static List<string> _allItemIds;
     private static Dictionary<string, string> _categories;
 
-    // Every item id currently known (filename minus ".png"), sorted A-Z.
-    public static List<string> GetAllItemIds()
+    // Every item id currently known (filename minus ".png"), including
+// items inside subfolders such as Items/ore/.
+public static List<string> GetAllItemIds()
+{
+    if (_allItemIds != null) return _allItemIds;
+
+    _allItemIds = new List<string>();
+
+    ScanItemFolder(ItemsFolder);
+
+    _allItemIds.Sort(StringComparer.OrdinalIgnoreCase);
+
+    return _allItemIds;
+}
+
+// Recursively scans Items/ and all of its subfolders.
+private static void ScanItemFolder(string folderPath)
+{
+    using var dir = DirAccess.Open(folderPath);
+
+    if (dir == null)
     {
-        if (_allItemIds != null) return _allItemIds;
-
-        _allItemIds = new List<string>();
-        using var dir = DirAccess.Open(ItemsFolder);
-        if (dir == null)
-        {
-            GD.PrintErr($"ItemCatalog: couldn't open {ItemsFolder}");
-            return _allItemIds;
-        }
-
-        dir.ListDirBegin();
-        string fileName = dir.GetNext();
-        while (fileName != "")
-        {
-            if (!dir.CurrentIsDir() && fileName.EndsWith(".png"))
-            {
-                string id = fileName.Substring(0, fileName.Length - 4); // strip ".png"
-                _allItemIds.Add(id);
-            }
-            fileName = dir.GetNext();
-        }
-        dir.ListDirEnd();
-
-        _allItemIds.Sort(StringComparer.OrdinalIgnoreCase);
-        return _allItemIds;
+        GD.PrintErr($"ItemCatalog: couldn't open {folderPath}");
+        return;
     }
 
+    dir.ListDirBegin();
+
+    string fileName = dir.GetNext();
+
+    while (fileName != "")
+    {
+        string fullPath =
+            folderPath +
+            fileName;
+
+        if (dir.CurrentIsDir())
+        {
+            // Skip hidden/system folders.
+            if (!fileName.StartsWith("."))
+            {
+                ScanItemFolder(
+                    fullPath + "/"
+                );
+            }
+        }
+        else if (
+            fileName.EndsWith(
+                ".png",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
+        {
+            string id =
+                fileName.Substring(
+                    0,
+                    fileName.Length - 4
+                );
+
+            _allItemIds.Add(id);
+        }
+
+        fileName = dir.GetNext();
+    }
+
+    dir.ListDirEnd();
+}
     // Optional res://Core/Items/categories.json — a flat
     // { "itemId": "CategoryName", ... } map. If the file is missing
     // entirely this just returns an empty map and every item falls back

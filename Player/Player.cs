@@ -25,6 +25,7 @@ public partial class Player : CharacterBody3D
     private float _placeTimer  = 0f;
     private const float PlaceInterval = 0.15f;
     private bool  _isBreaking  = false;
+    
     private float _breakTimer  = 0f;
     private const float BreakInterval = 0.4f;
     private bool  _isDropping  = false;
@@ -252,36 +253,116 @@ public partial class Player : CharacterBody3D
 
     private Texture2D _unknownItemIconTex; // fallback for any item whose real icon can't be found - loaded once, lazily
 
-    private Texture2D GetItemIcon(string itemId)
+   private Texture2D GetItemIcon(string itemId)
+{
+    if (string.IsNullOrEmpty(itemId))
+        return null;
+
+    if (_iconCache.TryGetValue(itemId, out var cached))
+        return cached;
+
+    // ------------------------------------------------------------
+    // 1. Prefer the icon already assigned to the ItemResource.
+    // ------------------------------------------------------------
+    // This is important for tools and crafted items that generate
+    // their icons dynamically.
+
+    var item =
+        ItemRegistry.Instance?.GetItem(itemId);
+
+    Texture2D tex =
+        item?.Icon;
+
+
+    // ------------------------------------------------------------
+    // 2. Normal item texture
+    // ------------------------------------------------------------
+
+    if (tex == null)
     {
-        if (string.IsNullOrEmpty(itemId)) return null;
-        if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
+        string path =
+            $"res://Assets/Textures/Items/{itemId}.png";
 
-        // Prefer an icon already set on the ItemResource itself - crafted
-        // tools get a composited icon built at craft time (see
-        // ToolCrafting.BuildToolIcon) with no file on disk to look up.
-        var item = ItemRegistry.Instance?.GetItem(itemId);
-        Texture2D tex = item?.Icon;
-
-        if (tex == null)
+        if (ResourceLoader.Exists(path))
         {
-            string path = $"res://Assets/Textures/Items/{itemId}.png";
-            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+            tex =
+                ResourceLoader.Load<Texture2D>(
+                    path
+                );
         }
-
-        // Still nothing? Fall back to the "unknown item" placeholder
-        // instead of showing a blank/invisible slot - makes it obvious
-        // something's missing rather than silently disappearing.
-        if (tex == null)
-        {
-            if (_unknownItemIconTex == null)
-                _unknownItemIconTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/tool/chalk/unknown.png");
-            tex = _unknownItemIconTex;
-        }
-
-        _iconCache[itemId] = tex;
-        return tex;
     }
+
+
+    // ------------------------------------------------------------
+    // 3. Ore texture
+    // ------------------------------------------------------------
+    // Sun and Moon shards are stored here:
+    //
+    // Assets/Textures/Items/ore/sun_shard.png
+    // Assets/Textures/Items/ore/moon_shard.png
+
+    if (tex == null)
+    {
+        string orePath =
+            $"res://Assets/Textures/Items/ore/{itemId}.png";
+
+        if (ResourceLoader.Exists(orePath))
+        {
+            tex =
+                ResourceLoader.Load<Texture2D>(
+                    orePath
+                );
+        }
+    }
+
+
+    // ------------------------------------------------------------
+    // 4. Block texture fallback
+    // ------------------------------------------------------------
+
+    if (tex == null)
+    {
+        string blockPath =
+            $"res://Assets/Textures/Blocks/{itemId}.png";
+
+        if (ResourceLoader.Exists(blockPath))
+        {
+            tex =
+                ResourceLoader.Load<Texture2D>(
+                    blockPath
+                );
+        }
+    }
+
+
+    // ------------------------------------------------------------
+    // 5. Unknown item placeholder
+    // ------------------------------------------------------------
+
+    if (tex == null)
+    {
+        if (_unknownItemIconTex == null)
+        {
+            _unknownItemIconTex =
+                ResourceLoader.Load<Texture2D>(
+                    "res://Assets/Textures/Items/tool/chalk/unknown.png"
+                );
+        }
+
+        tex =
+            _unknownItemIconTex;
+    }
+
+
+    // ------------------------------------------------------------
+    // 6. Cache the result
+    // ------------------------------------------------------------
+
+    _iconCache[itemId] =
+        tex;
+
+    return tex;
+}
 
     // =========================================================================
     // UI BUILDERS
@@ -2089,82 +2170,482 @@ private void HandleOutputClicked(MouseButton button, bool shift)
     }
 
     private void TryBreakBlock()
+{
+    if (!_rayCast.IsColliding()) { ResetBreak(); return; }
+
+    var gm = GameModeManager.Instance;
+
+    if (gm != null && gm.IsStory)
     {
-        if (!_rayCast.IsColliding()) { ResetBreak(); return; }
-        var gm = GameModeManager.Instance;
-        if (gm != null && gm.IsStory) { ResetBreak(); return; }
+        ResetBreak();
+        return;
+    }
 
-        var col = _rayCast.GetCollider() as Node;
-        if (col is Melon melon) { melon.Break(_inventory); ResetBreak(); return; }
-        if (col is Mob mob) { mob.TakeDamage(UnarmedAttackDamage, GlobalPosition); ResetBreak(); return; }
-        if (col == null || !col.HasMeta("chunk")) { ResetBreak(); return; }
+    var col = _rayCast.GetCollider() as Node;
 
-        Chunk chunk  = (Chunk)col.GetMeta("chunk").AsGodotObject();
-        Vector3 tPos = _rayCast.GetCollisionPoint() - _rayCast.GetCollisionNormal() * 0.5f;
-        Vector3 lPos = tPos - chunk.GlobalPosition;
-        int bx = Mathf.FloorToInt(lPos.X), by = Mathf.FloorToInt(lPos.Y), bz = Mathf.FloorToInt(lPos.Z);
+    if (col is Melon melon)
+    {
+        melon.Break(_inventory);
+        ResetBreak();
+        return;
+    }
 
-        BlockState above = chunk.GetBlock(bx, by + 1, bz);
-        if (above.BlockId is "rose" or "clover" or "dandelion" or "rock_flint" or "rock_coal" or "rock_iron" or "rock_tin" or "rock_copper")
+        // ---------------------------------------------------------
+// SUN / MOON
+// ---------------------------------------------------------
+
+if (col != null &&
+    (col.Name == "SunCollision" ||
+     col.Name == "MoonCollision"))
+{
+    string celestialId =
+        col.Name == "SunCollision"
+            ? "sun"
+            : "moon";
+
+    // Start a new celestial break.
+    if (_breakTargetBlockId != celestialId)
+    {
+        _breakOverlay?.ResetTarget();
+
+        _breakHitCount = 0;
+        _breakTargetBlockId = celestialId;
+
+        // Celestial bodies use the normal block breaking speed.
+        _breakMiningPower = 1;
+    }
+
+    _breakHitCount++;
+
+    // Get the CURRENT position of the moving celestial body.
+    Vector3 celestialPosition =
+        ((Node3D)col).GlobalPosition;
+
+    Vector3I animationPosition =
+        new Vector3I(
+            Mathf.FloorToInt(celestialPosition.X),
+            Mathf.FloorToInt(celestialPosition.Y),
+            Mathf.FloorToInt(celestialPosition.Z)
+        );
+
+    // Keep the break overlay attached to the moving
+    // Sun/Moon every single hit.
+    float celestialSize =
+    celestialId == "sun"
+        ? 16f
+        : 10f;
+
+_breakOverlay?.SetCelestialMode(
+    celestialPosition,
+    new Vector3(
+        celestialSize,
+        celestialSize,
+        celestialSize
+    ),
+    new Vector3(
+        0f,
+        Mathf.Pi / 4f,
+        0f
+    )
+);
+
+    // Normal block-breaking animation.
+    bool celestialShouldBreak =
+        _breakOverlay?.UpdateBreak(
+            animationPosition,
+            _breakHitCount,
+            _breakMiningPower
+        )
+        ??
+        (
+            _breakHitCount *
+            _breakMiningPower >=
+            BlockBreakOverlay.TotalStages
+        );
+
+    // -----------------------------------------------------
+    // BREAK THE CELESTIAL BODY
+    // -----------------------------------------------------
+
+    if (celestialShouldBreak)
+{
+    GD.Print(
+        $"[Player] BROKE CELESTIAL BODY: {celestialId}"
+    );
+
+    var dayNight =
+        GetTree().GetFirstNodeInGroup(
+            "day_night_cycle"
+        );
+
+    if (dayNight is DayNightCycle cycle)
+    {
+        // Break the Sun / Moon.
+        cycle.BreakCelestialBody(
+            celestialId
+        );
+
+        // ---------------------------------------------------------
+        // CELESTIAL DROP
+        // ---------------------------------------------------------
+
+        string defaultDropItem =
+            celestialId == "sun"
+                ? "sun_shard"
+                : "moon_shard";
+
+        int dropCount = 1;
+        string dropItem = defaultDropItem;
+
+        var dropManager =
+            BlockDropManager.Instance;
+
+        if (dropManager != null)
         {
-            // Flowers/rocks pop out as a physical drop too, from just above the block being broken.
-            Vector3 aboveWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 1.5f, bz + 0.5f);
-            if (above.BlockId == "rose")      SpawnItemDrop("rose", 1, aboveWorldPos);
-            if (above.BlockId == "dandelion") SpawnItemDrop("dandelion", 1, aboveWorldPos);
-            if (above.BlockId.StartsWith("rock_")) SpawnItemDrop(above.BlockId, 1, aboveWorldPos);
-            chunk.SetBlock(bx, by + 1, bz, BlockState.Air);
-            ResetBreak(); return;
-        }
+            var rng =
+                new RandomNumberGenerator();
 
-        BlockState b = chunk.GetBlock(bx, by, bz);
-        if (b.IsAir()) { ResetBreak(); return; }
-        if (b.BlockId == "bedrock" && gm != null && gm.IsSurvival) { ResetBreak(); return; }
+            rng.Randomize();
 
-        if (gm != null && gm.IsCreate)
-        {
-            // Creative mode stays instant — no physical drop, straight to inventory.
-            var (dropIdC, dropCountC) = GetDrop(b.BlockId);
-            if (dropIdC is not ("rose" or "dandelion" or "clover")) AddItemToInventory(dropIdC, dropCountC);
-            var oreC = OreRegistry.Instance?.GetOreFromBlockState(b);
-            if (oreC != null) AddItemToInventory(oreC.ItemId, 1);
-            chunk.SetBlock(bx, by, bz, BlockState.Air);
-            ResetBreak(); return;
-        }
-
-        var blockWorldPos = new Vector3I(Mathf.FloorToInt(tPos.X), Mathf.FloorToInt(tPos.Y), Mathf.FloorToInt(tPos.Z));
-        if (blockWorldPos != _breakTargetBlock || b.BlockId != _breakTargetBlockId)
-        {
-            _breakOverlay?.ResetTarget();
-            _breakHitCount      = 0;
-            _breakTargetBlock   = blockWorldPos;
-            _breakTargetBlockId = b.BlockId;
-            string heldItem = _inventory.Slots[MainInvSize + _selectedSlot].IsEmpty ? "" : _inventory.Slots[MainInvSize + _selectedSlot].ItemId;
-            _breakMiningPower = ToolDefinition.GetEffectiveMiningPower(b.BlockId, heldItem);
-        }
-
-        _breakHitCount++;
-        bool shouldBreak = _breakOverlay?.UpdateBreak(blockWorldPos, _breakHitCount, _breakMiningPower)
-            ?? (_breakHitCount * _breakMiningPower >= BlockBreakOverlay.TotalStages);
-        if (shouldBreak)
-        {
-            var (drop, dropCount) = GetDrop(b.BlockId);
-            if (drop is not ("rose" or "dandelion" or "clover"))
+            if (dropManager.TryRollDrop(
+                celestialId,
+                rng,
+                out string jsonDropItem,
+                out int jsonDropCount))
             {
-                // Survival mode: spawn a physical drop at the block's position
-                // instead of adding it to the inventory directly.
-                Vector3 dropWorldPos = chunk.GlobalPosition + new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
-                SpawnItemDrop(drop, dropCount, dropWorldPos);
+                dropItem = jsonDropItem;
+                dropCount = jsonDropCount;
 
-                // Ore-logged blocks drop the ore item too, alongside the
-                // host block itself (e.g. coal on clay -> clay + coal).
-                var ore = OreRegistry.Instance?.GetOreFromBlockState(b);
-                if (ore != null) SpawnItemDrop(ore.ItemId, 1, dropWorldPos);
+                GD.Print(
+                    $"[Player] Celestial JSON drop: " +
+                    $"{dropCount}x {dropItem}"
+                );
             }
-            chunk.SetBlock(bx, by, bz, BlockState.Air);
-            DamageHeldToolDurability();
-            ResetBreak();
+            else
+            {
+                // JSON chance failed.
+                dropCount = 0;
+
+                GD.Print(
+                    $"[Player] Celestial drop roll failed: " +
+                    $"{celestialId}"
+                );
+            }
+        }
+        else
+        {
+            // Safety fallback.
+            dropCount = 1;
+
+            GD.PrintErr(
+                "[Player] BlockDropManager unavailable. " +
+                $"Using fallback drop: 1x {dropItem}"
+            );
+        }
+
+        if (dropCount > 0)
+        {
+            Vector3 dropPosition =
+                ((Node3D)col).GlobalPosition;
+
+            SpawnItemDrop(
+                dropItem,
+                dropCount,
+                dropPosition
+            );
         }
     }
+
+    ResetBreak();
+}
+
+return;
+
+}
+
+    if (col is Mob mob)
+    {
+        mob.TakeDamage(UnarmedAttackDamage, GlobalPosition);
+        ResetBreak();
+        return;
+    }
+
+    if (col == null || !col.HasMeta("chunk"))
+    {
+        ResetBreak();
+        return;
+    }
+
+    Chunk chunk = (Chunk)col.GetMeta("chunk").AsGodotObject();
+
+    Vector3 tPos =
+        _rayCast.GetCollisionPoint()
+        - _rayCast.GetCollisionNormal() * 0.5f;
+
+    Vector3 lPos = tPos - chunk.GlobalPosition;
+
+    int bx = Mathf.FloorToInt(lPos.X);
+    int by = Mathf.FloorToInt(lPos.Y);
+    int bz = Mathf.FloorToInt(lPos.Z);
+
+    // ---------------------------------------------------------
+    // FLOWERS / ROCKS ABOVE THE BLOCK
+    // ---------------------------------------------------------
+
+    BlockState above = chunk.GetBlock(bx, by + 1, bz);
+
+    if (above.BlockId is
+        "rose" or
+        "clover" or
+        "dandelion" or
+        "rock_flint" or
+        "rock_coal" or
+        "rock_iron" or
+        "rock_tin" or
+        "rock_copper")
+    {
+        Vector3 aboveWorldPos =
+            chunk.GlobalPosition +
+            new Vector3(bx + 0.5f, by + 1.5f, bz + 0.5f);
+
+        if (above.BlockId == "rose")
+            SpawnItemDrop("rose", 1, aboveWorldPos);
+
+        if (above.BlockId == "dandelion")
+            SpawnItemDrop("dandelion", 1, aboveWorldPos);
+
+        if (above.BlockId.StartsWith("rock_"))
+            SpawnItemDrop(above.BlockId, 1, aboveWorldPos);
+
+        chunk.SetBlock(
+            bx,
+            by + 1,
+            bz,
+            BlockState.Air
+        );
+
+        ResetBreak();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // GET TARGET BLOCK
+    // ---------------------------------------------------------
+
+    BlockState b = chunk.GetBlock(bx, by, bz);
+
+    if (b.IsAir())
+    {
+        ResetBreak();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // BEDROCK
+    // ---------------------------------------------------------
+
+    if (b.BlockId == "bedrock" &&
+        gm != null &&
+        gm.IsSurvival)
+    {
+        ResetBreak();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // BOMB
+    // ---------------------------------------------------------
+
+    if (b.BlockId == "bomb")
+    {
+        Vector3I bombWorldPosition = new Vector3I(
+            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
+        );
+
+        // Remove the bomb first.
+        chunk.SetBlock(
+            bx,
+            by,
+            bz,
+            BlockState.Air
+        );
+
+        // Then explode.
+        ExplodeBomb(
+            bombWorldPosition,
+            3
+        );
+
+        ResetBreak();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // CREATIVE
+    // ---------------------------------------------------------
+
+    if (gm != null && gm.IsCreate)
+    {
+        var (dropIdC, dropCountC) = GetDrop(b.BlockId);
+
+        if (dropIdC is not ("rose" or "dandelion" or "clover"))
+            AddItemToInventory(dropIdC, dropCountC);
+
+        var oreC =
+            OreRegistry.Instance?.GetOreFromBlockState(b);
+
+        if (oreC != null)
+            AddItemToInventory(oreC.ItemId, 1);
+
+        chunk.SetBlock(
+            bx,
+            by,
+            bz,
+            BlockState.Air
+        );
+
+        ResetBreak();
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // NORMAL BREAKING / MINING
+    // ---------------------------------------------------------
+
+    var blockWorldPos = new Vector3I(
+        Mathf.FloorToInt(tPos.X),
+        Mathf.FloorToInt(tPos.Y),
+        Mathf.FloorToInt(tPos.Z)
+    );
+
+    if (blockWorldPos != _breakTargetBlock ||
+        b.BlockId != _breakTargetBlockId)
+    {
+        _breakOverlay?.ResetTarget();
+
+        _breakHitCount = 0;
+
+        _breakTargetBlock = blockWorldPos;
+        _breakTargetBlockId = b.BlockId;
+
+        string heldItem =
+            _inventory.Slots[MainInvSize + _selectedSlot].IsEmpty
+                ? ""
+                : _inventory.Slots[MainInvSize + _selectedSlot].ItemId;
+
+        _breakMiningPower =
+            ToolDefinition.GetEffectiveMiningPower(
+                b.BlockId,
+                heldItem
+            );
+    }
+
+    _breakHitCount++;
+
+    bool shouldBreak =
+        _breakOverlay?.UpdateBreak(
+            blockWorldPos,
+            _breakHitCount,
+            _breakMiningPower
+        )
+        ??
+        (
+            _breakHitCount *
+            _breakMiningPower >=
+            BlockBreakOverlay.TotalStages
+        );
+
+    if (shouldBreak)
+    {
+        var (drop, dropCount) = GetDrop(b.BlockId);
+
+        if (drop is not ("rose" or "dandelion" or "clover"))
+        {
+            Vector3 dropWorldPos =
+                chunk.GlobalPosition +
+                new Vector3(
+                    bx + 0.5f,
+                    by + 0.5f,
+                    bz + 0.5f
+                );
+
+            SpawnItemDrop(
+                drop,
+                dropCount,
+                dropWorldPos
+            );
+
+            var ore =
+                OreRegistry.Instance?.GetOreFromBlockState(b);
+
+            if (ore != null)
+            {
+                SpawnItemDrop(
+                    ore.ItemId,
+                    1,
+                    dropWorldPos
+                );
+            }
+        }
+
+        chunk.SetBlock(
+            bx,
+            by,
+            bz,
+            BlockState.Air
+        );
+
+        DamageHeldToolDurability();
+
+        ResetBreak();
+    }
+}
+
+    private void ExplodeBomb(Vector3I center, int radius = 3)
+{
+    ChunkManager chunkManager = GetTree().GetFirstNodeInGroup("chunk_manager") as ChunkManager;
+
+    if (chunkManager == null)
+    {
+        GD.PrintErr("[Bomb] Could not find ChunkManager.");
+        return;
+    }
+
+    int radiusSquared = radius * radius;
+
+    for (int x = center.X - radius; x <= center.X + radius; x++)
+    {
+        for (int y = center.Y - radius; y <= center.Y + radius; y++)
+        {
+            for (int z = center.Z - radius; z <= center.Z + radius; z++)
+            {
+                int dx = x - center.X;
+                int dy = y - center.Y;
+                int dz = z - center.Z;
+
+                // Sphere-shaped explosion.
+                if ((dx * dx) + (dy * dy) + (dz * dz) > radiusSquared)
+                    continue;
+
+                Vector3I worldPos = new Vector3I(x, y, z);
+                BlockState block = chunkManager.GetBlockAtWorld(worldPos);
+
+                if (block.IsAir())
+                    continue;
+
+                // Bombs cannot destroy bedrock.
+                if (block.BlockId == "bedrock")
+                    continue;
+
+                chunkManager.SetBlockAtWorld(worldPos, BlockState.Air);
+            }
+        }
+    }
+
+    GD.Print($"[Bomb] Explosion at {center} radius {radius}");
+}
 
     // Loses 1 durability on the currently equipped hotbar item, if it's a
     // tool with durability. Breaks (clears the slot) at 0.
