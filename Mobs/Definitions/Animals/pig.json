@@ -1,0 +1,63 @@
+{
+  "id": "pig",
+  "displayName": "Pig",
+  "model": "res://Assets/Models/Mobs/pig.gltf",
+
+  "stats": {
+	"maxHealth": 10.0,
+	"moveSpeed": 2.5,
+	"turnSpeed": 8.0
+  },
+
+  "behavior": {
+	"type": "passive",
+	"wanderRadius": 6.0,
+	"minIdleTime": 2.0,
+	"maxIdleTime": 6.0,
+	"detectionRange": 8.0,
+	"attackRange": 1.3,
+	"attackDamage": 2.0,
+	"attackInterval": 1.2
+  },
+
+  "flee": {
+	"enabled": true,
+	"distance": 6.0,
+	"speedMultiplier": 1.8
+  },
+
+  "food": {
+	"enabled": true,
+	"items": [
+	  "wheat",
+      "carrot"
+	],
+	"healAmount": 5.0
+  },
+
+  "breeding": {
+	"enabled": true,
+	"foodItems": [
+      "carrot"
+	],
+	"litterMin": 1,
+	"litterMax": 3,
+	"breedCooldown": 60.0,
+	"babyGrowthTime": 600.0
+  },
+
+  "gender": {
+	"enabled": true,
+	"maleChance": 0.5,
+	"femaleChance": 0.5
+  },
+
+  "spawning": {
+	"enabled": true,
+	"minGroupSize": 1,
+	"maxGroupSize": 3,
+	"minSpawnDistance": 12.0,
+	"maxSpawnDistance": 48.0,
+	"maxWorldCount": 20
+  }
+}

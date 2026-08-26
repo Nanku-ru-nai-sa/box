@@ -4,7 +4,8 @@
 [ext_resource type="Script" uid="uid://dhfrwx04yvws0" path="res://Core/World/ChunkManager.cs" id="1_ko2s7"]
 [ext_resource type="PackedScene" uid="uid://cwo0b48pnm0pr" path="res://Player/player.tscn" id="2_gxb1y"]
 [ext_resource type="Script" uid="uid://d2km18kovq21" path="res://Scenes/LoadingScreen.cs" id="3_f2nln"]
-[ext_resource type="PackedScene" uid="uid://cqopmewi8qjri" path="res://Mobs/mob.tscn" id="5_efk68"]
+[ext_resource type="PackedScene" uid="uid://cqopmewi8qjri" path="res://Mobs/Framework/mob.tscn" id="5_efk68"]
+[ext_resource type="Script" uid="uid://d0m2tfluc0x2y" path="res://Mobs/Spawning/MobSpawner.cs" id="6_06fis"]
 
 [node name="TestWorld" type="Node3D" unique_id=1392221281]
 
@@ -29,5 +30,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 201, 8)
 
 [node name="Mob" parent="." unique_id=1903476427 instance=ExtResource("5_efk68")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 201, 0)
-MinIdleTime = 0.2
-MaxIdleTime = 0.9
+
+[node name="MobSpawner" type="Node3D" parent="." unique_id=498175751]
+script = ExtResource("6_06fis")
+MobScene = ExtResource("5_efk68")

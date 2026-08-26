@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://cqopmewi8qjri"]
 
-[ext_resource type="Script" uid="uid://dv8o4vv4g1cnx" path="res://Mobs/Mob.cs" id="1_npuaf"]
+[ext_resource type="Script" uid="uid://dv8o4vv4g1cnx" path="res://Mobs/Framework/Mob.cs" id="1_npuaf"]
 
 [node name="Mob" type="CharacterBody3D" unique_id=1903476427]
 script = ExtResource("1_npuaf")
