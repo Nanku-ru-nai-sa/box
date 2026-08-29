@@ -63,19 +63,17 @@ public class MobBreeding
 {
     public bool enabled = true;
 
-    // Foods that can actually trigger breeding.
-    // These should normally also appear in the regular food list.
     public string[] foodItems = Array.Empty<string>();
 
-    // Number of babies produced in one breeding event.
     public int litterMin = 1;
     public int litterMax = 3;
 
     // Time before this mob can breed again.
-    public float breedCooldown = 60.0f;
+    public float breedCooldown = 900.0f;
 
-    // Time required for a baby to become an adult.
-    public float babyGrowthTime = 600.0f;
+    // Random time for a baby to grow into an adult.
+    public float babyGrowthMin = 300.0f;
+    public float babyGrowthMax = 900.0f;
 }
 
 [Serializable]

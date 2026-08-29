@@ -1975,14 +1975,36 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                     else ResetBreak();
                 }
                 if (mb.ButtonIndex == MouseButton.Right)
-                {
-                    _isPlacing = mb.Pressed;
-                    if (mb.Pressed)
-                    {
-                        if (TryOpenCraftingTable()) _isPlacing = false;
-                        else { TryPlaceBlock(); _placeTimer = 0f; }
-                    }
-                }
+{
+    _isPlacing = mb.Pressed;
+
+    if (mb.Pressed)
+    {
+        // -------------------------------------------------
+        // MOB INTERACTION
+        // -------------------------------------------------
+
+        if (TryInteractWithMob())
+        {
+            _isPlacing = false;
+            return;
+        }
+
+        // -------------------------------------------------
+        // EXISTING BLOCK INTERACTION
+        // -------------------------------------------------
+
+        if (TryOpenCraftingTable())
+        {
+            _isPlacing = false;
+        }
+        else
+        {
+            TryPlaceBlock();
+            _placeTimer = 0f;
+        }
+    }
+}
                 if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed) SelectHotbarSlot((_selectedSlot + 1) % HotbarSize);
                 else if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed)  SelectHotbarSlot((_selectedSlot - 1 + HotbarSize) % HotbarSize);
             }
@@ -2059,6 +2081,141 @@ private void HandleOutputClicked(MouseButton button, bool shift)
             }
         }
     }
+    private bool TryInteractWithMob()
+{
+    Camera3D camera = GetViewport().GetCamera3D();
+
+    if (camera == null)
+        return false;
+
+    Vector2 screenCenter =
+        GetViewport().GetVisibleRect().Size / 2f;
+
+    Vector3 rayOrigin =
+        camera.ProjectRayOrigin(screenCenter);
+
+    Vector3 rayDirection =
+        camera.ProjectRayNormal(screenCenter);
+
+    Vector3 rayEnd =
+        rayOrigin + rayDirection * 6f;
+
+    var spaceState =
+        GetWorld3D().DirectSpaceState;
+
+    var query =
+        PhysicsRayQueryParameters3D.Create(
+            rayOrigin,
+            rayEnd
+        );
+
+    query.CollideWithBodies = true;
+    query.CollideWithAreas = true;
+
+    var result =
+        spaceState.IntersectRay(query);
+
+    if (result.Count == 0)
+        return false;
+
+    if (!result.ContainsKey("collider"))
+        return false;
+
+    Node collider =
+        result["collider"].As<Node>();
+
+    if (collider == null)
+        return false;
+
+    // The collision shape is normally a child of the Mob,
+    // so check both the collider itself and its parent.
+   Mob mob = collider as Mob;
+
+Node current = collider;
+
+while (mob == null && current != null)
+{
+    current = current.GetParent();
+    mob = current as Mob;
+}
+
+if (mob == null)
+    return false;
+
+    if (mob == null)
+        return false;
+
+    // -----------------------------------------------------
+    // GET CURRENTLY HELD ITEM
+    // -----------------------------------------------------
+
+    int inventoryIndex =
+        MainInvSize + _selectedSlot;
+
+    if (_inventory == null ||
+        _inventory.Slots == null ||
+        inventoryIndex < 0 ||
+        inventoryIndex >= _inventory.Slots.Length)
+    {
+        return true;
+    }
+
+    InventorySlot slot =
+        _inventory.Slots[inventoryIndex];
+
+    if (slot == null ||
+        slot.IsEmpty)
+    {
+        GD.Print(
+            $"[Player] Looking at {mob.Name}, but holding nothing."
+        );
+
+        return true;
+    }
+
+    string itemId =
+        slot.ItemId;
+
+    // -----------------------------------------------------
+    // TRY FEEDING
+    // -----------------------------------------------------
+
+    if (!mob.CanEat(itemId))
+    {
+        GD.Print(
+            $"[Player] {mob.Name} cannot eat {itemId}."
+        );
+
+        // We still return true because the player is
+        // interacting with a mob, so don't place a block
+        // through it.
+        return true;
+    }
+
+    if (!mob.Feed(itemId))
+    {
+        return true;
+    }
+
+    // -----------------------------------------------------
+    // CONSUME ONE FOOD ITEM
+    // -----------------------------------------------------
+
+    int removed =
+        _inventory.RemoveItem(
+            itemId,
+            1
+        );
+
+    if (removed > 0)
+    {
+        GD.Print(
+            $"[Player] Fed {mob.Name} {itemId}."
+        );
+    }
+
+    return true;
+}
 
     private void SelectHotbarSlot(int slot)
     {

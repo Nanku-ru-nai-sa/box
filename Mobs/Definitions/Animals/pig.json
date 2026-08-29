@@ -29,22 +29,23 @@
   "food": {
 	"enabled": true,
 	"items": [
-	  "wheat",
+	  "apple",
       "carrot"
 	],
 	"healAmount": 5.0
   },
 
   "breeding": {
-	"enabled": true,
-	"foodItems": [
-      "carrot"
-	],
-	"litterMin": 1,
-	"litterMax": 3,
-	"breedCooldown": 60.0,
-	"babyGrowthTime": 600.0
-  },
+  "enabled": true,
+  "foodItems": [
+    "carrot"
+  ],
+  "litterMin": 1,
+  "litterMax": 3,
+  "breedCooldown": 900.0,
+  "babyGrowthMin": 300.0,
+  "babyGrowthMax": 900.0
+},
 
   "gender": {
 	"enabled": true,

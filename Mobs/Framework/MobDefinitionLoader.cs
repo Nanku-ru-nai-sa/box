@@ -18,8 +18,14 @@ public static class MobDefinitionLoader
 
             string json = file.GetAsText();
 
-            MobDefinition definition =
-                System.Text.Json.JsonSerializer.Deserialize<MobDefinition>(json);
+            var options = new System.Text.Json.JsonSerializerOptions
+{
+    IncludeFields = true,
+    PropertyNameCaseInsensitive = true
+};
+
+MobDefinition definition =
+    System.Text.Json.JsonSerializer.Deserialize<MobDefinition>(json, options);
 
             if (definition == null)
             {

@@ -103,6 +103,8 @@ public partial class Mob : CharacterBody3D
     public float FleeSpeedMultiplier { get; set; } = 1.8f;
 
     private bool _fleeEnabled = true;
+    private bool _breedingReady = false;
+    private float _breedCooldownTimer = 0f;
 
 
     // =========================================================
@@ -173,6 +175,9 @@ public partial class Mob : CharacterBody3D
     private float _repathTimer;
 
     private bool _fleeSpeedApplied = false;
+    
+private bool _isBreeding = false;
+private const float BreedSearchRadius = 8f;
 
 
     // =========================================================
@@ -921,7 +926,21 @@ public partial class Mob : CharacterBody3D
         float dt =
             (float)delta;
 
+// ---------------------------------------------------------
+// BREEDING
+// ---------------------------------------------------------
 
+if (_breedCooldownTimer > 0f)
+{
+    _breedCooldownTimer -= (float)delta;
+}
+
+if (_breedingReady &&
+    !_isBreeding &&
+    _breedCooldownTimer <= 0f)
+{
+    TryFindBreedingPartner();
+}
         // -----------------------------------------------------
         // Pathfind cooldown
         // -----------------------------------------------------
@@ -1221,7 +1240,71 @@ public partial class Mob : CharacterBody3D
         }
     }
 
+private void TryFindBreedingPartner()
+{
+    if (_definition == null ||
+        _definition.breeding == null ||
+        !_definition.breeding.enabled ||
+        !_breedingReady)
+    {
+        return;
+    }
 
+    foreach (Node node in GetTree().GetNodesInGroup("mobs"))
+    {
+        if (node == this)
+            continue;
+
+        if (node is not Mob other)
+            continue;
+
+        if (!other.IsBreedingReady())
+            continue;
+
+        if (other._definition == null ||
+            other._definition.id != _definition.id)
+        {
+            continue;
+        }
+
+        if (GlobalPosition.DistanceTo(other.GlobalPosition) > BreedSearchRadius)
+            continue;
+
+        BreedWith(other);
+        return;
+    }
+}
+public bool IsBreedingReady()
+{
+    return _breedingReady &&
+           _breedCooldownTimer <= 0f &&
+           !_isBreeding;
+}
+private void BreedWith(Mob partner)
+{
+    if (partner == null ||
+        partner == this ||
+        _isBreeding ||
+        partner._isBreeding)
+    {
+        return;
+    }
+
+    _isBreeding = true;
+    partner._isBreeding = true;
+
+    _breedingReady = false;
+    partner._breedingReady = false;
+
+    float cooldown = _definition.breeding.breedCooldown;
+
+    _breedCooldownTimer = cooldown;
+    partner._breedCooldownTimer = cooldown;
+
+    GD.Print(
+        $"[Mob] {Name} and {partner.Name} are breeding!"
+    );
+}
     // =========================================================
     // STATE MACHINE
     // =========================================================
@@ -1746,7 +1829,30 @@ public partial class Mob : CharacterBody3D
 /// <summary>
 /// Returns true if this mob can eat the specified item.
 /// The item ID must exist in the mob's JSON food.items list.
-/// </summary>
+private bool IsBreedingFood(string itemId)
+{
+    if (_definition == null ||
+        _definition.breeding == null ||
+        !_definition.breeding.enabled ||
+        _definition.breeding.foodItems == null ||
+        string.IsNullOrEmpty(itemId))
+    {
+        return false;
+    }
+
+    foreach (string foodItem in _definition.breeding.foodItems)
+    {
+        if (string.Equals(
+            foodItem,
+            itemId,
+            System.StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 public bool CanEat(string itemId)
 {
     if (_definition == null ||
@@ -1765,7 +1871,8 @@ public bool CanEat(string itemId)
         if (string.Equals(
             foodItem,
             itemId,
-            System.StringComparison.OrdinalIgnoreCase))
+            System.StringComparison.OrdinalIgnoreCase
+        ))
         {
             return true;
         }
@@ -1775,10 +1882,9 @@ public bool CanEat(string itemId)
 }
 
 
-/// <summary>
+
 /// Returns true if the specified item is one of this mob's
 /// special breeding foods.
-/// </summary>
 public bool IsBreedFood(string itemId)
 {
     if (_definition == null ||
@@ -1806,6 +1912,22 @@ public bool IsBreedFood(string itemId)
     return false;
 }
 
+// =========================================================
+// FEEDING INTERACTION
+// =========================================================
+
+/// Attempts to feed this mob using the specified item.
+/// Returns true if the item was accepted.
+public bool TryFeed(string itemId)
+{
+    if (string.IsNullOrEmpty(itemId))
+        return false;
+
+    if (!CanEat(itemId))
+        return false;
+
+    return Feed(itemId);
+}
 
 /// <summary>
 /// Feeds this mob.
@@ -1816,33 +1938,29 @@ public bool Feed(string itemId)
     if (!CanEat(itemId))
         return false;
 
-    float oldHealth = _health;
+    bool breedingFood = IsBreedFood(itemId);
 
-    // Heal the mob.
-    if (_definition.food != null)
+    // Normal food cannot be eaten when already at full health.
+    // Breeding food (such as carrot) is still accepted.
+    if (_health >= MaxHealth && !breedingFood)
+        return false;
+
+    // Heal if the mob isn't already at full health.
+    if (_definition.food != null && _health < MaxHealth)
     {
         _health += _definition.food.healAmount;
-    }
 
-    _health = Mathf.Clamp(
-        _health,
-        0f,
-        MaxHealth
-    );
-
-    float healed = _health - oldHealth;
-
-    if (healed > 0f)
-    {
-        GD.Print(
-            $"[Mob] {Name} ate {itemId} and healed {healed:0.0} HP."
+        _health = Mathf.Clamp(
+            _health,
+            0f,
+            MaxHealth
         );
     }
-    else
+
+    // Remember that this mob has been given breeding food.
+    if (breedingFood && _breedCooldownTimer <= 0f)
     {
-        GD.Print(
-            $"[Mob] {Name} ate {itemId}, but was already at full HP."
-        );
+        _breedingReady = true;
     }
 
     return true;
