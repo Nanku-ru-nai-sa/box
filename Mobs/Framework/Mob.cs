@@ -1,34 +1,36 @@
 using Godot;
 using System.Collections.Generic;
 
-// Mob — base class for all mobs.
+// =============================================================
+// MOB
+// =============================================================
 //
-// Mob-specific information is loaded from JSON through MobDefinition.
-// This keeps the C# Mob class generic so pigs, cows, chickens, etc.
-// can eventually use the same Mob class with different definitions.
+// Generic mob framework.
 //
-// Current systems:
-// - Passive / Hostile behavior
+// Supports:
+// - Passive / Hostile AI
 // - VoxelPathfinder movement
 // - Wandering
-// - Hostile chase / attack
-// - Passive flee when damaged
+// - Hostile chasing
+// - Hostile attacking
+// - Passive fleeing
 // - Knockback
 // - Health
 // - Health bar
-// - GLTF model loading
-// - Walking leg animation
+// - GLTF models
+// - Walking animation
 // - Male / Female gender
-// - Happiness based on full HP
-// - Food / breeding data from JSON
-//
-// Planned systems:
-// - Mob spawning
 // - Feeding
 // - Breeding
-// - Baby mobs / growth
-// - Ragdoll death
-// - Grab / drag dead mobs
+// - Baby mobs
+// - Baby growth
+//
+// IMPORTANT:
+// Baby mobs are visually scaled through _mobModel only.
+// The CharacterBody3D itself is NOT scaled.
+// This keeps collision, physics, AI and pathfinding identical
+// between babies and adults.
+// =============================================================
 
 public enum MobBehaviorType
 {
@@ -103,8 +105,30 @@ public partial class Mob : CharacterBody3D
     public float FleeSpeedMultiplier { get; set; } = 1.8f;
 
     private bool _fleeEnabled = true;
+
+
+    // =========================================================
+    // BREEDING
+    // =========================================================
+
     private bool _breedingReady = false;
+    private bool _isBreeding = false;
     private float _breedCooldownTimer = 0f;
+
+    private const float BreedSearchRadius = 8f;
+
+
+    // =========================================================
+    // BABY
+    // =========================================================
+
+    private bool _isBaby = false;
+
+    private float _babyGrowthTimer = 0f;
+
+    // Stores the normal visual model scale.
+    // We intentionally DO NOT scale the CharacterBody3D.
+    private Vector3 _adultModelScale = Vector3.One;
 
 
     // =========================================================
@@ -175,9 +199,6 @@ public partial class Mob : CharacterBody3D
     private float _repathTimer;
 
     private bool _fleeSpeedApplied = false;
-    
-private bool _isBreeding = false;
-private const float BreedSearchRadius = 8f;
 
 
     // =========================================================
@@ -262,18 +283,9 @@ private const float BreedSearchRadius = 8f;
 
     public float Health => _health;
 
-    /// <summary>
-    /// For now HP = happiness.
-    /// A mob at full HP is considered happy.
-    /// </summary>
     public bool IsHappy =>
         _health >= MaxHealth;
 
-    /// <summary>
-    /// Currently breeding requires full HP.
-    /// Breed food and partner checks will be handled
-    /// by the future breeding system.
-    /// </summary>
     public bool IsHappyEnoughToBreed =>
         IsHappy;
 
@@ -284,9 +296,12 @@ private const float BreedSearchRadius = 8f;
             return _definition != null &&
                    _definition.breeding != null &&
                    _definition.breeding.enabled &&
-                   IsHappy;
+                   IsHappy &&
+                   !_isBaby;
         }
     }
+
+    public bool IsBaby => _isBaby;
 
 
     // =========================================================
@@ -296,6 +311,7 @@ private const float BreedSearchRadius = 8f;
     public override void _Ready()
     {
         AddToGroup("mobs");
+
         _rng.Randomize();
 
         LoadDefinition();
@@ -310,9 +326,22 @@ private const float BreedSearchRadius = 8f;
 
         _health = MaxHealth;
 
-        _idleTimer = _rng.RandfRange(
-            MinIdleTime,
-            MaxIdleTime
+        _state = State.Idle;
+
+        _hasTarget = false;
+
+        _currentPath.Clear();
+
+        _idleTimer =
+            _rng.RandfRange(
+                MinIdleTime,
+                MaxIdleTime
+            );
+
+        GD.Print(
+            $"[Mob] {Name} initialized. " +
+            $"Definition={DefinitionPath} " +
+            $"Behavior={BehaviorType}"
         );
     }
 
@@ -331,11 +360,12 @@ private const float BreedSearchRadius = 8f;
             Height = 1.6f
         };
 
-        shape.Position = new Vector3(
-            0,
-            0.8f,
-            0
-        );
+        shape.Position =
+            new Vector3(
+                0,
+                0.8f,
+                0
+            );
 
         AddChild(shape);
     }
@@ -361,11 +391,6 @@ private const float BreedSearchRadius = 8f;
             return;
         }
 
-
-        // -----------------------------------------------------
-        // STATS
-        // -----------------------------------------------------
-
         if (_definition.stats != null)
         {
             MaxHealth =
@@ -377,11 +402,6 @@ private const float BreedSearchRadius = 8f;
             TurnSpeed =
                 _definition.stats.turnSpeed;
         }
-
-
-        // -----------------------------------------------------
-        // BEHAVIOR
-        // -----------------------------------------------------
 
         if (_definition.behavior != null)
         {
@@ -398,7 +418,6 @@ private const float BreedSearchRadius = 8f;
                 BehaviorType =
                     MobBehaviorType.Passive;
             }
-
 
             WanderRadius =
                 _definition.behavior.wanderRadius;
@@ -422,11 +441,6 @@ private const float BreedSearchRadius = 8f;
                 _definition.behavior.attackInterval;
         }
 
-
-        // -----------------------------------------------------
-        // FLEE
-        // -----------------------------------------------------
-
         if (_definition.flee != null)
         {
             _fleeEnabled =
@@ -438,7 +452,6 @@ private const float BreedSearchRadius = 8f;
             FleeSpeedMultiplier =
                 _definition.flee.speedMultiplier;
         }
-
 
         GD.Print(
             $"[Mob] Loaded definition: {_definition.displayName}"
@@ -460,7 +473,6 @@ private const float BreedSearchRadius = 8f;
             return;
         }
 
-
         float maleChance =
             Mathf.Max(
                 0f,
@@ -473,20 +485,16 @@ private const float BreedSearchRadius = 8f;
                 _definition.gender.femaleChance
             );
 
-
         float total =
             maleChance +
             femaleChance;
-
 
         if (total <= 0f)
         {
             maleChance = 0.5f;
             femaleChance = 0.5f;
-
             total = 1f;
         }
-
 
         float roll =
             _rng.RandfRange(
@@ -494,25 +502,18 @@ private const float BreedSearchRadius = 8f;
                 total
             );
 
-
         if (roll < maleChance)
         {
-            _gender =
-                MobGender.Male;
+            _gender = MobGender.Male;
         }
         else
         {
-            _gender =
-                MobGender.Female;
+            _gender = MobGender.Female;
         }
 
-
-        if (_definition != null)
-        {
-            GD.Print(
-                $"[Mob] {_definition.displayName} spawned as {_gender}"
-            );
-        }
+        GD.Print(
+            $"[Mob] {_definition.displayName} spawned as {_gender}"
+        );
     }
 
 
@@ -525,7 +526,6 @@ private const float BreedSearchRadius = 8f;
         string modelPath =
             "res://Assets/Models/Mobs/pig.gltf";
 
-
         if (_definition != null &&
             !string.IsNullOrEmpty(
                 _definition.model))
@@ -534,12 +534,10 @@ private const float BreedSearchRadius = 8f;
                 _definition.model;
         }
 
-
         var scene =
             GD.Load<PackedScene>(
                 modelPath
             );
-
 
         if (scene == null)
         {
@@ -550,12 +548,10 @@ private const float BreedSearchRadius = 8f;
             return;
         }
 
-
         _mobModel =
             scene.Instantiate<Node3D>();
 
         AddChild(_mobModel);
-
 
         _frontRightLeg =
             _mobModel.FindChild(
@@ -564,14 +560,12 @@ private const float BreedSearchRadius = 8f;
                 false
             ) as Node3D;
 
-
         _frontLeftLeg =
             _mobModel.FindChild(
                 "front_left",
                 true,
                 false
             ) as Node3D;
-
 
         _backRightLeg =
             _mobModel.FindChild(
@@ -580,14 +574,12 @@ private const float BreedSearchRadius = 8f;
                 false
             ) as Node3D;
 
-
         _backLeftLeg =
             _mobModel.FindChild(
                 "back_left",
                 true,
                 false
             ) as Node3D;
-
 
         if (_frontRightLeg == null ||
             _frontLeftLeg == null ||
@@ -599,13 +591,11 @@ private const float BreedSearchRadius = 8f;
             );
         }
 
-
         _mobModel.Scale =
-            new Vector3(
-                1f,
-                1f,
-                1f
-            );
+            Vector3.One;
+
+        _adultModelScale =
+            _mobModel.Scale;
     }
 
 
@@ -624,11 +614,9 @@ private const float BreedSearchRadius = 8f;
             return;
         }
 
-
         bool walking =
             Mathf.Abs(Velocity.X) > 0.05f ||
             Mathf.Abs(Velocity.Z) > 0.05f;
-
 
         if (!walking)
         {
@@ -643,7 +631,6 @@ private const float BreedSearchRadius = 8f;
                     _frontRightLeg.Rotation.Z
                 );
 
-
             _frontLeftLeg.Rotation =
                 new Vector3(
                     Mathf.LerpAngle(
@@ -654,7 +641,6 @@ private const float BreedSearchRadius = 8f;
                     _frontLeftLeg.Rotation.Y,
                     _frontLeftLeg.Rotation.Z
                 );
-
 
             _backRightLeg.Rotation =
                 new Vector3(
@@ -667,7 +653,6 @@ private const float BreedSearchRadius = 8f;
                     _backRightLeg.Rotation.Z
                 );
 
-
             _backLeftLeg.Rotation =
                 new Vector3(
                     Mathf.LerpAngle(
@@ -679,10 +664,8 @@ private const float BreedSearchRadius = 8f;
                     _backLeftLeg.Rotation.Z
                 );
 
-
             return;
         }
-
 
         float speed =
             new Vector2(
@@ -690,26 +673,26 @@ private const float BreedSearchRadius = 8f;
                 Velocity.Z
             ).Length();
 
-
         float animationSpeed =
             Mathf.Clamp(
-                speed / Mathf.Max(MoveSpeed, 0.01f),
+                speed /
+                Mathf.Max(
+                    MoveSpeed,
+                    0.01f
+                ),
                 0.5f,
                 2f
             );
-
 
         _walkAnimationTime +=
             dt *
             animationSpeed *
             7f;
 
-
         float swing =
             Mathf.Sin(
                 _walkAnimationTime
             ) * 0.45f;
-
 
         _frontRightLeg.Rotation =
             new Vector3(
@@ -718,7 +701,6 @@ private const float BreedSearchRadius = 8f;
                 _frontRightLeg.Rotation.Z
             );
 
-
         _backLeftLeg.Rotation =
             new Vector3(
                 swing,
@@ -726,14 +708,12 @@ private const float BreedSearchRadius = 8f;
                 _backLeftLeg.Rotation.Z
             );
 
-
         _frontLeftLeg.Rotation =
             new Vector3(
                 -swing,
                 _frontLeftLeg.Rotation.Y,
                 _frontLeftLeg.Rotation.Z
             );
-
 
         _backRightLeg.Rotation =
             new Vector3(
@@ -753,7 +733,6 @@ private const float BreedSearchRadius = 8f;
         var bg =
             new MeshInstance3D();
 
-
         bg.Mesh =
             new QuadMesh
             {
@@ -764,14 +743,12 @@ private const float BreedSearchRadius = 8f;
                     )
             };
 
-
         bg.Position =
             new Vector3(
                 0,
                 HealthBarYOffset,
                 0
             );
-
 
         var bgMat =
             new StandardMaterial3D
@@ -794,7 +771,6 @@ private const float BreedSearchRadius = 8f;
                     BaseMaterial3D.TransparencyEnum.Alpha
             };
 
-
         bg.MaterialOverride =
             bgMat;
 
@@ -805,10 +781,8 @@ private const float BreedSearchRadius = 8f;
         _healthBarBackground =
             bg;
 
-
         _healthBarFill =
             new MeshInstance3D();
-
 
         _healthBarFill.Mesh =
             new QuadMesh
@@ -820,14 +794,12 @@ private const float BreedSearchRadius = 8f;
                     )
             };
 
-
         _healthBarFill.Position =
             new Vector3(
                 0,
                 HealthBarYOffset,
                 0.01f
             );
-
 
         var fillMat =
             new StandardMaterial3D
@@ -846,7 +818,6 @@ private const float BreedSearchRadius = 8f;
                     BaseMaterial3D.BillboardModeEnum.Enabled
             };
 
-
         _healthBarFill.MaterialOverride =
             fillMat;
 
@@ -864,12 +835,10 @@ private const float BreedSearchRadius = 8f;
             return;
         }
 
-
         bool shouldShow =
             ShowHealthBars &&
             _health < MaxHealth &&
             _health > 0f;
-
 
         _healthBarBackground.Visible =
             shouldShow;
@@ -877,10 +846,8 @@ private const float BreedSearchRadius = 8f;
         _healthBarFill.Visible =
             shouldShow;
 
-
         if (!shouldShow)
             return;
-
 
         float frac =
             Mathf.Clamp(
@@ -889,21 +856,17 @@ private const float BreedSearchRadius = 8f;
                 1f
             );
 
-
         var mesh =
             _healthBarFill.Mesh as QuadMesh;
 
-
         if (mesh == null)
             return;
-
 
         mesh.Size =
             new Vector2(
                 HealthBarWidth * frac,
                 HealthBarHeight
             );
-
 
         _healthBarFill.Position =
             new Vector3(
@@ -926,23 +889,42 @@ private const float BreedSearchRadius = 8f;
         float dt =
             (float)delta;
 
-// ---------------------------------------------------------
-// BREEDING
-// ---------------------------------------------------------
 
-if (_breedCooldownTimer > 0f)
-{
-    _breedCooldownTimer -= (float)delta;
-}
-
-if (_breedingReady &&
-    !_isBreeding &&
-    _breedCooldownTimer <= 0f)
-{
-    TryFindBreedingPartner();
-}
         // -----------------------------------------------------
-        // Pathfind cooldown
+        // BREEDING
+        // -----------------------------------------------------
+
+        if (_breedCooldownTimer > 0f)
+        {
+            _breedCooldownTimer -= dt;
+        }
+
+        if (_breedingReady &&
+            !_isBreeding &&
+            !_isBaby &&
+            _breedCooldownTimer <= 0f)
+        {
+            TryFindBreedingPartner();
+        }
+
+
+        // -----------------------------------------------------
+        // BABY GROWTH
+        // -----------------------------------------------------
+
+        if (_isBaby)
+        {
+            _babyGrowthTimer -= dt;
+
+            if (_babyGrowthTimer <= 0f)
+            {
+                GrowUp();
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // PATHFIND COOLDOWN
         // -----------------------------------------------------
 
         if (_pathfindCooldownTimer > 0f)
@@ -952,10 +934,11 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Find player
+        // FIND PLAYER
         // -----------------------------------------------------
 
-        if (_player == null)
+        if (_player == null ||
+            !IsInstanceValid(_player))
         {
             var found =
                 GetTree()
@@ -972,19 +955,18 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Hit feedback
+        // HIT FEEDBACK
         // -----------------------------------------------------
 
         UpdateHitFeedback(dt);
 
 
         // -----------------------------------------------------
-        // Gravity
+        // GRAVITY
         // -----------------------------------------------------
 
         Vector3 velocity =
             Velocity;
-
 
         if (!IsOnFloor())
         {
@@ -998,7 +980,7 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Initial landing
+        // INITIAL LANDING
         // -----------------------------------------------------
 
         if (!_hasLanded)
@@ -1012,8 +994,20 @@ if (_breedingReady &&
 
                 _stuckCheckLastPosition =
                     GlobalPosition;
-            }
 
+                // Start normal AI immediately after landing.
+                _state = State.Idle;
+
+                _hasTarget = false;
+
+                _currentPath.Clear();
+
+                _idleTimer =
+                    _rng.RandfRange(
+                        MinIdleTime,
+                        MaxIdleTime
+                    );
+            }
 
             Velocity =
                 velocity;
@@ -1025,7 +1019,7 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Knockback
+        // KNOCKBACK
         // -----------------------------------------------------
 
         if (_knockbackTimer > 0f)
@@ -1035,7 +1029,6 @@ if (_breedingReady &&
 
             velocity.Z =
                 _knockbackVelocity.Z;
-
 
             Velocity =
                 velocity;
@@ -1061,7 +1054,7 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Visuals
+        // VISUALS
         // -----------------------------------------------------
 
         UpdateWalkAnimation(dt);
@@ -1070,7 +1063,7 @@ if (_breedingReady &&
 
 
         // -----------------------------------------------------
-        // Movement
+        // MOVEMENT
         // -----------------------------------------------------
 
         Velocity =
@@ -1090,7 +1083,6 @@ if (_breedingReady &&
         {
             _knockbackTimer -= dt;
 
-
             float t =
                 Mathf.Clamp(
                     _knockbackTimer /
@@ -1102,10 +1094,8 @@ if (_breedingReady &&
                     1f
                 );
 
-
             float originalSpeed =
                 _knockbackVelocity.Length();
-
 
             if (originalSpeed > 0.001f)
             {
@@ -1113,7 +1103,6 @@ if (_breedingReady &&
                     _knockbackVelocity.Normalized() *
                     (originalSpeed * t);
             }
-
 
             if (_knockbackTimer <= 0f)
             {
@@ -1127,7 +1116,6 @@ if (_breedingReady &&
                     GlobalPosition;
             }
         }
-
 
         if (_flashTimer > 0f)
         {
@@ -1148,30 +1136,23 @@ if (_breedingReady &&
         {
             CheckIfStuck(dt);
 
-
             _pathTimeoutTimer += dt;
-
 
             if (_pathTimeoutTimer >
                 MaxPathDuration)
             {
                 AbandonPath();
-
                 return;
             }
-
 
             Vector3 toTarget =
                 _currentTarget -
                 GlobalPosition;
 
-
             float verticalDiff =
                 toTarget.Y;
 
-
             toTarget.Y = 0;
-
 
             if (toTarget.Length() < 0.3f &&
                 Mathf.Abs(verticalDiff) < 0.6f)
@@ -1185,16 +1166,13 @@ if (_breedingReady &&
                         ? toTarget.Normalized()
                         : Vector3.Zero;
 
-
                 velocity.X =
                     dir.X *
                     MoveSpeed;
 
-
                 velocity.Z =
                     dir.Z *
                     MoveSpeed;
-
 
                 if (dir != Vector3.Zero)
                 {
@@ -1203,7 +1181,6 @@ if (_breedingReady &&
                         dt
                     );
                 }
-
 
                 if (verticalDiff > 0.5f &&
                     IsOnFloor())
@@ -1228,7 +1205,6 @@ if (_breedingReady &&
                     4f
                 );
 
-
             velocity.Z =
                 Mathf.MoveToward(
                     velocity.Z,
@@ -1240,71 +1216,362 @@ if (_breedingReady &&
         }
     }
 
-private void TryFindBreedingPartner()
-{
-    if (_definition == null ||
-        _definition.breeding == null ||
-        !_definition.breeding.enabled ||
-        !_breedingReady)
+
+    // =========================================================
+    // BREEDING
+    // =========================================================
+
+    private void TryFindBreedingPartner()
     {
-        return;
-    }
-
-    foreach (Node node in GetTree().GetNodesInGroup("mobs"))
-    {
-        if (node == this)
-            continue;
-
-        if (node is not Mob other)
-            continue;
-
-        if (!other.IsBreedingReady())
-            continue;
-
-        if (other._definition == null ||
-            other._definition.id != _definition.id)
+        if (_definition == null ||
+            _definition.breeding == null ||
+            !_definition.breeding.enabled ||
+            !_breedingReady ||
+            _isBaby)
         {
-            continue;
+            return;
         }
 
-        if (GlobalPosition.DistanceTo(other.GlobalPosition) > BreedSearchRadius)
-            continue;
+        foreach (Node node in
+                 GetTree().GetNodesInGroup("mobs"))
+        {
+            if (node == this)
+                continue;
 
-        BreedWith(other);
-        return;
+            if (node is not Mob other)
+                continue;
+
+            if (!other.IsBreedingReady())
+                continue;
+
+            if (other._definition == null ||
+                other._definition.id != _definition.id)
+            {
+                continue;
+            }
+
+            if (other.Gender == Gender)
+                continue;
+
+            if (GlobalPosition.DistanceTo(
+                    other.GlobalPosition) >
+                BreedSearchRadius)
+            {
+                continue;
+            }
+
+            BreedWith(other);
+
+            return;
+        }
     }
-}
-public bool IsBreedingReady()
-{
-    return _breedingReady &&
-           _breedCooldownTimer <= 0f &&
-           !_isBreeding;
-}
-private void BreedWith(Mob partner)
-{
-    if (partner == null ||
-        partner == this ||
-        _isBreeding ||
-        partner._isBreeding)
+
+
+    public bool IsBreedingReady()
     {
-        return;
+        return _breedingReady &&
+               _breedCooldownTimer <= 0f &&
+               !_isBreeding &&
+               !_isBaby;
     }
 
-    _isBreeding = true;
-    partner._isBreeding = true;
 
-    _breedingReady = false;
-    partner._breedingReady = false;
+    private void BreedWith(Mob partner)
+    {
+        if (partner == null ||
+            partner == this ||
+            _isBreeding ||
+            partner._isBreeding)
+        {
+            return;
+        }
 
-    float cooldown = _definition.breeding.breedCooldown;
+        if (_definition == null ||
+            _definition.breeding == null ||
+            !_definition.breeding.enabled)
+        {
+            return;
+        }
 
-    _breedCooldownTimer = cooldown;
-    partner._breedCooldownTimer = cooldown;
+        if (partner._definition == null ||
+            partner._definition.breeding == null ||
+            !partner._definition.breeding.enabled)
+        {
+            return;
+        }
 
-    GD.Print(
-        $"[Mob] {Name} and {partner.Name} are breeding!"
-    );
-}
+        _isBreeding = true;
+        partner._isBreeding = true;
+
+        _breedingReady = false;
+        partner._breedingReady = false;
+
+        float cooldown =
+            _definition.breeding.breedCooldown;
+
+        _breedCooldownTimer =
+            cooldown;
+
+        partner._breedCooldownTimer =
+            cooldown;
+
+        GD.Print(
+            $"[Mob] {Name} and {partner.Name} are breeding!"
+        );
+
+        SpawnBabies(partner);
+
+        _isBreeding = false;
+        partner._isBreeding = false;
+    }
+
+
+    // =========================================================
+    // SPAWN BABIES
+    // =========================================================
+
+    private void SpawnBabies(Mob partner)
+    {
+        if (partner == null ||
+            _definition == null ||
+            _definition.breeding == null)
+        {
+            return;
+        }
+
+        int litterMin =
+            Mathf.Max(
+                1,
+                _definition.breeding.litterMin
+            );
+
+        int litterMax =
+            Mathf.Max(
+                litterMin,
+                _definition.breeding.litterMax
+            );
+
+        int litterSize =
+            GD.RandRange(
+                litterMin,
+                litterMax
+            );
+
+        string scenePath =
+            SceneFilePath;
+
+        if (string.IsNullOrEmpty(scenePath))
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: SceneFilePath is empty."
+            );
+
+            return;
+        }
+
+        PackedScene mobScene =
+            ResourceLoader.Load<PackedScene>(
+                scenePath
+            );
+
+        if (mobScene == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Could not load mob scene: {scenePath}"
+            );
+
+            return;
+        }
+
+        Vector3 center =
+            (
+                GlobalPosition +
+                partner.GlobalPosition
+            ) * 0.5f;
+
+        for (int i = 0; i < litterSize; i++)
+        {
+            Mob baby =
+                mobScene.Instantiate<Mob>();
+
+            if (baby == null)
+            {
+                GD.PrintErr(
+                    "[Mob] Failed to create baby mob."
+                );
+
+                continue;
+            }
+
+            // -------------------------------------------------
+            // Set definition before the baby enters the world.
+            // -------------------------------------------------
+
+            baby.DefinitionPath =
+                DefinitionPath;
+
+
+            // -------------------------------------------------
+            // Add baby to same parent as parents.
+            // -------------------------------------------------
+
+            GetParent().AddChild(baby);
+
+
+            // -------------------------------------------------
+            // Position baby.
+            //
+            // Start above the ground so gravity can settle it.
+            // -------------------------------------------------
+
+            Vector3 offset =
+                new Vector3(
+                    (float)GD.RandRange(
+                        -1.0,
+                        1.0
+                    ),
+
+                    0f,
+
+                    (float)GD.RandRange(
+                        -1.0,
+                        1.0
+                    )
+                );
+
+            Vector3 spawnPosition =
+                center +
+                offset;
+
+            spawnPosition.Y += 2.5f;
+
+            baby.GlobalPosition =
+                spawnPosition;
+
+
+            // -------------------------------------------------
+            // Initialize baby.
+            // -------------------------------------------------
+
+            baby.MakeBaby();
+
+
+            GD.Print(
+                $"[Mob] Baby {baby.Name} was born. " +
+                $"Definition={baby.DefinitionPath} " +
+                $"Growth={baby._babyGrowthTimer:F1}s"
+            );
+        }
+    }
+
+
+    // =========================================================
+    // MAKE BABY
+    // =========================================================
+
+    private void MakeBaby()
+    {
+        _isBaby = true;
+
+        _babyGrowthTimer =
+            (float)GD.RandRange(
+                300,
+                900
+            );
+
+        // IMPORTANT:
+        // Store the model's normal scale.
+        //
+        // We do NOT scale this CharacterBody3D.
+        _adultModelScale =
+            _mobModel != null
+                ? _mobModel.Scale
+                : Vector3.One;
+
+        // Only make the VISUAL model smaller.
+        if (_mobModel != null)
+        {
+            _mobModel.Scale =
+                _adultModelScale * 0.55f;
+        }
+
+        // Baby cannot breed.
+        _breedingReady = false;
+
+        // Reset AI/path state.
+        _state = State.Idle;
+
+        _hasTarget = false;
+
+        _currentPath.Clear();
+
+        _repathTimer = 0f;
+
+        _pathTimeoutTimer = 0f;
+
+        _pathfindCooldownTimer = 0f;
+
+        _stuckCheckTimer = 0f;
+
+        _stuckCheckFailCount = 0;
+
+        // Make sure the baby has a valid idle timer.
+        _idleTimer =
+            _rng.RandfRange(
+                MinIdleTime,
+                MaxIdleTime
+            );
+
+        GD.Print(
+            $"[Mob] {Name} is a baby. " +
+            $"Growth time: {_babyGrowthTimer:F1} seconds."
+        );
+    }
+
+
+    // =========================================================
+    // GROW UP
+    // =========================================================
+
+    private void GrowUp()
+    {
+        if (!_isBaby)
+            return;
+
+        _isBaby = false;
+
+        // Restore visual model size only.
+        if (_mobModel != null)
+        {
+            _mobModel.Scale =
+                _adultModelScale;
+        }
+
+        // Reset AI cleanly.
+        _state = State.Idle;
+
+        _hasTarget = false;
+
+        _currentPath.Clear();
+
+        _pathTimeoutTimer = 0f;
+
+        _stuckCheckTimer = 0f;
+
+        _stuckCheckFailCount = 0;
+
+        _idleTimer =
+            _rng.RandfRange(
+                MinIdleTime,
+                MaxIdleTime
+            );
+
+        GD.Print(
+            $"[Mob] {Name} has grown into an adult."
+        );
+    }
+
+
     // =========================================================
     // STATE MACHINE
     // =========================================================
@@ -1321,14 +1588,12 @@ private void BreedWith(Mob partner)
                 _threat == null ||
                 !IsInstanceValid(_threat);
 
-
             bool threatFar =
                 !threatGone &&
                 GlobalPosition.DistanceTo(
                     _threat.GlobalPosition
                 ) >
                 FleeDistance * 1.5f;
-
 
             if (threatGone ||
                 threatFar)
@@ -1337,7 +1602,6 @@ private void BreedWith(Mob partner)
 
                 EnterIdle();
             }
-
 
             return;
         }
@@ -1349,13 +1613,13 @@ private void BreedWith(Mob partner)
 
         if (BehaviorType ==
                 MobBehaviorType.Hostile &&
-            _player != null)
+            _player != null &&
+            IsInstanceValid(_player))
         {
             float distToPlayer =
                 GlobalPosition.DistanceTo(
                     _player.GlobalPosition
                 );
-
 
             if (distToPlayer <=
                 AttackRange)
@@ -1368,7 +1632,6 @@ private void BreedWith(Mob partner)
 
                 return;
             }
-
 
             if (distToPlayer <=
                 DetectionRange)
@@ -1383,10 +1646,8 @@ private void BreedWith(Mob partner)
                         0f;
                 }
 
-
                 return;
             }
-
 
             if (_state ==
                     State.Chase ||
@@ -1406,7 +1667,6 @@ private void BreedWith(Mob partner)
             State.Idle)
         {
             _idleTimer -= dt;
-
 
             if (_idleTimer <= 0f)
             {
@@ -1440,14 +1700,13 @@ private void BreedWith(Mob partner)
 
                 _repathTimer -= dt;
 
-
                 if (_repathTimer <= 0f)
                 {
                     _repathTimer =
                         RepathInterval;
 
-
-                    if (_player != null)
+                    if (_player != null &&
+                        IsInstanceValid(_player))
                     {
                         RequestPathTo(
                             _player.GlobalPosition,
@@ -1462,7 +1721,6 @@ private void BreedWith(Mob partner)
             case State.Flee:
 
                 _repathTimer -= dt;
-
 
                 if (_repathTimer <= 0f)
                 {
@@ -1479,12 +1737,10 @@ private void BreedWith(Mob partner)
 
                 _attackTimer -= dt;
 
-
                 if (_attackTimer <= 0f)
                 {
                     _attackTimer =
                         AttackInterval;
-
 
                     GD.Print(
                         $"{Name} hits the player for {AttackDamage}"
@@ -1505,10 +1761,10 @@ private void BreedWith(Mob partner)
         _state =
             State.Idle;
 
-
         _hasTarget =
             false;
 
+        _currentPath.Clear();
 
         _idleTimer =
             _rng.RandfRange(
@@ -1537,7 +1793,6 @@ private void BreedWith(Mob partner)
                 )
             );
 
-
         Vector3 target =
             _homePosition +
             new Vector3(
@@ -1545,7 +1800,6 @@ private void BreedWith(Mob partner)
                 0,
                 offset.Y
             );
-
 
         if (RequestPathTo(
             target,
@@ -1578,7 +1832,6 @@ private void BreedWith(Mob partner)
             return false;
         }
 
-
         var path =
             VoxelPathfinder.FindPath(
                 GlobalPosition,
@@ -1586,19 +1839,16 @@ private void BreedWith(Mob partner)
                 maxRange
             );
 
-
         if (path == null ||
             path.Count == 0)
         {
             return false;
         }
 
-
         _currentPath =
             new Queue<Vector3>(
                 path
             );
-
 
         _pathTimeoutTimer =
             0f;
@@ -1612,9 +1862,7 @@ private void BreedWith(Mob partner)
         _stuckCheckLastPosition =
             GlobalPosition;
 
-
         AdvancePath();
-
 
         return true;
     }
@@ -1631,21 +1879,17 @@ private void BreedWith(Mob partner)
             return;
         }
 
-
         if (_threat == null ||
             !IsInstanceValid(_threat))
         {
             return;
         }
 
-
         Vector3 away =
             GlobalPosition -
             _threat.GlobalPosition;
 
-
         away.Y = 0;
-
 
         if (away.Length() < 0.01f)
         {
@@ -1658,12 +1902,10 @@ private void BreedWith(Mob partner)
                 away.Normalized();
         }
 
-
         Vector3 fleeTarget =
             GlobalPosition +
             away *
             FleeDistance;
-
 
         RequestPathTo(
             fleeTarget,
@@ -1680,33 +1922,27 @@ private void BreedWith(Mob partner)
     {
         _stuckCheckTimer += dt;
 
-
         if (_stuckCheckTimer <
             StuckCheckInterval)
         {
             return;
         }
 
-
         _stuckCheckTimer =
             0f;
-
 
         float moved =
             GlobalPosition.DistanceTo(
                 _stuckCheckLastPosition
             );
 
-
         _stuckCheckLastPosition =
             GlobalPosition;
-
 
         if (moved <
             StuckDistanceThreshold)
         {
             _stuckCheckFailCount++;
-
 
             if (_stuckCheckFailCount >=
                 StuckChecksBeforeGivingUp)
@@ -1780,7 +2016,6 @@ private void BreedWith(Mob partner)
             return;
         }
 
-
         Transform3D targetXform =
             Transform3D.Identity
                 .LookingAt(
@@ -1788,16 +2023,13 @@ private void BreedWith(Mob partner)
                     Vector3.Up
                 );
 
-
         Quaternion current =
             Transform.Basis
                 .GetRotationQuaternion();
 
-
         Quaternion target =
             targetXform.Basis
                 .GetRotationQuaternion();
-
 
         Quaternion smoothed =
             current.Slerp(
@@ -1809,162 +2041,145 @@ private void BreedWith(Mob partner)
                 )
             );
 
-
         Transform3D t =
             Transform;
 
-
         t.Basis =
             new Basis(smoothed);
-
 
         Transform =
             t;
     }
 
-// ---------------------------------------------------------
-// FOOD / FEEDING
-// ---------------------------------------------------------
 
-/// <summary>
-/// Returns true if this mob can eat the specified item.
-/// The item ID must exist in the mob's JSON food.items list.
-private bool IsBreedingFood(string itemId)
-{
-    if (_definition == null ||
-        _definition.breeding == null ||
-        !_definition.breeding.enabled ||
-        _definition.breeding.foodItems == null ||
-        string.IsNullOrEmpty(itemId))
-    {
-        return false;
-    }
+    // =========================================================
+    // FOOD / FEEDING
+    // =========================================================
 
-    foreach (string foodItem in _definition.breeding.foodItems)
+    private bool IsBreedingFood(string itemId)
     {
-        if (string.Equals(
-            foodItem,
-            itemId,
-            System.StringComparison.OrdinalIgnoreCase))
+        if (_definition == null ||
+            _definition.breeding == null ||
+            !_definition.breeding.enabled ||
+            _definition.breeding.foodItems == null ||
+            string.IsNullOrEmpty(itemId))
         {
-            return true;
+            return false;
         }
-    }
 
-    return false;
-}
-public bool CanEat(string itemId)
-{
-    if (_definition == null ||
-        _definition.food == null ||
-        !_definition.food.enabled ||
-        string.IsNullOrEmpty(itemId))
-    {
-        return false;
-    }
-
-    if (_definition.food.items == null)
-        return false;
-
-    foreach (string foodItem in _definition.food.items)
-    {
-        if (string.Equals(
-            foodItem,
-            itemId,
-            System.StringComparison.OrdinalIgnoreCase
-        ))
+        foreach (string foodItem in
+                 _definition.breeding.foodItems)
         {
-            return true;
+            if (string.Equals(
+                foodItem,
+                itemId,
+                System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
-    }
 
-    return false;
-}
-
-
-
-/// Returns true if the specified item is one of this mob's
-/// special breeding foods.
-public bool IsBreedFood(string itemId)
-{
-    if (_definition == null ||
-        _definition.breeding == null ||
-        !_definition.breeding.enabled ||
-        string.IsNullOrEmpty(itemId))
-    {
         return false;
     }
 
-    if (_definition.breeding.foodItems == null)
-        return false;
 
-    foreach (string foodItem in _definition.breeding.foodItems)
+    public bool CanEat(string itemId)
     {
-        if (string.Equals(
-            foodItem,
-            itemId,
-            System.StringComparison.OrdinalIgnoreCase))
+        if (_definition == null ||
+            _definition.food == null ||
+            !_definition.food.enabled ||
+            string.IsNullOrEmpty(itemId))
         {
-            return true;
+            return false;
         }
+
+        if (_definition.food.items == null)
+        {
+            return false;
+        }
+
+        foreach (string foodItem in
+                 _definition.food.items)
+        {
+            if (string.Equals(
+                foodItem,
+                itemId,
+                System.StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    return false;
-}
 
-// =========================================================
-// FEEDING INTERACTION
-// =========================================================
-
-/// Attempts to feed this mob using the specified item.
-/// Returns true if the item was accepted.
-public bool TryFeed(string itemId)
-{
-    if (string.IsNullOrEmpty(itemId))
-        return false;
-
-    if (!CanEat(itemId))
-        return false;
-
-    return Feed(itemId);
-}
-
-/// <summary>
-/// Feeds this mob.
-/// Returns true if the mob accepted the food.
-/// </summary>
-public bool Feed(string itemId)
-{
-    if (!CanEat(itemId))
-        return false;
-
-    bool breedingFood = IsBreedFood(itemId);
-
-    // Normal food cannot be eaten when already at full health.
-    // Breeding food (such as carrot) is still accepted.
-    if (_health >= MaxHealth && !breedingFood)
-        return false;
-
-    // Heal if the mob isn't already at full health.
-    if (_definition.food != null && _health < MaxHealth)
+    public bool IsBreedFood(string itemId)
     {
-        _health += _definition.food.healAmount;
-
-        _health = Mathf.Clamp(
-            _health,
-            0f,
-            MaxHealth
-        );
+        return IsBreedingFood(itemId);
     }
 
-    // Remember that this mob has been given breeding food.
-    if (breedingFood && _breedCooldownTimer <= 0f)
+
+    public bool TryFeed(string itemId)
     {
-        _breedingReady = true;
+        if (string.IsNullOrEmpty(itemId))
+        {
+            return false;
+        }
+
+        if (!CanEat(itemId))
+        {
+            return false;
+        }
+
+        return Feed(itemId);
     }
 
-    return true;
-}
+
+    public bool Feed(string itemId)
+    {
+        if (!CanEat(itemId))
+        {
+            return false;
+        }
+
+        bool breedingFood =
+            IsBreedFood(itemId);
+
+        if (_health >= MaxHealth &&
+            !breedingFood)
+        {
+            return false;
+        }
+
+        if (_definition.food != null &&
+            _health < MaxHealth)
+        {
+            _health +=
+                _definition.food.healAmount;
+
+            _health =
+                Mathf.Clamp(
+                    _health,
+                    0f,
+                    MaxHealth
+                );
+        }
+
+        if (breedingFood &&
+            !_isBaby &&
+            _breedCooldownTimer <= 0f)
+        {
+            _breedingReady = true;
+
+            GD.Print(
+                $"[Mob] {Name} is ready to breed."
+            );
+        }
+
+        return true;
+    }
+
 
     // =========================================================
     // DAMAGE
@@ -1980,9 +2195,7 @@ public bool Feed(string itemId)
             return;
         }
 
-
         _health -= amount;
-
 
         _health =
             Mathf.Max(
@@ -1990,20 +2203,15 @@ public bool Feed(string itemId)
                 0f
             );
 
-
-        // -----------------------------------------------------
-        // Determine attack source
-        // -----------------------------------------------------
-
         Vector3 source;
-
 
         if (sourcePosition.HasValue)
         {
             source =
                 sourcePosition.Value;
         }
-        else if (_player != null)
+        else if (_player != null &&
+                 IsInstanceValid(_player))
         {
             source =
                 _player.GlobalPosition;
@@ -2015,18 +2223,11 @@ public bool Feed(string itemId)
                 Vector3.Forward;
         }
 
-
-        // -----------------------------------------------------
-        // Knockback direction
-        // -----------------------------------------------------
-
         Vector3 away =
             GlobalPosition -
             source;
 
-
         away.Y = 0;
-
 
         if (away.Length() >
             0.01f)
@@ -2040,37 +2241,33 @@ public bool Feed(string itemId)
                 Vector3.Forward;
         }
 
-
         _knockbackVelocity =
             away *
             KnockbackForce;
 
-
         _knockbackTimer =
             KnockbackDuration;
-
 
         _flashTimer =
             FlashDuration;
 
 
         // -----------------------------------------------------
-        // Passive flee
+        // PASSIVE FLEE
         // -----------------------------------------------------
 
         if (_fleeEnabled &&
             BehaviorType ==
                 MobBehaviorType.Passive &&
             _player != null &&
+            IsInstanceValid(_player) &&
             _state != State.Flee)
         {
             _threat =
                 _player;
 
-
             _state =
                 State.Flee;
-
 
             if (!_fleeSpeedApplied &&
                 FleeSpeedMultiplier > 0f)
@@ -2082,17 +2279,15 @@ public bool Feed(string itemId)
                     true;
             }
 
-
             _repathTimer =
                 0f;
-
 
             RequestFleePath();
         }
 
 
         // -----------------------------------------------------
-        // Death
+        // DEATH
         // -----------------------------------------------------
 
         if (_health <= 0f)
@@ -2113,13 +2308,11 @@ public bool Feed(string itemId)
             return;
         }
 
-
         if (FleeSpeedMultiplier > 0f)
         {
             MoveSpeed /=
                 FleeSpeedMultiplier;
         }
-
 
         _fleeSpeedApplied =
             false;
@@ -2132,26 +2325,6 @@ public bool Feed(string itemId)
 
     private void Die()
     {
-        // -----------------------------------------------------
-        // Future death system
-        // -----------------------------------------------------
-        //
-        // Mob
-        //   ↓
-        // Disable AI
-        //   ↓
-        // Create ragdoll
-        //   ↓
-        // Enable physical bones
-        //   ↓
-        // Corpse
-        //   ↓
-        // Can be grabbed / dragged
-        //   ↓
-        // Eventually despawn
-        //
-        // -----------------------------------------------------
-
         RestoreNormalSpeed();
 
         _hasTarget =
