@@ -20,16 +20,22 @@ using System.Collections.Generic;
 // - GLTF models
 // - Walking animation
 // - Male / Female gender
+// - Male / Female models
+// - Male / Female textures
 // - Feeding
 // - Breeding
 // - Baby mobs
+// - Custom baby models
+// - Custom baby textures
 // - Baby growth
+// - JSON-configurable drops
+// - Automatic model-based collision
 //
 // IMPORTANT:
-// Baby mobs are visually scaled through _mobModel only.
-// The CharacterBody3D itself is NOT scaled.
-// This keeps collision, physics, AI and pathfinding identical
-// between babies and adults.
+// Baby mobs are NOT created by scaling the CharacterBody3D.
+// If a custom baby model is provided, that model is used.
+// Otherwise the adult model is scaled down.
+// Collision is automatically rebuilt to match the active model.
 // =============================================================
 
 public enum MobBehaviorType
@@ -126,9 +132,9 @@ public partial class Mob : CharacterBody3D
 
     private float _babyGrowthTimer = 0f;
 
-    // Stores the normal visual model scale.
-    // We intentionally DO NOT scale the CharacterBody3D.
     private Vector3 _adultModelScale = Vector3.One;
+
+    private bool _usingCustomBabyModel = false;
 
 
     // =========================================================
@@ -267,6 +273,19 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // AUTOMATIC COLLISION
+    // =========================================================
+
+    private CollisionShape3D _modelCollision;
+
+    private Vector3 _adultCollisionSize;
+
+    private Vector3 _adultCollisionPosition;
+
+    private bool _collisionBuilt = false;
+
+
+    // =========================================================
     // GENDER
     // =========================================================
 
@@ -316,13 +335,15 @@ public partial class Mob : CharacterBody3D
 
         LoadDefinition();
 
+        // IMPORTANT:
+        // Gender must be assigned BEFORE building the model.
+        AssignGender();
+
         BuildMobModel();
 
         BuildHealthBar();
 
         CreateCollision();
-
-        AssignGender();
 
         _health = MaxHealth;
 
@@ -341,7 +362,8 @@ public partial class Mob : CharacterBody3D
         GD.Print(
             $"[Mob] {Name} initialized. " +
             $"Definition={DefinitionPath} " +
-            $"Behavior={BehaviorType}"
+            $"Behavior={BehaviorType} " +
+            $"Gender={_gender}"
         );
     }
 
@@ -352,22 +374,198 @@ public partial class Mob : CharacterBody3D
 
     private void CreateCollision()
     {
-        var shape = new CollisionShape3D();
-
-        shape.Shape = new CapsuleShape3D
+        if (_mobModel == null)
         {
-            Radius = 0.4f,
-            Height = 1.6f
-        };
-
-        shape.Position =
-            new Vector3(
-                0,
-                0.8f,
-                0
+            GD.PrintErr(
+                $"[Mob] {Name}: Cannot build collision because model is null."
             );
 
-        AddChild(shape);
+            return;
+        }
+
+        bool foundMesh = false;
+
+        Aabb combinedBounds =
+            new Aabb(
+                Vector3.Zero,
+                Vector3.Zero
+            );
+
+        foreach (Node node in
+                 _mobModel.FindChildren(
+                     "*",
+                     "MeshInstance3D",
+                     true,
+                     false
+                 ))
+        {
+            if (node is not MeshInstance3D meshInstance)
+                continue;
+
+            if (meshInstance.Mesh == null)
+                continue;
+
+            Aabb localAabb =
+                meshInstance.Mesh.GetAabb();
+
+            Transform3D meshToMob =
+                meshInstance.GlobalTransform *
+                GlobalTransform.AffineInverse();
+
+            Vector3 min =
+                localAabb.Position;
+
+            Vector3 max =
+                localAabb.Position +
+                localAabb.Size;
+
+            Vector3[] corners =
+            {
+                new Vector3(min.X, min.Y, min.Z),
+                new Vector3(max.X, min.Y, min.Z),
+                new Vector3(min.X, max.Y, min.Z),
+                new Vector3(max.X, max.Y, min.Z),
+
+                new Vector3(min.X, min.Y, max.Z),
+                new Vector3(max.X, min.Y, max.Z),
+                new Vector3(min.X, max.Y, max.Z),
+                new Vector3(max.X, max.Y, max.Z)
+            };
+
+            foreach (Vector3 corner in corners)
+            {
+                Vector3 point =
+                    meshToMob * corner;
+
+                if (!foundMesh)
+                {
+                    combinedBounds =
+                        new Aabb(
+                            point,
+                            Vector3.Zero
+                        );
+
+                    foundMesh = true;
+                }
+                else
+                {
+                    combinedBounds =
+                        combinedBounds.Expand(
+                            point
+                        );
+                }
+            }
+        }
+
+        if (!foundMesh)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: No mesh found for automatic collision."
+            );
+
+            return;
+        }
+
+        Vector3 size =
+            combinedBounds.Size;
+
+        size.X =
+            Mathf.Max(
+                size.X,
+                0.1f
+            );
+
+        size.Y =
+            Mathf.Max(
+                size.Y,
+                0.1f
+            );
+
+        size.Z =
+            Mathf.Max(
+                size.Z,
+                0.1f
+            );
+
+        var box =
+            new BoxShape3D();
+
+        box.Size =
+            size;
+
+        _modelCollision =
+            new CollisionShape3D();
+
+        _modelCollision.Shape =
+            box;
+
+        _modelCollision.Position =
+            combinedBounds.Position +
+            combinedBounds.Size * 0.5f;
+
+        AddChild(
+            _modelCollision
+        );
+
+        _adultCollisionSize =
+            box.Size;
+
+        _adultCollisionPosition =
+            _modelCollision.Position;
+
+        _collisionBuilt = true;
+
+        GD.Print(
+            $"[Mob] {Name}: Automatic collision created. " +
+            $"Size={_adultCollisionSize} " +
+            $"Position={_adultCollisionPosition}"
+        );
+    }
+
+
+    // =========================================================
+    // REMOVE COLLISION
+    // =========================================================
+
+    private void RemoveModelCollision()
+    {
+        if (_modelCollision != null &&
+            IsInstanceValid(_modelCollision))
+        {
+            _modelCollision.QueueFree();
+        }
+
+        _modelCollision = null;
+        _collisionBuilt = false;
+    }
+
+
+    // =========================================================
+    // UPDATE COLLISION SCALE
+    // =========================================================
+
+    private void UpdateCollisionScale(
+        float scale)
+    {
+        if (!_collisionBuilt ||
+            _modelCollision == null)
+        {
+            return;
+        }
+
+        if (_modelCollision.Shape
+            is not BoxShape3D box)
+        {
+            return;
+        }
+
+        box.Size =
+            _adultCollisionSize *
+            scale;
+
+        _modelCollision.Position =
+            _adultCollisionPosition *
+            scale;
     }
 
 
@@ -518,21 +716,271 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // MODEL
+    // GET ADULT MODEL PATH
+    // =========================================================
+
+    private string GetAdultModelPath()
+    {
+        string defaultModel =
+            "res://Assets/Models/Mobs/pig.gltf";
+
+        if (_definition == null)
+            return defaultModel;
+
+        if (_definition.gender != null &&
+            _definition.gender.enabled)
+        {
+            if (_gender == MobGender.Male &&
+                !string.IsNullOrWhiteSpace(
+                    _definition.gender.maleModel))
+            {
+                return _definition.gender.maleModel;
+            }
+
+            if (_gender == MobGender.Female &&
+                !string.IsNullOrWhiteSpace(
+                    _definition.gender.femaleModel))
+            {
+                return _definition.gender.femaleModel;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(
+            _definition.model))
+        {
+            return _definition.model;
+        }
+
+        return defaultModel;
+    }
+
+
+    // =========================================================
+    // GET ADULT TEXTURE PATH
+    // =========================================================
+
+    private string GetAdultTexturePath()
+    {
+        if (_definition == null ||
+            _definition.gender == null ||
+            !_definition.gender.enabled)
+        {
+            return "";
+        }
+
+        if (_gender == MobGender.Male)
+        {
+            return _definition.gender.maleTexture ?? "";
+        }
+
+        return _definition.gender.femaleTexture ?? "";
+    }
+
+
+    // =========================================================
+    // GET BABY MODEL PATH
+    // =========================================================
+
+    private string GetBabyModelPath()
+    {
+        if (_definition != null &&
+            _definition.baby != null &&
+            !string.IsNullOrWhiteSpace(
+                _definition.baby.model))
+        {
+            return _definition.baby.model;
+        }
+
+        return GetAdultModelPath();
+    }
+
+
+    // =========================================================
+    // GET BABY TEXTURE PATH
+    // =========================================================
+
+    private string GetBabyTexturePath()
+    {
+        if (_definition != null &&
+            _definition.baby != null &&
+            !string.IsNullOrWhiteSpace(
+                _definition.baby.texture))
+        {
+            return _definition.baby.texture;
+        }
+
+        return GetAdultTexturePath();
+    }
+
+
+    // =========================================================
+    // LOAD TEXTURE
+    // =========================================================
+
+    private Texture2D LoadMobTexture(
+        string texturePath)
+    {
+        if (string.IsNullOrWhiteSpace(texturePath))
+            return null;
+
+        Texture2D texture =
+            GD.Load<Texture2D>(
+                texturePath
+            );
+
+        if (texture == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Could not load mob texture: {texturePath}"
+            );
+        }
+
+        return texture;
+    }
+
+
+    // =========================================================
+// APPLY TEXTURE
+// =========================================================
+
+private void ApplyMobTexture(
+    Texture2D texture)
+{
+    if (_mobModel == null ||
+        texture == null)
+    {
+        return;
+    }
+
+    foreach (Node node in
+             _mobModel.FindChildren(
+                 "*",
+                 "MeshInstance3D",
+                 true,
+                 false
+             ))
+    {
+        if (node is not MeshInstance3D mesh)
+            continue;
+
+        // -------------------------------------------------
+        // Get the existing material from the GLTF.
+        // -------------------------------------------------
+
+        Material existingMaterial =
+            mesh.GetActiveMaterial(0);
+
+        StandardMaterial3D material;
+
+        if (existingMaterial is StandardMaterial3D existingStandard)
+        {
+            material =
+                existingStandard.Duplicate()
+                    as StandardMaterial3D;
+        }
+        else
+        {
+            material =
+                new StandardMaterial3D();
+        }
+
+        if (material == null)
+            continue;
+
+        // -------------------------------------------------
+        // Replace ONLY the texture.
+        // Keep the GLTF material's other settings.
+        // -------------------------------------------------
+
+        material.AlbedoTexture =
+            texture;
+
+        material.TextureFilter =
+            BaseMaterial3D.TextureFilterEnum.Nearest;
+
+        // -------------------------------------------------
+        // Preserve transparency.
+        // -------------------------------------------------
+
+        if (texture.HasAlpha())
+        {
+            material.Transparency =
+                BaseMaterial3D.TransparencyEnum.Alpha;
+
+            material.ShadingMode =
+                BaseMaterial3D.ShadingModeEnum.PerPixel;
+
+            material.CullMode =
+                BaseMaterial3D.CullModeEnum.Disabled;
+        }
+
+        // -------------------------------------------------
+        // Apply the duplicated material.
+        // -------------------------------------------------
+
+        mesh.MaterialOverride =
+            material;
+    }
+}
+
+
+    // =========================================================
+    // FIND LEG NODES
+    // =========================================================
+
+    private void FindLegNodes()
+    {
+        _frontRightLeg =
+            _mobModel?.FindChild(
+                "front_right",
+                true,
+                false
+            ) as Node3D;
+
+        _frontLeftLeg =
+            _mobModel?.FindChild(
+                "front_left",
+                true,
+                false
+            ) as Node3D;
+
+        _backRightLeg =
+            _mobModel?.FindChild(
+                "back_right",
+                true,
+                false
+            ) as Node3D;
+
+        _backLeftLeg =
+            _mobModel?.FindChild(
+                "back_left",
+                true,
+                false
+            ) as Node3D;
+
+        if (_frontRightLeg == null ||
+            _frontLeftLeg == null ||
+            _backRightLeg == null ||
+            _backLeftLeg == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Could not find all four leg nodes in active mob model."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // BUILD MOB MODEL
     // =========================================================
 
     private void BuildMobModel()
     {
         string modelPath =
-            "res://Assets/Models/Mobs/pig.gltf";
+            GetAdultModelPath();
 
-        if (_definition != null &&
-            !string.IsNullOrEmpty(
-                _definition.model))
-        {
-            modelPath =
-                _definition.model;
-        }
+        string texturePath =
+            GetAdultTexturePath();
 
         var scene =
             GD.Load<PackedScene>(
@@ -551,51 +999,133 @@ public partial class Mob : CharacterBody3D
         _mobModel =
             scene.Instantiate<Node3D>();
 
-        AddChild(_mobModel);
-
-        _frontRightLeg =
-            _mobModel.FindChild(
-                "front_right",
-                true,
-                false
-            ) as Node3D;
-
-        _frontLeftLeg =
-            _mobModel.FindChild(
-                "front_left",
-                true,
-                false
-            ) as Node3D;
-
-        _backRightLeg =
-            _mobModel.FindChild(
-                "back_right",
-                true,
-                false
-            ) as Node3D;
-
-        _backLeftLeg =
-            _mobModel.FindChild(
-                "back_left",
-                true,
-                false
-            ) as Node3D;
-
-        if (_frontRightLeg == null ||
-            _frontLeftLeg == null ||
-            _backRightLeg == null ||
-            _backLeftLeg == null)
-        {
-            GD.PrintErr(
-                $"[Mob] Could not find all four leg nodes in {modelPath}"
-            );
-        }
+        AddChild(
+            _mobModel
+        );
 
         _mobModel.Scale =
             Vector3.One;
 
         _adultModelScale =
             _mobModel.Scale;
+
+        FindLegNodes();
+
+        if (!string.IsNullOrWhiteSpace(
+            texturePath))
+        {
+            Texture2D texture =
+                LoadMobTexture(
+                    texturePath
+                );
+
+            ApplyMobTexture(
+                texture
+            );
+        }
+
+        GD.Print(
+            $"[Mob] {Name}: Loaded adult model {modelPath}"
+        );
+
+        if (!string.IsNullOrWhiteSpace(
+            texturePath))
+        {
+            GD.Print(
+                $"[Mob] {Name}: Applied texture {texturePath}"
+            );
+        }
+    }
+
+
+    // =========================================================
+    // REPLACE MOB MODEL
+    // =========================================================
+
+    private bool ReplaceMobModel(
+        string modelPath,
+        string texturePath,
+        bool customBabyModel)
+    {
+        if (string.IsNullOrWhiteSpace(
+            modelPath))
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Model path is empty."
+            );
+
+            return false;
+        }
+
+        var scene =
+            GD.Load<PackedScene>(
+                modelPath
+            );
+
+        if (scene == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Could not load model: {modelPath}"
+            );
+
+            return false;
+        }
+
+        // Remove old collision first.
+        RemoveModelCollision();
+
+        // Remove old model.
+        if (_mobModel != null &&
+            IsInstanceValid(_mobModel))
+        {
+            _mobModel.QueueFree();
+        }
+
+        _mobModel = null;
+
+        // Clear animation references.
+        _frontRightLeg = null;
+        _frontLeftLeg = null;
+        _backRightLeg = null;
+        _backLeftLeg = null;
+
+        // Build new model.
+        _mobModel =
+            scene.Instantiate<Node3D>();
+
+        AddChild(
+            _mobModel
+        );
+
+        _mobModel.Scale =
+            Vector3.One;
+
+        _usingCustomBabyModel =
+            customBabyModel;
+
+        FindLegNodes();
+
+        if (!string.IsNullOrWhiteSpace(
+            texturePath))
+        {
+            Texture2D texture =
+                LoadMobTexture(
+                    texturePath
+                );
+
+            ApplyMobTexture(
+                texture
+            );
+        }
+
+        // Rebuild collision against the new model.
+        CreateCollision();
+
+        GD.Print(
+            $"[Mob] {Name}: Switched model to {modelPath}"
+        );
+
+        return true;
     }
 
 
@@ -995,7 +1525,6 @@ public partial class Mob : CharacterBody3D
                 _stuckCheckLastPosition =
                     GlobalPosition;
 
-                // Start normal AI immediately after landing.
                 _state = State.Idle;
 
                 _hasTarget = false;
@@ -1403,26 +1932,10 @@ public partial class Mob : CharacterBody3D
                 continue;
             }
 
-            // -------------------------------------------------
-            // Set definition before the baby enters the world.
-            // -------------------------------------------------
-
             baby.DefinitionPath =
                 DefinitionPath;
 
-
-            // -------------------------------------------------
-            // Add baby to same parent as parents.
-            // -------------------------------------------------
-
             GetParent().AddChild(baby);
-
-
-            // -------------------------------------------------
-            // Position baby.
-            //
-            // Start above the ground so gravity can settle it.
-            // -------------------------------------------------
 
             Vector3 offset =
                 new Vector3(
@@ -1448,13 +1961,7 @@ public partial class Mob : CharacterBody3D
             baby.GlobalPosition =
                 spawnPosition;
 
-
-            // -------------------------------------------------
-            // Initialize baby.
-            // -------------------------------------------------
-
             baby.MakeBaby();
-
 
             GD.Print(
                 $"[Mob] Baby {baby.Name} was born. " +
@@ -1473,32 +1980,36 @@ public partial class Mob : CharacterBody3D
     {
         _isBaby = true;
 
-        _babyGrowthTimer =
-            (float)GD.RandRange(
-                300,
-                900
-            );
+        float growthMin =
+            300f;
 
-        // IMPORTANT:
-        // Store the model's normal scale.
-        //
-        // We do NOT scale this CharacterBody3D.
-        _adultModelScale =
-            _mobModel != null
-                ? _mobModel.Scale
-                : Vector3.One;
+        float growthMax =
+            900f;
 
-        // Only make the VISUAL model smaller.
-        if (_mobModel != null)
+        if (_definition != null &&
+            _definition.breeding != null)
         {
-            _mobModel.Scale =
-                _adultModelScale * 0.55f;
+            growthMin =
+                Mathf.Max(
+                    1f,
+                    _definition.breeding.babyGrowthMin
+                );
+
+            growthMax =
+                Mathf.Max(
+                    growthMin,
+                    _definition.breeding.babyGrowthMax
+                );
         }
 
-        // Baby cannot breed.
+        _babyGrowthTimer =
+            _rng.RandfRange(
+                growthMin,
+                growthMax
+            );
+
         _breedingReady = false;
 
-        // Reset AI/path state.
         _state = State.Idle;
 
         _hasTarget = false;
@@ -1515,12 +2026,84 @@ public partial class Mob : CharacterBody3D
 
         _stuckCheckFailCount = 0;
 
-        // Make sure the baby has a valid idle timer.
         _idleTimer =
             _rng.RandfRange(
                 MinIdleTime,
                 MaxIdleTime
             );
+
+        // -----------------------------------------------------
+        // CUSTOM BABY MODEL
+        // -----------------------------------------------------
+
+        bool hasCustomBabyModel =
+            _definition != null &&
+            _definition.baby != null &&
+            !string.IsNullOrWhiteSpace(
+                _definition.baby.model
+            );
+
+        if (hasCustomBabyModel)
+        {
+            string babyModel =
+                GetBabyModelPath();
+
+            string babyTexture =
+                GetBabyTexturePath();
+
+            if (ReplaceMobModel(
+                    babyModel,
+                    babyTexture,
+                    true))
+            {
+                _usingCustomBabyModel = true;
+
+                GD.Print(
+                    $"[Mob] {Name}: Using custom baby model."
+                );
+            }
+            else
+            {
+                _usingCustomBabyModel = false;
+
+                if (_mobModel != null)
+                {
+                    _adultModelScale =
+                        _mobModel.Scale;
+
+                    _mobModel.Scale =
+                        _adultModelScale * 0.55f;
+
+                    UpdateCollisionScale(
+                        0.55f
+                    );
+                }
+            }
+        }
+        else
+        {
+            // -------------------------------------------------
+            // FALLBACK:
+            // Use adult model scaled to 55%.
+            // -------------------------------------------------
+
+            _usingCustomBabyModel = false;
+
+            _adultModelScale =
+                _mobModel != null
+                    ? _mobModel.Scale
+                    : Vector3.One;
+
+            if (_mobModel != null)
+            {
+                _mobModel.Scale =
+                    _adultModelScale * 0.55f;
+            }
+
+            UpdateCollisionScale(
+                0.55f
+            );
+        }
 
         GD.Print(
             $"[Mob] {Name} is a baby. " +
@@ -1540,14 +2123,43 @@ public partial class Mob : CharacterBody3D
 
         _isBaby = false;
 
-        // Restore visual model size only.
-        if (_mobModel != null)
+        // -----------------------------------------------------
+        // CUSTOM BABY MODEL
+        // -----------------------------------------------------
+
+        if (_usingCustomBabyModel)
         {
-            _mobModel.Scale =
-                _adultModelScale;
+            string adultModel =
+                GetAdultModelPath();
+
+            string adultTexture =
+                GetAdultTexturePath();
+
+            ReplaceMobModel(
+                adultModel,
+                adultTexture,
+                false
+            );
+
+            _usingCustomBabyModel = false;
+        }
+        else
+        {
+            // -------------------------------------------------
+            // SCALED ADULT MODEL
+            // -------------------------------------------------
+
+            if (_mobModel != null)
+            {
+                _mobModel.Scale =
+                    _adultModelScale;
+            }
+
+            UpdateCollisionScale(
+                1f
+            );
         }
 
-        // Reset AI cleanly.
         _state = State.Idle;
 
         _hasTarget = false;
@@ -1578,10 +2190,6 @@ public partial class Mob : CharacterBody3D
 
     private void UpdateState(float dt)
     {
-        // -----------------------------------------------------
-        // FLEE
-        // -----------------------------------------------------
-
         if (_state == State.Flee)
         {
             bool threatGone =
@@ -1605,11 +2213,6 @@ public partial class Mob : CharacterBody3D
 
             return;
         }
-
-
-        // -----------------------------------------------------
-        // HOSTILE AI
-        // -----------------------------------------------------
 
         if (BehaviorType ==
                 MobBehaviorType.Hostile &&
@@ -1658,11 +2261,6 @@ public partial class Mob : CharacterBody3D
             }
         }
 
-
-        // -----------------------------------------------------
-        // IDLE
-        // -----------------------------------------------------
-
         if (_state ==
             State.Idle)
         {
@@ -1673,11 +2271,6 @@ public partial class Mob : CharacterBody3D
                 PickWanderTarget();
             }
         }
-
-
-        // -----------------------------------------------------
-        // WANDER
-        // -----------------------------------------------------
 
         else if (_state ==
                  State.Wander &&
@@ -2320,6 +2913,152 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // DROP ITEMS
+    // =========================================================
+
+    private void SpawnDrops()
+    {
+        if (_definition == null ||
+            _definition.drops == null ||
+            !_definition.drops.enabled ||
+            _definition.drops.items == null ||
+            _definition.drops.items.Length == 0)
+        {
+            return;
+        }
+
+        Node parent =
+            GetParent();
+
+        if (parent == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: Cannot spawn drops because parent is null."
+            );
+
+            return;
+        }
+
+        foreach (MobDrop drop in
+                 _definition.drops.items)
+        {
+            if (drop == null)
+                continue;
+
+            if (string.IsNullOrWhiteSpace(
+                drop.item))
+            {
+                continue;
+            }
+
+            float chance =
+                Mathf.Clamp(
+                    drop.chance,
+                    0f,
+                    1f
+                );
+
+            float roll =
+                _rng.Randf();
+
+            if (roll > chance)
+            {
+                continue;
+            }
+
+            int min =
+                Mathf.Max(
+                    1,
+                    drop.min
+                );
+
+            int max =
+                Mathf.Max(
+                    min,
+                    drop.max
+                );
+
+            int count =
+                _rng.RandiRange(
+                    min,
+                    max
+                );
+
+            if (count <= 0)
+                continue;
+
+
+            // -------------------------------------------------
+            // CREATE ITEM PICKUP
+            // -------------------------------------------------
+
+            ItemPickup pickup =
+                new ItemPickup();
+
+            pickup.ItemId =
+                drop.item;
+
+            pickup.Count =
+                count;
+
+
+            // -------------------------------------------------
+            // GIVE THE DROP A LITTLE POP
+            // -------------------------------------------------
+
+            float angle =
+                _rng.RandfRange(
+                    0f,
+                    Mathf.Tau
+                );
+
+            float horizontalSpeed =
+                _rng.RandfRange(
+                    0.5f,
+                    1.2f
+                );
+
+            pickup.TossVelocity =
+                new Vector3(
+                    Mathf.Cos(angle) *
+                    horizontalSpeed,
+
+                    _rng.RandfRange(
+                        1.8f,
+                        2.6f
+                    ),
+
+                    Mathf.Sin(angle) *
+                    horizontalSpeed
+                );
+
+
+            // -------------------------------------------------
+            // ADD TO WORLD
+            // -------------------------------------------------
+
+            parent.AddChild(
+                pickup
+            );
+
+            pickup.GlobalPosition =
+                GlobalPosition +
+                new Vector3(
+                    0f,
+                    0.5f,
+                    0f
+                );
+
+
+            GD.Print(
+                $"[Mob] {Name} dropped " +
+                $"{count}x {drop.item}"
+            );
+        }
+    }
+
+
+    // =========================================================
     // DEATH
     // =========================================================
 
@@ -2331,6 +3070,18 @@ public partial class Mob : CharacterBody3D
             false;
 
         _currentPath.Clear();
+
+
+        // -----------------------------------------------------
+        // DROP LOOT BEFORE REMOVING MOB
+        // -----------------------------------------------------
+
+        SpawnDrops();
+
+
+        // -----------------------------------------------------
+        // REMOVE MOB
+        // -----------------------------------------------------
 
         SetPhysicsProcess(false);
 

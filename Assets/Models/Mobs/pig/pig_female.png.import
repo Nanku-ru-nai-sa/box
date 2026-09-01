@@ -3,7 +3,7 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://ceg37ntn0kx4w"
-path.s3tc="res://.godot/imported/pig_0.png-9f9a3301e98672dabea45ed90c750837.s3tc.ctex"
+path.s3tc="res://.godot/imported/pig_female.png-8b487ee0eadc1aa25ccae7093db976dd.s3tc.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc"],
 "vram_texture": true
@@ -14,8 +14,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://Assets/Models/Mobs/pig_0.png"
-dest_files=["res://.godot/imported/pig_0.png-9f9a3301e98672dabea45ed90c750837.s3tc.ctex"]
+source_file="res://Assets/Models/Mobs/pig/pig_female.png"
+dest_files=["res://.godot/imported/pig_female.png-8b487ee0eadc1aa25ccae7093db976dd.s3tc.ctex"]
 
 [params]
 

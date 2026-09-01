@@ -1,7 +1,9 @@
 {
   "id": "pig",
   "displayName": "Pig",
-  "model": "res://Assets/Models/Mobs/pig.gltf",
+
+  "model": "res://Assets/Models/Mobs/pig/pig.gltf",
+  "babyModel": "res://Assets/Models/Mobs/pig/pig_baby.gltf",
 
   "stats": {
 	"maxHealth": 10.0,
@@ -36,21 +38,36 @@
   },
 
   "breeding": {
-  "enabled": true,
-  "foodItems": [
-    "carrot"
-  ],
-  "litterMin": 1,
-  "litterMax": 3,
-  "breedCooldown": 900.0,
-  "babyGrowthMin": 300.0,
-  "babyGrowthMax": 900.0
-},
+	"enabled": true,
+	"foodItems": [
+      "carrot"
+	],
+	"litterMin": 1,
+	"litterMax": 3,
+	"breedCooldown": 900.0,
+	"babyGrowthMin": 300.0,
+	"babyGrowthMax": 900.0
+  },
 
   "gender": {
 	"enabled": true,
 	"maleChance": 0.5,
-	"femaleChance": 0.5
+	"femaleChance": 0.5,
+
+	"maleTexture": "res://Assets/Models/Mobs/pig/pig_male.png",
+	"femaleTexture": "res://Assets/Models/Mobs/pig/pig_female.png"
+  },
+
+  "drops": {
+	"enabled": true,
+	"items": [
+	  {
+		"item": "dirt",
+		"min": 1,
+		"max": 3,
+		"chance": 1.0
+	  }
+	]
   },
 
   "spawning": {

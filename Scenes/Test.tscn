@@ -28,9 +28,6 @@ script = ExtResource("3_f2nln")
 [node name="player" parent="." unique_id=189951435 instance=ExtResource("2_gxb1y")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 201, 8)
 
-[node name="Mob" parent="." unique_id=1903476427 instance=ExtResource("5_efk68")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 201, 0)
-
 [node name="MobSpawner" type="Node3D" parent="." unique_id=498175751]
 script = ExtResource("6_06fis")
 MobScene = ExtResource("5_efk68")

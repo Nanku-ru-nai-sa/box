@@ -6,6 +6,7 @@ public class MobDefinition
     public string id = "";
     public string displayName = "";
 
+    // Default adult model.
     public string model = "";
 
     public MobStats stats = new MobStats();
@@ -14,8 +15,19 @@ public class MobDefinition
     public MobBreeding breeding = new MobBreeding();
     public MobGenderSettings gender = new MobGenderSettings();
     public MobSpawnSettings spawning = new MobSpawnSettings();
-	public FleeDefinition flee = new FleeDefinition();
+    public FleeDefinition flee = new FleeDefinition();
+
+    // Baby appearance.
+    public MobBabySettings baby = new MobBabySettings();
+
+    // Items this mob can drop when it dies.
+    public MobDrops drops = new MobDrops();
 }
+
+
+// =============================================================
+// FLEE
+// =============================================================
 
 [Serializable]
 public class FleeDefinition
@@ -24,12 +36,24 @@ public class FleeDefinition
     public float distance = 6f;
     public float speedMultiplier = 1.8f;
 }
+
+
+// =============================================================
+// STATS
+// =============================================================
+
+[Serializable]
 public class MobStats
 {
     public float maxHealth = 10.0f;
     public float moveSpeed = 2.5f;
     public float turnSpeed = 8.0f;
 }
+
+
+// =============================================================
+// BEHAVIOR
+// =============================================================
 
 [Serializable]
 public class MobBehavior
@@ -46,6 +70,11 @@ public class MobBehavior
     public float attackInterval = 1.2f;
 }
 
+
+// =============================================================
+// FOOD
+// =============================================================
+
 [Serializable]
 public class MobFood
 {
@@ -57,6 +86,11 @@ public class MobFood
     // How much HP normal food restores.
     public float healAmount = 5.0f;
 }
+
+
+// =============================================================
+// BREEDING
+// =============================================================
 
 [Serializable]
 public class MobBreeding
@@ -76,6 +110,11 @@ public class MobBreeding
     public float babyGrowthMax = 900.0f;
 }
 
+
+// =============================================================
+// GENDER
+// =============================================================
+
 [Serializable]
 public class MobGenderSettings
 {
@@ -84,7 +123,45 @@ public class MobGenderSettings
     // 0.5 = 50% male / 50% female.
     public float maleChance = 0.5f;
     public float femaleChance = 0.5f;
+
+    // Optional male-specific model.
+    // Empty = use normal model.
+    public string maleModel = "";
+
+    // Optional female-specific model.
+    // Empty = use normal model.
+    public string femaleModel = "";
+
+    // Optional male-specific texture.
+    // Empty = keep model's normal texture.
+    public string maleTexture = "";
+
+    // Optional female-specific texture.
+    // Empty = keep model's normal texture.
+    public string femaleTexture = "";
 }
+
+
+// =============================================================
+// BABY
+// =============================================================
+
+[Serializable]
+public class MobBabySettings
+{
+    // Optional custom baby model.
+    // Empty = use the normal adult model scaled down.
+    public string model = "";
+
+    // Optional custom baby texture.
+    // Empty = keep the model's normal texture.
+    public string texture = "";
+}
+
+
+// =============================================================
+// SPAWNING
+// =============================================================
 
 [Serializable]
 public class MobSpawnSettings
@@ -98,4 +175,36 @@ public class MobSpawnSettings
     public float maxSpawnDistance = 48.0f;
 
     public int maxWorldCount = 20;
+}
+
+
+// =============================================================
+// MOB DROPS
+// =============================================================
+
+[Serializable]
+public class MobDrops
+{
+    public bool enabled = true;
+
+    public MobDrop[] items = Array.Empty<MobDrop>();
+}
+
+
+[Serializable]
+public class MobDrop
+{
+    // Item ID from your item registry.
+    public string item = "";
+
+    // Minimum amount dropped.
+    public int min = 1;
+
+    // Maximum amount dropped.
+    public int max = 1;
+
+    // 1.0 = 100%
+    // 0.5 = 50%
+    // 0.1 = 10%
+    public float chance = 1.0f;
 }
