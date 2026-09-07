@@ -42,6 +42,7 @@ public partial class BlockRegistry : Node
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
         var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
         var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
+        var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo_shoot.png");
 
         // Geology Layer rocks - fill for ChunkManager's Layers list (the
         // geology/soil-band system). diorite/gabbro previously only had
@@ -368,6 +369,19 @@ bomb.TextureTop = bombTex;
 bomb.TextureSide = bombTex;
 bomb.TextureBottom = bombTex;
 Register(bomb);
+
+var bambooShoot = new BlockResource();
+bambooShoot.BlockId = "bamboo_shoot";
+bambooShoot.DisplayName = "Bamboo Shoot";
+bambooShoot.IsSolid = false;
+bambooShoot.CanChisel = false;
+bambooShoot.IsTransparent = true;
+bambooShoot.IsCross = true;
+bambooShoot.Hardness = 0f;
+bambooShoot.TextureTop = bambooShootTex;
+bambooShoot.TextureSide = bambooShootTex;
+bambooShoot.TextureBottom = bambooShootTex;
+Register(bambooShoot);
 
         GD.Print("Blocks registered.");
     }

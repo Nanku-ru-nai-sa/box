@@ -2136,26 +2136,29 @@ _moonCube.Visible =
     // ============================================================
 
     private void SaveCurrentWorldState()
-    {
-        if (SaveManager.Instance == null)
-            return;
+{
+    if (SaveManager.Instance == null)
+        return;
 
-        SaveManager.Instance.SaveWorldTime(
-            _timeOfDay
+    SaveManager.Instance.SaveWorldTime(
+        _timeOfDay
+    );
+
+    SeasonManager seasonManager =
+        GetNodeOrNull<SeasonManager>(
+            "/root/SeasonManager"
         );
 
-        SeasonManager seasonManager =
-            GetNodeOrNull<SeasonManager>(
-                "/root/SeasonManager"
-            );
-
-        if (seasonManager != null)
-        {
-            SaveManager.Instance.SaveWorldSeason(
-                seasonManager
-            );
-        }
+    if (seasonManager != null)
+    {
+        SaveManager.Instance.SaveWorldSeason(
+            seasonManager
+        );
     }
+
+    // Save all currently existing mobs.
+    SaveManager.Instance.SaveWorldMobs();
+}
 
     // ============================================================
     // CURRENT TIME

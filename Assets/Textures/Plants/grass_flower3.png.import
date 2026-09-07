@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bx078hukmmier"
-path="res://.godot/imported/brown_mushroom.png-81f532e18f943ab6728759e0196dd202.ctex"
+uid="uid://cisxb8glqpnpx"
+path="res://.godot/imported/grass_flower3.png-d4735d38683273dc01c97cf5a81f912b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/brown_mushroom.png"
-dest_files=["res://.godot/imported/brown_mushroom.png-81f532e18f943ab6728759e0196dd202.ctex"]
+source_file="res://Assets/Textures/Plants/grass_flower3.png"
+dest_files=["res://.godot/imported/grass_flower3.png-d4735d38683273dc01c97cf5a81f912b.ctex"]
 
 [params]
 

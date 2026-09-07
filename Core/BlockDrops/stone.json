@@ -1,0 +1,6 @@
+{
+  "block": "stone",
+  "drops": [
+	{ "item": "rock", "chance": 1 }
+  ]
+}

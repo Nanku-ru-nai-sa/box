@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ds20wv2cjf0bo"
-path="res://.godot/imported/pineapple_bottom.png-4424a6835a4d79df49bc6e3a7ff9062a.ctex"
+uid="uid://dtxdgc0ik02r"
+path="res://.godot/imported/bamboo_shoot.png-e92cdcb5f88cd55cee90ee5196ef32ac.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/pineapple_bottom.png"
-dest_files=["res://.godot/imported/pineapple_bottom.png-4424a6835a4d79df49bc6e3a7ff9062a.ctex"]
+source_file="res://Assets/Textures/Plants/bamboo_shoot.png"
+dest_files=["res://.godot/imported/bamboo_shoot.png-e92cdcb5f88cd55cee90ee5196ef32ac.ctex"]
 
 [params]
 

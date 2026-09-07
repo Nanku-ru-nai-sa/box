@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cisxb8glqpnpx"
-path="res://.godot/imported/grass_flower3.png-905f8ef752c50965eff4b1cca484247b.ctex"
+uid="uid://dioxtpr2nwnfr"
+path="res://.godot/imported/rose.png-cfed4b171c858a0ba7a4862a863ef008.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/grass_flower3.png"
-dest_files=["res://.godot/imported/grass_flower3.png-905f8ef752c50965eff4b1cca484247b.ctex"]
+source_file="res://Assets/Textures/Plants/rose.png"
+dest_files=["res://.godot/imported/rose.png-cfed4b171c858a0ba7a4862a863ef008.ctex"]
 
 [params]
 

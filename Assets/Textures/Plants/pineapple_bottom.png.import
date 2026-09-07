@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dioxtpr2nwnfr"
-path="res://.godot/imported/rose.png-203b53c4561b5a5cf3fd593519a1faa7.ctex"
+uid="uid://ds20wv2cjf0bo"
+path="res://.godot/imported/pineapple_bottom.png-0d2f88dcd4a4cd743e3b1582d42bb2ba.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/rose.png"
-dest_files=["res://.godot/imported/rose.png-203b53c4561b5a5cf3fd593519a1faa7.ctex"]
+source_file="res://Assets/Textures/Plants/pineapple_bottom.png"
+dest_files=["res://.godot/imported/pineapple_bottom.png-0d2f88dcd4a4cd743e3b1582d42bb2ba.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c05h3oqomijlg"
-path="res://.godot/imported/single_clover.png-327f1d5cf4448cf0b12bf44a8a43a23d.ctex"
+uid="uid://be84q3ydt4iks"
+path="res://.godot/imported/pineapple_flower.png-d6c15a89fba7315dc037b0a38c77a4c5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/single_clover.png"
-dest_files=["res://.godot/imported/single_clover.png-327f1d5cf4448cf0b12bf44a8a43a23d.ctex"]
+source_file="res://Assets/Textures/Plants/pineapple_flower.png"
+dest_files=["res://.godot/imported/pineapple_flower.png-d6c15a89fba7315dc037b0a38c77a4c5.ctex"]
 
 [params]
 

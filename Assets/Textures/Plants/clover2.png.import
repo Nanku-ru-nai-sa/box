@@ -3,15 +3,15 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://b5hdi31remra8"
-path="res://.godot/imported/clover2.png-0e5bc4186bc660b7cc2fb724d40b976a.ctex"
+path="res://.godot/imported/clover2.png-a8cc04e992b9e459ac4e8cd5f12f492a.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/clover2.png"
-dest_files=["res://.godot/imported/clover2.png-0e5bc4186bc660b7cc2fb724d40b976a.ctex"]
+source_file="res://Assets/Textures/Plants/clover2.png"
+dest_files=["res://.godot/imported/clover2.png-a8cc04e992b9e459ac4e8cd5f12f492a.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b4sjsf5cw230"
-path="res://.godot/imported/pineapple_plant.png-3a77ac384d193d28b2641f4f23052ad5.ctex"
+uid="uid://b5rjcd26nl6u6"
+path="res://.godot/imported/grass_flower1.png-d675440fd1d621eefcbfb568b28cb823.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/pineapple_plant.png"
-dest_files=["res://.godot/imported/pineapple_plant.png-3a77ac384d193d28b2641f4f23052ad5.ctex"]
+source_file="res://Assets/Textures/Plants/grass_flower1.png"
+dest_files=["res://.godot/imported/grass_flower1.png-d675440fd1d621eefcbfb568b28cb823.ctex"]
 
 [params]
 

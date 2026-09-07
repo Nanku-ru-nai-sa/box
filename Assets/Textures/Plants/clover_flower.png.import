@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dsyygkooeuofu"
-path="res://.godot/imported/dandelion.png-5e1cce6158236f547d5db1a07ef7c5ec.ctex"
+uid="uid://bwkkxe2mhyul"
+path="res://.godot/imported/clover_flower.png-ad786313f70ed26bcb6f9661301a655c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/dandelion.png"
-dest_files=["res://.godot/imported/dandelion.png-5e1cce6158236f547d5db1a07ef7c5ec.ctex"]
+source_file="res://Assets/Textures/Plants/clover_flower.png"
+dest_files=["res://.godot/imported/clover_flower.png-ad786313f70ed26bcb6f9661301a655c.ctex"]
 
 [params]
 

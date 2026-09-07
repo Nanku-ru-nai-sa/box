@@ -2138,10 +2138,6 @@ while (mob == null && current != null)
     current = current.GetParent();
     mob = current as Mob;
 }
-
-if (mob == null)
-    return false;
-
     if (mob == null)
         return false;
 

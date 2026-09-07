@@ -4,6 +4,24 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Linq;
 
+// ============================================================
+// SAVED MOB DATA
+// ============================================================
+
+[Serializable]
+public class SavedMobData
+{
+    public string DefinitionPath { get; set; } = "";
+
+    public float[] Position { get; set; } =
+        new float[3];
+}
+
+
+// ============================================================
+// SAVE MANAGER
+// ============================================================
+
 public partial class SaveManager : Node
 {
     public static SaveManager Instance { get; private set; }
@@ -20,6 +38,9 @@ public partial class SaveManager : Node
     private static readonly JsonSerializerOptions JsonOpts =
         new() { WriteIndented = true };
 
+    // READY
+    // ============================================================
+
     public override void _Ready()
     {
         Instance = this;
@@ -32,8 +53,6 @@ public partial class SaveManager : Node
             WorldsRoot
         );
     }
-
-    // ============================================================
     // CHARACTERS
     // ============================================================
 
@@ -199,7 +218,6 @@ public partial class SaveManager : Node
         }
     }
 
-    // ============================================================
     // WORLDS
     // ============================================================
 
@@ -303,7 +321,6 @@ public partial class SaveManager : Node
         }
     }
 
-    // ============================================================
     // CREATE WORLD
     // ============================================================
 
@@ -362,7 +379,6 @@ public partial class SaveManager : Node
         return meta;
     }
 
-    // ============================================================
     // SAVE WORLD
     // ============================================================
 
@@ -409,6 +425,7 @@ public partial class SaveManager : Node
         );
     }
 
+
     // ============================================================
     // ACTIVE WORLD
     // ============================================================
@@ -430,6 +447,7 @@ public partial class SaveManager : Node
             SaveWorldMeta(meta);
         }
     }
+
 
     // ============================================================
     // DAY / NIGHT TIME
@@ -481,6 +499,7 @@ public partial class SaveManager : Node
         );
     }
 
+
     public float LoadWorldTime()
     {
         if (string.IsNullOrEmpty(
@@ -522,6 +541,7 @@ public partial class SaveManager : Node
 
         return time;
     }
+
 
     // ============================================================
     // SEASON STATE
@@ -596,6 +616,7 @@ public partial class SaveManager : Node
         );
     }
 
+
     public bool LoadWorldSeason(
         SeasonManager seasonManager)
     {
@@ -637,6 +658,184 @@ public partial class SaveManager : Node
         return true;
     }
 
+
+    // ============================================================
+    // MOB STATE
+    // ============================================================
+
+    private string GetMobSavePath()
+    {
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
+        {
+            return "";
+        }
+
+        return
+            $"{WorldsRoot}" +
+            $"{ActiveWorldId}/mobs.json";
+    }
+
+
+    public void SaveWorldMobs()
+    {
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
+        {
+            GD.PrintErr(
+                "[SaveManager] Cannot save mobs. " +
+                "There is no active world."
+            );
+
+            return;
+        }
+
+        string path =
+            GetMobSavePath();
+
+        var savedMobs =
+            new List<SavedMobData>();
+
+        SceneTree tree =
+            GetTree();
+
+        if (tree != null)
+        {
+            foreach (Node node in
+                tree.GetNodesInGroup("mobs"))
+            {
+                if (node is not Mob mob)
+                    continue;
+
+                Vector3 position =
+                    mob.GlobalPosition;
+
+                savedMobs.Add(
+                    new SavedMobData
+                    {
+                        DefinitionPath =
+                            mob.DefinitionPath,
+
+                        Position =
+                            new float[]
+                            {
+                                position.X,
+                                position.Y,
+                                position.Z
+                            }
+                    }
+                );
+            }
+        }
+
+        DirAccess.MakeDirRecursiveAbsolute(
+            $"{WorldsRoot}{ActiveWorldId}/"
+        );
+
+        using var file =
+            FileAccess.Open(
+                path,
+                FileAccess.ModeFlags.Write
+            );
+
+        if (file == null)
+        {
+            GD.PrintErr(
+                $"[SaveManager] Could not open mob save file: {path}"
+            );
+
+            return;
+        }
+
+        file.StoreString(
+            JsonSerializer.Serialize(
+                savedMobs,
+                JsonOpts
+            )
+        );
+
+        GD.Print(
+            $"[SaveManager] Saved {savedMobs.Count} mobs."
+        );
+    }
+
+
+    public List<SavedMobData> LoadWorldMobs()
+    {
+        var results =
+            new List<SavedMobData>();
+
+        if (string.IsNullOrEmpty(
+            ActiveWorldId))
+        {
+            return results;
+        }
+
+        string path =
+            GetMobSavePath();
+
+        if (!FileAccess.FileExists(path))
+        {
+            GD.Print(
+                "[SaveManager] No saved mob data found."
+            );
+
+            return results;
+        }
+
+        using var file =
+            FileAccess.Open(
+                path,
+                FileAccess.ModeFlags.Read
+            );
+
+        if (file == null)
+            return results;
+
+        try
+        {
+            var loaded =
+                JsonSerializer.Deserialize<
+                    List<SavedMobData>
+                >(
+                    file.GetAsText()
+                );
+
+            if (loaded == null)
+                return results;
+
+            foreach (var mob in loaded)
+            {
+                if (mob == null)
+                    continue;
+
+                if (string.IsNullOrEmpty(
+                    mob.DefinitionPath))
+                    continue;
+
+                if (mob.Position == null ||
+                    mob.Position.Length != 3)
+                    continue;
+
+                results.Add(mob);
+            }
+
+            GD.Print(
+                $"[SaveManager] Loaded {results.Count} saved mobs."
+            );
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr(
+                "[SaveManager] mobs.json parse failed: " +
+                e.Message
+            );
+        }
+
+        return results;
+    }
+
+
     // ============================================================
     // DELETE WORLD
     // ============================================================
@@ -654,6 +853,7 @@ public partial class SaveManager : Node
             ActiveWorldId = "";
         }
     }
+
 
     // ============================================================
     // HELPERS
@@ -678,6 +878,7 @@ public partial class SaveManager : Node
             ? "save"
             : clean.ToLower();
     }
+
 
     private void DeleteDirRecursive(
         string path)
