@@ -115,19 +115,24 @@ public partial class PauseMenu : Node
     }
 
     private void OnSaveAndQuit()
-    {
-        // Save world + inventory before leaving
-        var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
-        if (cm != null && _player != null)
-        {
-            cm.Call("SaveModifiedChunks");
-            // Access inventory via reflection-safe public method
-            _player.SaveInventoryFromPauseMenu(cm);
-        }
+{
+    // Save world + inventory + mobs before leaving
+    var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
 
-        GetTree().Paused = false;
-        GetTree().ChangeSceneToFile(MainMenuScene);
+    if (cm != null && _player != null)
+    {
+        cm.Call("SaveModifiedChunks");
+
+        // Save player inventory
+        _player.SaveInventoryFromPauseMenu(cm);
     }
+
+    // Save all currently existing mobs
+    SaveManager.Instance?.SaveWorldMobs();
+
+    GetTree().Paused = false;
+    GetTree().ChangeSceneToFile(MainMenuScene);
+}
 
     // ── Settings panel ───────────────────────────────────────────────────────
     // Settings + Keybinds UI now lives in the shared SettingsPanel class

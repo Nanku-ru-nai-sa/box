@@ -1,15 +1,127 @@
 using Godot;
-using System;
+using System.Collections.Generic;
 
 public partial class MobSpawnerManager : Node
 {
-	// Called when the node enters the scene tree for the first time.
-	public override void _Ready()
-	{
-	}
+    private bool _loadedSavedMobs = false;
 
-	// Called every frame. 'delta' is the elapsed time since the previous frame.
-	public override void _Process(double delta)
-	{
-	}
+    public override void _Ready()
+    {
+        CallDeferred(nameof(LoadSavedMobs));
+    }
+
+
+    // =========================================================
+    // LOAD SAVED MOBS
+    // =========================================================
+
+    private void LoadSavedMobs()
+    {
+        if (_loadedSavedMobs)
+            return;
+
+        _loadedSavedMobs = true;
+
+        var saveManager = SaveManager.Instance;
+
+        if (saveManager == null)
+        {
+            GD.PrintErr(
+                "[MobSpawnerManager] SaveManager is not available."
+            );
+
+            return;
+        }
+
+        List<SavedMobData> savedMobs =
+            saveManager.LoadWorldMobs();
+
+        if (savedMobs == null ||
+            savedMobs.Count == 0)
+        {
+            GD.Print(
+                "[MobSpawnerManager] No saved mobs to restore."
+            );
+
+            return;
+        }
+
+        Node parent = GetParent();
+
+        if (parent == null)
+        {
+            GD.PrintErr(
+                "[MobSpawnerManager] No parent world node."
+            );
+
+            return;
+        }
+
+        foreach (SavedMobData saved in savedMobs)
+        {
+            if (saved == null)
+                continue;
+
+            if (string.IsNullOrEmpty(
+                saved.DefinitionPath))
+            {
+                continue;
+            }
+
+            if (saved.Position == null ||
+                saved.Position.Length != 3)
+            {
+                continue;
+            }
+
+            PackedScene mobScene =
+                ResourceLoader.Load<PackedScene>(
+                    "res://Mobs/Framework/mob.tscn"
+                );
+
+            if (mobScene == null)
+            {
+                GD.PrintErr(
+                    "[MobSpawnerManager] Could not load mob.tscn."
+                );
+
+                return;
+            }
+
+            Mob mob =
+                mobScene.Instantiate<Mob>();
+
+            if (mob == null)
+            {
+                GD.PrintErr(
+                    "[MobSpawnerManager] mob.tscn did not contain a Mob."
+                );
+
+                continue;
+            }
+
+            mob.DefinitionPath =
+                saved.DefinitionPath;
+
+            parent.AddChild(mob);
+
+            mob.GlobalPosition =
+                new Vector3(
+                    saved.Position[0],
+                    saved.Position[1],
+                    saved.Position[2]
+                );
+
+            GD.Print(
+                $"[MobSpawnerManager] Restored mob: " +
+                $"{saved.DefinitionPath} at " +
+                $"{mob.GlobalPosition}"
+            );
+        }
+
+        GD.Print(
+            $"[MobSpawnerManager] Restored " +
+            $"{savedMobs.Count} saved mobs."
+        );
+    }
 }
