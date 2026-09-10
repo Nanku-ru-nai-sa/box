@@ -128,7 +128,7 @@ public partial class PauseMenu : Node
     }
 
     // Save all currently existing mobs
-    SaveManager.Instance?.SaveWorldMobs();
+    SaveManager.Instance?.SaveCurrentWorld();
 
     GetTree().Paused = false;
     GetTree().ChangeSceneToFile(MainMenuScene);

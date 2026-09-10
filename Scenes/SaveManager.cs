@@ -15,6 +15,9 @@ public class SavedMobData
 
     public float[] Position { get; set; } =
         new float[3];
+
+    // Mob's horizontal facing direction.
+    public float RotationY { get; set; } = 0f;
 }
 
 
@@ -38,6 +41,8 @@ public partial class SaveManager : Node
     private static readonly JsonSerializerOptions JsonOpts =
         new() { WriteIndented = true };
 
+
+    // ============================================================
     // READY
     // ============================================================
 
@@ -53,6 +58,9 @@ public partial class SaveManager : Node
             WorldsRoot
         );
     }
+
+
+    // ============================================================
     // CHARACTERS
     // ============================================================
 
@@ -99,6 +107,7 @@ public partial class SaveManager : Node
             .ToList();
     }
 
+
     public CharacterMeta LoadCharacterMeta(
         string characterId)
     {
@@ -132,6 +141,7 @@ public partial class SaveManager : Node
         }
     }
 
+
     public CharacterMeta CreateCharacter(
         string displayName,
         string cheatCodes,
@@ -162,6 +172,7 @@ public partial class SaveManager : Node
         return meta;
     }
 
+
     public void SaveCharacterMeta(
         CharacterMeta meta)
     {
@@ -184,6 +195,7 @@ public partial class SaveManager : Node
         );
     }
 
+
     public void SetActiveCharacter(
         string characterId)
     {
@@ -204,6 +216,7 @@ public partial class SaveManager : Node
         }
     }
 
+
     public void DeleteCharacter(
         string characterId)
     {
@@ -218,6 +231,8 @@ public partial class SaveManager : Node
         }
     }
 
+
+    // ============================================================
     // WORLDS
     // ============================================================
 
@@ -263,6 +278,7 @@ public partial class SaveManager : Node
             )
             .ToList();
     }
+
 
     public WorldMeta LoadWorldMeta(
         string worldId)
@@ -321,6 +337,8 @@ public partial class SaveManager : Node
         }
     }
 
+
+    // ============================================================
     // CREATE WORLD
     // ============================================================
 
@@ -379,6 +397,8 @@ public partial class SaveManager : Node
         return meta;
     }
 
+
+    // ============================================================
     // SAVE WORLD
     // ============================================================
 
@@ -447,6 +467,38 @@ public partial class SaveManager : Node
             SaveWorldMeta(meta);
         }
     }
+
+
+    // ============================================================
+    // CENTRAL WORLD SAVE ENTRY POINT
+    // ============================================================
+
+    public void SaveCurrentWorld()
+{
+    if (string.IsNullOrEmpty(
+        ActiveWorldId))
+    {
+        GD.PrintErr(
+            "[SaveManager] Cannot save world. " +
+            "There is no active world."
+        );
+
+        return;
+    }
+
+    // Save current GameMode
+    if (GameModeManager.Instance != null)
+    {
+        GameModeManager.Instance.SaveToWorld();
+    }
+
+    // Save current mobs
+    SaveWorldMobs();
+
+    GD.Print(
+        "[SaveManager] Current world save completed."
+    );
+}
 
 
     // ============================================================
@@ -709,23 +761,37 @@ public partial class SaveManager : Node
 
                 Vector3 position =
                     mob.GlobalPosition;
+savedMobs.Add(
+    new SavedMobData
+    {
+        DefinitionPath =
+            mob.DefinitionPath,
 
-                savedMobs.Add(
-                    new SavedMobData
-                    {
-                        DefinitionPath =
-                            mob.DefinitionPath,
+        Position =
+            new float[]
+            {
+                position.X,
+                position.Y,
+                position.Z
+            },
 
-                        Position =
-                            new float[]
-                            {
-                                position.X,
-                                position.Y,
-                                position.Z
-                            }
-                    }
-                );
+        RotationY =
+            mob.Rotation.Y
+    }
+);
             }
+        }
+
+        // Do not open the file when there are zero mobs.
+        // Opening with Write would truncate the existing mobs.json.
+        if (savedMobs.Count == 0)
+        {
+            GD.Print(
+                "[SaveManager] Found 0 mobs. " +
+                "Existing mob save was left untouched."
+            );
+
+            return;
         }
 
         DirAccess.MakeDirRecursiveAbsolute(

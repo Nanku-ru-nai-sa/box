@@ -38,11 +38,12 @@ public partial class BlockRegistry : Node
         var snowTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/snow.png");
         var melonTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_top.png");
         var melonSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/melon_side.png");
-        var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rose.png");
-        var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/clover.png");
-        var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dandelion.png");
         var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
-        var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo_shoot.png");
+
+        var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/bamboo_shoot.png");
+        var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/rose.png");
+        var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/clover.png");
+        var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/dandelion.png");
 
         // Geology Layer rocks - fill for ChunkManager's Layers list (the
         // geology/soil-band system). diorite/gabbro previously only had

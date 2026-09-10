@@ -55,6 +55,17 @@ public partial class PlayerCamera : Node3D
             _camera.Fov = SettingsManager.Instance.Fov;
     }
 
+public float GetPitch()
+{
+    return _pitch;
+}
+
+public void SetPitch(float pitch)
+{
+    _pitch = Mathf.Clamp(pitch, MinPitch, MaxPitch);
+    Rotation = new Vector3(_pitch, 0, 0);
+}
+
     public Camera3D GetCamera() => _camera;
     public Vector3 GetCameraForward() => -_camera.GlobalTransform.Basis.Z;
 }

@@ -162,33 +162,88 @@ public partial class LoadingScreen : Node
     }
 
     private void OnWorldReady()
+{
+    GD.Print("LoadingScreen: WorldReady received.");
+    _worldReadyReceived = true;
+    _statusLabel.Text = "Almost there...";
+
+    // Restore saved GameMode
+    if (GameModeManager.Instance != null)
     {
-        GD.Print("LoadingScreen: WorldReady received.");
-        _worldReadyReceived = true;
-        _statusLabel.Text   = "Almost there...";
-        RestorePlayerPosition();
+        GameModeManager.Instance.LoadFromWorld();
     }
+
+    RestorePlayerPosition();
+}
 
     private void RestorePlayerPosition()
+{
+    var cm = FindChunkManager();
+    if (cm == null) return;
+
+    var player = FindPlayer();
+    if (player == null) return;
+
+    // =========================================================
+    // POSITION
+    // =========================================================
+
+    var savedPos = cm.LoadPlayerPosition();
+
+    if (savedPos.HasValue)
     {
-        var cm = FindChunkManager();
-        if (cm == null) return;
+        player.GlobalPosition = savedPos.Value;
 
-        var player = FindPlayer();
-        if (player == null) return;
-
-        var savedPos = cm.LoadPlayerPosition();
-        if (savedPos.HasValue)
-        {
-            player.GlobalPosition = savedPos.Value;
-            GD.Print($"LoadingScreen: Player position restored to {savedPos.Value}");
-        }
-        else
-        {
-            GD.Print("LoadingScreen: No saved position, using default spawn.");
-        }
+        GD.Print(
+            $"LoadingScreen: Player position restored to {savedPos.Value}"
+        );
+    }
+    else
+    {
+        GD.Print(
+            "LoadingScreen: No saved position, using default spawn."
+        );
     }
 
+    // =========================================================
+    // LOOK DIRECTION
+    // =========================================================
+
+    var savedLook = cm.LoadPlayerLook();
+
+    if (savedLook.HasValue)
+    {
+        float yaw = savedLook.Value.X;
+        float pitch = savedLook.Value.Y;
+
+        // Player body = left/right
+        player.Rotation = new Vector3(
+            player.Rotation.X,
+            yaw,
+            player.Rotation.Z
+        );
+
+        // Camera = up/down
+        if (player is Player playerScript)
+        {
+            var camera = playerScript.GetPlayerCamera();
+
+            if (camera != null)
+                camera.SetPitch(pitch);
+        }
+
+        GD.Print(
+            $"LoadingScreen: Player look restored. " +
+            $"Yaw={yaw}, Pitch={pitch}"
+        );
+    }
+    else
+    {
+        GD.Print(
+            "LoadingScreen: No saved look direction, using default."
+        );
+    }
+}
     private void FreezePlayer(bool freeze)
     {
         var player = FindPlayer();

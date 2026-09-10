@@ -90,26 +90,50 @@ public partial class MobSpawner : Node3D
     // ---------------------------------------------------------
 
     public override void _Ready()
+{
+    _rng.Randomize();
+
+    _spawnTimer = SpawnInterval;
+
+    if (MobScene == null)
     {
-        _rng.Randomize();
-
-        _spawnTimer = SpawnInterval;
-
-        if (MobScene == null)
-        {
-            GD.PrintErr(
-                "[MobSpawner] MobScene has not been assigned."
-            );
-        }
-
-        if (DefinitionPaths == null ||
-            DefinitionPaths.Length == 0)
-        {
-            GD.PrintErr(
-                "[MobSpawner] No mob definition paths assigned."
-            );
-        }
+        GD.PrintErr(
+            "[MobSpawner] MobScene has not been assigned."
+        );
     }
+
+    if (DefinitionPaths == null ||
+        DefinitionPaths.Length == 0)
+    {
+        GD.PrintErr(
+            "[MobSpawner] No mob definition paths assigned."
+        );
+    }
+
+    // Restore mobs only after the world/chunks are ready.
+var chunkManager =
+    GetTree().Root.FindChild(
+        "ChunkManager",
+        true,
+        false
+    ) as ChunkManager;
+
+if (chunkManager != null)
+{
+    chunkManager.WorldReady += LoadSavedMobs;
+
+    // Handle the case where the world was already ready.
+    if (chunkManager.IsInitialLoadComplete)
+        CallDeferred(nameof(LoadSavedMobs));
+}
+else
+{
+    GD.PrintErr(
+        "[MobSpawner] ChunkManager not found. " +
+        "Saved mobs cannot be restored."
+    );
+}
+}
 
 
     // ---------------------------------------------------------
@@ -275,38 +299,128 @@ public partial class MobSpawner : Node3D
     // ---------------------------------------------------------
 
     private void SpawnMob(
-        string definitionPath,
-        Vector3 spawnPosition)
+    string definitionPath,
+    Vector3 spawnPosition,
+    float rotationY = 0f)
+{
+    if (MobScene == null)
+        return;
+
+    Mob mob =
+        MobScene.Instantiate<Mob>();
+
+    if (mob == null)
     {
-        if (MobScene == null)
-            return;
-
-        Mob mob =
-            MobScene.Instantiate<Mob>();
-
-        if (mob == null)
-        {
-            GD.PrintErr(
-                "[MobSpawner] MobScene did not contain a Mob."
-            );
-
-            return;
-        }
-
-        // The Mob needs to know which JSON definition to use.
-        mob.DefinitionPath =
-            definitionPath;
-
-        AddChild(mob);
-
-        mob.GlobalPosition =
-            spawnPosition;
-
-        GD.Print(
-            $"[MobSpawner] Spawned mob from {definitionPath} at {spawnPosition}"
+        GD.PrintErr(
+            "[MobSpawner] MobScene did not contain a Mob."
         );
+
+        return;
     }
 
+    // The Mob needs to know which JSON definition to use.
+    mob.DefinitionPath =
+        definitionPath;
+
+    AddChild(mob);
+
+    mob.GlobalPosition =
+        spawnPosition;
+
+    mob.Rotation =
+        new Vector3(
+            0f,
+            rotationY,
+            0f
+        );
+
+    GD.Print(
+        $"[MobSpawner] Spawned mob from {definitionPath} " +
+        $"at {spawnPosition} facing Y={rotationY}"
+    );
+}
+// ---------------------------------------------------------
+// LOAD SAVED MOBS
+// ---------------------------------------------------------
+
+private void LoadSavedMobs()
+{
+    var chunkManager =
+        GetTree().Root.FindChild(
+            "ChunkManager",
+            true,
+            false
+        ) as ChunkManager;
+
+    if (chunkManager != null)
+        chunkManager.WorldReady -= LoadSavedMobs;
+        
+    if (SaveManager.Instance == null)
+    {
+        GD.PrintErr(
+            "[MobSpawner] SaveManager is not available."
+        );
+
+        return;
+    }
+
+    if (MobScene == null)
+    {
+        GD.PrintErr(
+            "[MobSpawner] Cannot restore mobs because MobScene is null."
+        );
+
+        return;
+    }
+
+    List<SavedMobData> savedMobs =
+        SaveManager.Instance.LoadWorldMobs();
+
+    if (savedMobs == null ||
+        savedMobs.Count == 0)
+    {
+        GD.Print(
+            "[MobSpawner] No saved mobs to restore."
+        );
+
+        return;
+    }
+
+    foreach (SavedMobData saved in savedMobs)
+    {
+        if (saved == null)
+            continue;
+
+        if (string.IsNullOrEmpty(
+            saved.DefinitionPath))
+        {
+            continue;
+        }
+
+        if (saved.Position == null ||
+            saved.Position.Length != 3)
+        {
+            continue;
+        }
+
+        Vector3 position =
+            new Vector3(
+                saved.Position[0],
+                saved.Position[1],
+                saved.Position[2]
+            );
+
+        SpawnMob(
+    saved.DefinitionPath,
+    position,
+    saved.RotationY
+);
+    }
+
+    GD.Print(
+        $"[MobSpawner] Restored {savedMobs.Count} saved mobs."
+    );
+}
 
     // ---------------------------------------------------------
     // COUNT MOBS

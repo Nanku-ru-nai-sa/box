@@ -106,17 +106,24 @@ public partial class MobSpawnerManager : Node
             parent.AddChild(mob);
 
             mob.GlobalPosition =
-                new Vector3(
-                    saved.Position[0],
-                    saved.Position[1],
-                    saved.Position[2]
-                );
+    new Vector3(
+        saved.Position[0],
+        saved.Position[1],
+        saved.Position[2]
+    );
 
-            GD.Print(
-                $"[MobSpawnerManager] Restored mob: " +
-                $"{saved.DefinitionPath} at " +
-                $"{mob.GlobalPosition}"
-            );
+mob.Rotation = new Vector3(
+    0f,
+    saved.RotationY,
+    0f
+);
+
+GD.Print(
+    $"[MobSpawnerManager] Restored mob: " +
+    $"{saved.DefinitionPath} at " +
+    $"{mob.GlobalPosition} " +
+    $"facing Y={saved.RotationY}"
+);
         }
 
         GD.Print(

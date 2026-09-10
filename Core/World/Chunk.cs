@@ -303,17 +303,21 @@ public partial class Chunk : Node3D
     }
 
     public void SetBlockNaturalGrowth(
-        int x,
-        int y,
-        int z,
-        BlockState block)
-    {
-        if (!IsInBounds(x, y, z))
-            return;
+    int x,
+    int y,
+    int z,
+    BlockState block)
+{
+    if (!IsInBounds(x, y, z))
+        return;
 
-        _blocks[x, y, z] = block;
-        _isDirty = true;
-    }
+    _blocks[x, y, z] = block;
+
+    // Natural growth must persist just like player changes.
+    _modifiedBlocks[new Vector3I(x, y, z)] = block;
+
+    _isDirty = true;
+}
 
     private BlockState GetBlockCrossChunk(
         int x,

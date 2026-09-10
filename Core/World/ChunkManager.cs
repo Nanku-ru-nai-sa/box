@@ -596,7 +596,10 @@ public void LoadInventory(Inventory inventory)
     GD.Print("Inventory loaded.");
 }
 
-public void SavePlayerPosition(Vector3 position)
+public void SavePlayerPosition(
+    Vector3 position,
+    float yaw,
+    float pitch)
 {
     DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
 
@@ -604,28 +607,73 @@ public void SavePlayerPosition(Vector3 position)
     {
         ["x"] = position.X,
         ["y"] = position.Y,
-        ["z"] = position.Z
+        ["z"] = position.Z,
+
+        ["yaw"] = yaw,
+        ["pitch"] = pitch
     };
 
-    using var file = FileAccess.Open(PlayerSaveDirectory + "player.json", FileAccess.ModeFlags.Write);
+    using var file = FileAccess.Open(
+        PlayerSaveDirectory + "player.json",
+        FileAccess.ModeFlags.Write
+    );
+
     file.StoreString(Json.Stringify(data));
-    GD.Print($"Player position saved: {position}");
+
+    GD.Print(
+        $"Player saved: position={position}, " +
+        $"yaw={yaw}, pitch={pitch}"
+    );
 }
 
 public Vector3? LoadPlayerPosition()
 {
     string path = PlayerSaveDirectory + "player.json";
-    if (!FileAccess.FileExists(path)) return null;
 
-    using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+    if (!FileAccess.FileExists(path))
+        return null;
+
+    using var file = FileAccess.Open(
+        path,
+        FileAccess.ModeFlags.Read
+    );
+
     var parsed = Json.ParseString(file.GetAsText()).AsGodotDictionary();
-    if (parsed == null) return null;
+
+    if (parsed == null)
+        return null;
 
     return new Vector3(
         (float)parsed["x"],
         (float)parsed["y"],
         (float)parsed["z"]
     );
+}
+
+public Vector2? LoadPlayerLook()
+{
+    string path = PlayerSaveDirectory + "player.json";
+
+    if (!FileAccess.FileExists(path))
+        return null;
+
+    using var file = FileAccess.Open(
+        path,
+        FileAccess.ModeFlags.Read
+    );
+
+    var parsed = Json.ParseString(file.GetAsText()).AsGodotDictionary();
+
+    if (parsed == null)
+        return null;
+
+    if (!parsed.ContainsKey("yaw") || !parsed.ContainsKey("pitch"))
+        return null;
+
+    float yaw = (float)parsed["yaw"];
+    float pitch = (float)parsed["pitch"];
+
+    return new Vector2(yaw, pitch);
 }
 
     public void LoadChunkModifications(Chunk chunk, Vector3I chunkPos)

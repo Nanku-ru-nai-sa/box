@@ -2156,8 +2156,6 @@ _moonCube.Visible =
         );
     }
 
-    // Save all currently existing mobs.
-    SaveManager.Instance.SaveWorldMobs();
 }
 
     // ============================================================

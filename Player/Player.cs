@@ -1966,6 +1966,11 @@ private void HandleOutputClicked(MouseButton button, bool shift)
 
         if (@event is InputEventMouseButton mb)
         {
+            if (mb.ButtonIndex == MouseButton.Middle && mb.Pressed)
+{
+    PickBlock();
+    return;
+}
             if (!_inventoryOpen && !_chatOpen && !_creativeMenuOpen)
             {
                 if (mb.ButtonIndex == MouseButton.Left)
@@ -2076,7 +2081,11 @@ private void HandleOutputClicked(MouseButton button, bool shift)
                 var cm = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
                 cm.Call("SaveModifiedChunks");
                 cm.SaveInventory(_inventory);
-                cm.SavePlayerPosition(GlobalPosition);
+                cm.SavePlayerPosition(
+    GlobalPosition,
+    Rotation.Y,
+    _playerCamera?.GetPitch() ?? 0f
+);
                 GD.Print("World saved!");
             }
         }
@@ -2268,7 +2277,152 @@ while (mob == null && current != null)
             Input.MouseMode      = Input.MouseModeEnum.Captured;
         }
     }
+private void PickBlock()
+{
+    // Don't pick through UI.
+    if (_inventoryOpen || _chatOpen || _creativeMenuOpen)
+        return;
 
+    if (_inventory == null || _inventory.Slots == null)
+        return;
+
+    // Must be looking at an actual chunk block.
+    if (!_rayCast.IsColliding())
+        return;
+
+    var col = _rayCast.GetCollider() as Node;
+
+    if (col == null || !col.HasMeta("chunk"))
+        return;
+
+    Chunk chunk = (Chunk)col.GetMeta("chunk").AsGodotObject();
+    if (chunk == null)
+        return;
+
+    // Find the block we're looking at.
+    Vector3 targetPos =
+        _rayCast.GetCollisionPoint()
+        - _rayCast.GetCollisionNormal() * 0.5f;
+
+    Vector3 localPos =
+        targetPos - chunk.GlobalPosition;
+
+    int bx = Mathf.FloorToInt(localPos.X);
+    int by = Mathf.FloorToInt(localPos.Y);
+    int bz = Mathf.FloorToInt(localPos.Z);
+
+    BlockState block =
+        chunk.GetBlock(bx, by, bz);
+
+    if (block.IsAir())
+        return;
+
+    string blockId = block.BlockId;
+
+    if (string.IsNullOrEmpty(blockId))
+        return;
+
+    // ---------------------------------------------------------
+    // FIRST: look for the block in the hotbar.
+    // ---------------------------------------------------------
+
+    for (int i = 0; i < HotbarSize; i++)
+    {
+        int inventoryIndex = MainInvSize + i;
+        var slot = _inventory.Slots[inventoryIndex];
+
+        if (slot != null &&
+            !slot.IsEmpty &&
+            slot.ItemId == blockId)
+        {
+            SelectHotbarSlot(i);
+            RefreshAllSlotVisuals();
+            return;
+        }
+    }
+
+    // ---------------------------------------------------------
+    // SECOND: look through the main inventory.
+    // ---------------------------------------------------------
+
+    for (int i = 0; i < MainInvSize; i++)
+    {
+        var slot = _inventory.Slots[i];
+
+        if (slot == null ||
+            slot.IsEmpty ||
+            slot.ItemId != blockId)
+            continue;
+
+        int hotbarIndex =
+            MainInvSize + _selectedSlot;
+
+        var hotbarSlot =
+            _inventory.Slots[hotbarIndex];
+
+        // Swap the inventory stack with the selected hotbar slot.
+        (
+            hotbarSlot.ItemId,
+            slot.ItemId
+        ) =
+        (
+            slot.ItemId,
+            hotbarSlot.ItemId
+        );
+
+        (
+            hotbarSlot.Count,
+            slot.Count
+        ) =
+        (
+            slot.Count,
+            hotbarSlot.Count
+        );
+
+        (
+            hotbarSlot.CurrentDurability,
+            slot.CurrentDurability
+        ) =
+        (
+            slot.CurrentDurability,
+            hotbarSlot.CurrentDurability
+        );
+
+        SelectHotbarSlot(_selectedSlot);
+
+        FireChanged();
+        RefreshAllSlotVisuals();
+
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // CREATE MODE:
+    // If we don't have the block, create a full stack.
+    // ---------------------------------------------------------
+
+    var gm = GameModeManager.Instance;
+
+    if (gm != null && gm.IsCreate)
+    {
+        if (!BlockRegistry.Instance.BlockExists(blockId))
+            return;
+
+        int hotbarIndex =
+            MainInvSize + _selectedSlot;
+
+        var hotbarSlot =
+            _inventory.Slots[hotbarIndex];
+
+        hotbarSlot.ItemId = blockId;
+        hotbarSlot.Count = _inventory.MaxStackSize;
+
+        SelectHotbarSlot(_selectedSlot);
+
+        FireChanged();
+        RefreshAllSlotVisuals();
+    }
+}
     // =========================================================================
     // BLOCK BREAK / PLACE
     // =========================================================================
@@ -3067,10 +3221,15 @@ return;
     public PlayerCamera GetPlayerCamera() => _playerCamera;
 
     public void SaveInventoryFromPauseMenu(ChunkManager cm)
-    {
-        cm.SaveInventory(_inventory);
-        cm.SavePlayerPosition(GlobalPosition);
-    }
+{
+    cm.SaveInventory(_inventory);
+
+    cm.SavePlayerPosition(
+        GlobalPosition,
+        Rotation.Y,
+        _playerCamera?.GetPitch() ?? 0f
+    );
+}
 
     public void ApplyGearMovement(ItemResource gear)
     {
