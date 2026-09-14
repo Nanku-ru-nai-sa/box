@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://vn5bvojqgsny"
-path="res://.godot/imported/22.png-3f162310d519cf0745726ce4c932df6c.ctex"
+uid="uid://du4jfkffn3hk6"
+path="res://.godot/imported/fur.png-ccd1d9b1feda47af5f920630c67a56e5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/22.png"
-dest_files=["res://.godot/imported/22.png-3f162310d519cf0745726ce4c932df6c.ctex"]
+source_file="res://Assets/Textures/Items/drop/fur.png"
+dest_files=["res://.godot/imported/fur.png-ccd1d9b1feda47af5f920630c67a56e5.ctex"]
 
 [params]
 

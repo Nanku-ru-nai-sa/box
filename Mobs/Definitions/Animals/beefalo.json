@@ -1,0 +1,89 @@
+{
+  "id": "beefalo",
+  "displayName": "Beefalo",
+  "model": "res://Assets/Models/Mobs/beefalo/beefalo.gltf",
+
+  "stats": {
+	"maxHealth": 30.0,
+	"moveSpeed": 2.0,
+	"turnSpeed": 6.0
+  },
+
+  "behavior": {
+	"type": "passive",
+	"detectionRange": 8.0,
+	"attackRange": 1.5,
+	"attackDamage": 4.0,
+	"attackInterval": 1.2
+  },
+
+  "sleep": {
+	"enabled": true,
+	"startHour": 20.0,
+	"endHour": 6.0
+  },
+
+  "flee": {
+	"enabled": false,
+	"distance": 6.0,
+	"speedMultiplier": 1.8
+  },
+
+  "fur": {
+	"enabled": true,
+	"item": "beefalo_fur",
+	"shearAmount": 3,
+	"deathAmount": 3
+  },
+
+  "shearing": {
+	"enabled": true,
+	"requiresSleeping": true,
+	"angerWhenAwake": true
+  },
+
+  "inHeat": {
+	"enabled": true,
+	"seasons": [
+      "spring"
+	]
+  },
+
+  "breeding": {
+	"enabled": true,
+	"food": [
+      "wheat"
+	],
+	"babyChance": 1.0
+  },
+
+  "gender": {
+	"enabled": true,
+	"maleModel": "",
+	"femaleModel": "",
+	"maleTexture": "",
+	"femaleTexture": ""
+  },
+
+  "spawning": {
+	"enabled": true
+  },
+
+  "baby": {
+	"enabled": true,
+	"growthTime": 1200.0,
+	"model": "",
+	"texture": ""
+  },
+
+  "food": {
+	"items": [
+      "wheat"
+	]
+  },
+
+  "drops": {
+	"enabled": true,
+	"items": []
+  }
+}

@@ -22,6 +22,12 @@
 	"attackInterval": 1.2
   },
 
+"sleep": {
+	"enabled": true,
+	"startHour": 20.0,
+	"endHour": 6.0
+  },
+
   "flee": {
 	"enabled": true,
 	"distance": 6.0,

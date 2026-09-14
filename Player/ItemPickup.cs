@@ -73,19 +73,17 @@ public partial class ItemPickup : Node3D
     private const string BlockTexturePath =
         "res://Assets/Textures/Blocks/{0}.png";
 
-    private const string ItemTexturePath =
-        "res://Assets/Textures/Items/{0}.png";
-
-    // IMPORTANT:
-    // Your ore drops live here:
+    // Items are searched recursively.
     //
-    // res://Assets/Textures/Items/ore/moon_shard.png
-    // res://Assets/Textures/Items/ore/sun_shard.png
+    // Examples that will all work:
     //
-    private const string OreTexturePath =
-        "res://Assets/Textures/Items/ore/{0}.png";
+    // res://Assets/Textures/Items/beefalo_fur.png
+    // res://Assets/Textures/Items/fur/beefalo_fur.png
+    // res://Assets/Textures/Items/animals/fur/beefalo_fur.png
+    //
+    private const string ItemTextureRoot =
+        "res://Assets/Textures/Items";
 
-    // Kept as a fallback in case you later put other celestial textures here.
     private const string CelestialTexturePath =
         "res://Assets/Textures/Celestial/{0}.png";
 
@@ -127,24 +125,12 @@ public partial class ItemPickup : Node3D
     public override void _Ready()
     {
         // --------------------------------------------------------
-        // Build all possible texture paths.
+        // Build possible texture paths.
         // --------------------------------------------------------
 
         string blockPath =
             string.Format(
                 BlockTexturePath,
-                ItemId
-            );
-
-        string itemPath =
-            string.Format(
-                ItemTexturePath,
-                ItemId
-            );
-
-        string orePath =
-            string.Format(
-                OreTexturePath,
                 ItemId
             );
 
@@ -178,97 +164,91 @@ public partial class ItemPickup : Node3D
 
 
         // --------------------------------------------------------
-        // 2. ORE
+        // 2. NORMAL ITEM
         //
-        // This MUST be checked before normal Items because your
-        // celestial drops are stored in Items/ore/.
-        // --------------------------------------------------------
-
-        else if (ResourceLoader.Exists(orePath))
-        {
-            _isBlock = false;
-
-            sourceTexture =
-                ResourceLoader.Load<Texture2D>(
-                    orePath
-                );
-
-            GD.Print(
-                $"[ItemPickup] Loaded ore texture: {orePath}"
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // 3. NORMAL ITEM
-        // --------------------------------------------------------
-
-        else if (ResourceLoader.Exists(itemPath))
-        {
-            _isBlock = false;
-
-            sourceTexture =
-                ResourceLoader.Load<Texture2D>(
-                    itemPath
-                );
-
-            GD.Print(
-                $"[ItemPickup] Loaded item texture: {itemPath}"
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // 4. CELESTIAL FALLBACK
-        // --------------------------------------------------------
-
-        else if (ResourceLoader.Exists(celestialPath))
-        {
-            _isBlock = false;
-
-            sourceTexture =
-                ResourceLoader.Load<Texture2D>(
-                    celestialPath
-                );
-
-            GD.Print(
-                $"[ItemPickup] Loaded celestial texture: {celestialPath}"
-            );
-        }
-
-
-        // --------------------------------------------------------
-        // 5. NOTHING FOUND
+        // Search the entire Items folder recursively.
+        // This means item subfolders do not need to be listed.
         // --------------------------------------------------------
 
         else
         {
-            _isBlock = false;
-            sourceTexture = null;
+            string itemPath =
+                FindItemTexturePath(
+                    ItemTextureRoot,
+                    ItemId
+                );
 
-            GD.PrintErr(
-                $"[ItemPickup] Could not find texture for item '{ItemId}'."
-            );
+            if (!string.IsNullOrWhiteSpace(itemPath))
+            {
+                _isBlock = false;
 
-            GD.PrintErr(
-                $"[ItemPickup] Checked:"
-            );
+                sourceTexture =
+                    ResourceLoader.Load<Texture2D>(
+                        itemPath
+                    );
 
-            GD.PrintErr(
-                $"  {blockPath}"
-            );
+                GD.Print(
+                    $"[ItemPickup] Loaded item texture: {itemPath}"
+                );
+            }
 
-            GD.PrintErr(
-                $"  {orePath}"
-            );
 
-            GD.PrintErr(
-                $"  {itemPath}"
-            );
+            // ----------------------------------------------------
+            // 3. CELESTIAL FALLBACK
+            // ----------------------------------------------------
 
-            GD.PrintErr(
-                $"  {celestialPath}"
-            );
+            else if (ResourceLoader.Exists(celestialPath))
+            {
+                _isBlock = false;
+
+                sourceTexture =
+                    ResourceLoader.Load<Texture2D>(
+                        celestialPath
+                    );
+
+                GD.Print(
+                    $"[ItemPickup] Loaded celestial texture: {celestialPath}"
+                );
+            }
+
+
+            // ----------------------------------------------------
+            // 4. NOTHING FOUND
+            // ----------------------------------------------------
+
+            else
+            {
+                _isBlock = false;
+                sourceTexture = null;
+
+                GD.PrintErr(
+                    $"[ItemPickup] Could not find texture for item '{ItemId}'."
+                );
+
+                GD.PrintErr(
+                    $"[ItemPickup] Checked block:"
+                );
+
+                GD.PrintErr(
+                    $"  {blockPath}"
+                );
+
+                GD.PrintErr(
+                    $"[ItemPickup] Searched recursively:"
+                );
+
+                GD.PrintErr(
+                    $"  {ItemTextureRoot}/"
+                );
+
+                GD.PrintErr(
+                    $"[ItemPickup] Checked celestial:"
+                );
+
+                GD.PrintErr(
+                    $"  {celestialPath}"
+                );
+            }
         }
 
 
@@ -450,6 +430,117 @@ public partial class ItemPickup : Node3D
                 TwistMin,
                 TwistMax
             );
+    }
+
+
+    // ============================================================
+    // FIND ITEM TEXTURE RECURSIVELY
+    // ============================================================
+    //
+    // Searches:
+    //
+    // res://Assets/Textures/Items/
+    //
+    // and every folder underneath it.
+    //
+    // The first PNG matching ItemId is returned.
+    //
+    // Example:
+    //
+    // ItemId = "beefalo_fur"
+    //
+    // Can find:
+    //
+    // res://Assets/Textures/Items/beefalo_fur.png
+    // res://Assets/Textures/Items/fur/beefalo_fur.png
+    // res://Assets/Textures/Items/animals/beefalo_fur.png
+    //
+    // ============================================================
+
+    private string FindItemTexturePath(
+        string folderPath,
+        string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return "";
+
+
+        DirAccess dir =
+            DirAccess.Open(
+                folderPath
+            );
+
+        if (dir == null)
+        {
+            return "";
+        }
+
+
+        // --------------------------------------------------------
+        // Check files in this folder.
+        // --------------------------------------------------------
+
+        string[] files =
+            dir.GetFiles();
+
+        foreach (string fileName in files)
+        {
+            if (!fileName.EndsWith(
+                    ".png",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string baseName =
+                System.IO.Path.GetFileNameWithoutExtension(
+                    fileName
+                );
+
+            if (!string.Equals(
+                    baseName,
+                    itemId,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            string fullPath =
+                $"{folderPath}/{fileName}";
+
+            if (ResourceLoader.Exists(fullPath))
+            {
+                return fullPath;
+            }
+        }
+
+
+        // --------------------------------------------------------
+        // Search subfolders.
+        // --------------------------------------------------------
+
+        string[] directories =
+            dir.GetDirectories();
+
+        foreach (string directoryName in directories)
+        {
+            string childPath =
+                $"{folderPath}/{directoryName}";
+
+            string result =
+                FindItemTexturePath(
+                    childPath,
+                    itemId
+                );
+
+            if (!string.IsNullOrWhiteSpace(result))
+            {
+                return result;
+            }
+        }
+
+
+        return "";
     }
 
 
@@ -763,8 +854,7 @@ public partial class ItemPickup : Node3D
                     if (
                         Mathf.Abs(
                             _velocity.Y
-                        ) >
-                        BounceSettleSpeed
+                        ) > BounceSettleSpeed
                     )
                     {
                         _velocity.Y =
@@ -910,13 +1000,13 @@ public partial class ItemPickup : Node3D
                     GlobalPosition
                 ).Normalized();
 
-
             GlobalPosition +=
                 toPlayer *
                 MagnetSpeed *
                 dt;
 
-            _settled = false;
+            _settled =
+                false;
         }
     }
 

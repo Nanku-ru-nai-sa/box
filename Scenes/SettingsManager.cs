@@ -10,15 +10,24 @@ public partial class SettingsManager : Node
     public static SettingsManager Instance { get; private set; }
 
     // ── Settings values ──────────────────────────────────────────────────────
+
     // Stored as 0-100 slider value; converted to actual multiplier in PlayerCamera
     public float MouseSensitivity { get; private set; } = 50f;
-    public float Fov              { get; private set; } = 75f;
-    public float MasterVolume     { get; private set; } = 1.0f;  // 0.0 - 1.0
-    public bool  Fullscreen       { get; private set; } = false;
+
+    public float Fov { get; private set; } = 75f;
+
+    public float MasterVolume { get; private set; } = 1.0f; // 0.0 - 1.0
+
+    public bool Fullscreen { get; private set; } = false;
+
+    // Player HUD
+    // When true, HP / Mana / Stamina remain visible instead of fading when full.
+    public bool ShowPlayerStats { get; private set; } = true;
 
     // Admin — unlocked by typing /admin <password> in chat
-    public bool   IsAdmin        { get; private set; } = false;
-    private const string AdminPassword = "boxadmin"; // change this to whatever you want
+    public bool IsAdmin { get; private set; } = false;
+
+    private const string AdminPassword = "boxadmin";
 
     private const string SavePath = "user://settings.json";
 
@@ -28,15 +37,17 @@ public partial class SettingsManager : Node
     public override void _Ready()
     {
         Instance = this;
+
         Load();
         ApplyAll();
     }
 
-    // ── Setters (call these from menus) ─────────────────────────────────────
+    // ── Setters ──────────────────────────────────────────────────────────────
 
     public void SetMouseSensitivity(float value)
     {
         MouseSensitivity = Mathf.Clamp(value, 0f, 100f);
+
         Save();
         OnSettingsChanged?.Invoke();
     }
@@ -44,7 +55,9 @@ public partial class SettingsManager : Node
     public void SetFov(float value)
     {
         Fov = Mathf.Clamp(value, 50f, 120f);
+
         ApplyFov();
+
         Save();
         OnSettingsChanged?.Invoke();
     }
@@ -52,7 +65,9 @@ public partial class SettingsManager : Node
     public void SetMasterVolume(float value)
     {
         MasterVolume = Mathf.Clamp(value, 0f, 1f);
+
         ApplyVolume();
+
         Save();
         OnSettingsChanged?.Invoke();
     }
@@ -60,7 +75,17 @@ public partial class SettingsManager : Node
     public void SetFullscreen(bool value)
     {
         Fullscreen = value;
+
         ApplyFullscreen();
+
+        Save();
+        OnSettingsChanged?.Invoke();
+    }
+
+    public void SetShowPlayerStats(bool value)
+    {
+        ShowPlayerStats = value;
+
         Save();
         OnSettingsChanged?.Invoke();
     }
@@ -73,11 +98,15 @@ public partial class SettingsManager : Node
             GD.Print("Admin unlocked.");
             return true;
         }
+
         GD.Print("Wrong admin password.");
         return false;
     }
 
-    public void RevokeAdmin() { IsAdmin = false; }
+    public void RevokeAdmin()
+    {
+        IsAdmin = false;
+    }
 
     // ── Apply to engine ──────────────────────────────────────────────────────
 
@@ -99,9 +128,12 @@ public partial class SettingsManager : Node
     {
         // Convert linear 0-1 to dB for Godot's audio bus
         float db = MasterVolume > 0f
-            ? 20f * Mathf.Log(MasterVolume) / Mathf.Log(10f)  // linear → dB
+            ? 20f * Mathf.Log(MasterVolume) / Mathf.Log(10f)
             : -80f;
-        AudioServer.SetBusVolumeDb(AudioServer.GetBusIndex("Master"), db);
+
+        AudioServer.SetBusVolumeDb(
+            AudioServer.GetBusIndex("Master"),
+            db);
     }
 
     private void ApplyFullscreen()
@@ -121,29 +153,58 @@ public partial class SettingsManager : Node
             ["mouse_sensitivity"] = MouseSensitivity,
             ["fov"]               = Fov,
             ["master_volume"]     = MasterVolume,
-            ["fullscreen"]        = Fullscreen
+            ["fullscreen"]        = Fullscreen,
+            ["show_player_stats"] = ShowPlayerStats
         };
 
-        using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Write);
-        if (file == null) { GD.PrintErr("SettingsManager: could not write settings"); return; }
+        using var file = FileAccess.Open(
+            SavePath,
+            FileAccess.ModeFlags.Write);
+
+        if (file == null)
+        {
+            GD.PrintErr("SettingsManager: could not write settings");
+            return;
+        }
+
         file.StoreString(Json.Stringify(data));
+
         GD.Print("Settings saved.");
     }
 
     public void Load()
     {
-        if (!FileAccess.FileExists(SavePath)) return;
+        if (!FileAccess.FileExists(SavePath))
+            return;
 
-        using var file = FileAccess.Open(SavePath, FileAccess.ModeFlags.Read);
-        if (file == null) return;
+        using var file = FileAccess.Open(
+            SavePath,
+            FileAccess.ModeFlags.Read);
+
+        if (file == null)
+            return;
 
         var parsed = Json.ParseString(file.GetAsText()).AsGodotDictionary();
-        if (parsed == null) return;
 
-        if (parsed.ContainsKey("mouse_sensitivity")) MouseSensitivity = (float)parsed["mouse_sensitivity"];
-        if (parsed.ContainsKey("fov"))               Fov              = (float)parsed["fov"];
-        if (parsed.ContainsKey("master_volume"))     MasterVolume     = (float)parsed["master_volume"];
-        if (parsed.ContainsKey("fullscreen"))        Fullscreen       = (bool)parsed["fullscreen"];
+        if (parsed == null)
+            return;
+
+        if (parsed.ContainsKey("mouse_sensitivity"))
+            MouseSensitivity = (float)parsed["mouse_sensitivity"];
+
+        if (parsed.ContainsKey("fov"))
+            Fov = (float)parsed["fov"];
+
+        if (parsed.ContainsKey("master_volume"))
+            MasterVolume = (float)parsed["master_volume"];
+
+        if (parsed.ContainsKey("fullscreen"))
+            Fullscreen = (bool)parsed["fullscreen"];
+
+        // Older settings files won't have this entry.
+        // In that case the default remains true.
+        if (parsed.ContainsKey("show_player_stats"))
+            ShowPlayerStats = (bool)parsed["show_player_stats"];
 
         GD.Print("Settings loaded.");
     }

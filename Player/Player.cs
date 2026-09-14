@@ -251,9 +251,9 @@ public partial class Player : CharacterBody3D
     // TEXTURE LOADING
     // =========================================================================
 
-    private Texture2D _unknownItemIconTex; // fallback for any item whose real icon can't be found - loaded once, lazily
+   private Texture2D _unknownItemIconTex;
 
-   private Texture2D GetItemIcon(string itemId)
+private Texture2D GetItemIcon(string itemId)
 {
     if (string.IsNullOrEmpty(itemId))
         return null;
@@ -262,10 +262,10 @@ public partial class Player : CharacterBody3D
         return cached;
 
     // ------------------------------------------------------------
-    // 1. Prefer the icon already assigned to the ItemResource.
+    // 1. Prefer the icon assigned directly to the ItemResource.
     // ------------------------------------------------------------
-    // This is important for tools and crafted items that generate
-    // their icons dynamically.
+    // Important for tools and crafted items that generate or assign
+    // their own icons.
 
     var item =
         ItemRegistry.Instance?.GetItem(itemId);
@@ -275,49 +275,39 @@ public partial class Player : CharacterBody3D
 
 
     // ------------------------------------------------------------
-    // 2. Normal item texture
+    // 2. Recursively search Assets/Textures/Items
     // ------------------------------------------------------------
-
-    if (tex == null)
-    {
-        string path =
-            $"res://Assets/Textures/Items/{itemId}.png";
-
-        if (ResourceLoader.Exists(path))
-        {
-            tex =
-                ResourceLoader.Load<Texture2D>(
-                    path
-                );
-        }
-    }
-
-
-    // ------------------------------------------------------------
-    // 3. Ore texture
-    // ------------------------------------------------------------
-    // Sun and Moon shards are stored here:
+    // This allows any item texture to live in any subfolder:
     //
-    // Assets/Textures/Items/ore/sun_shard.png
-    // Assets/Textures/Items/ore/moon_shard.png
+    // Items/apple.png
+    // Items/food/apple.png
+    // Items/food/fruit/apple.png
+    // Items/ore/sun_shard.png
+    // Items/tool/chalk/chalk.png
+    //
+    // No folder list needs to be maintained here.
 
     if (tex == null)
     {
-        string orePath =
-            $"res://Assets/Textures/Items/ore/{itemId}.png";
+        string itemTexturePath =
+            FindItemTexturePath(
+                "res://Assets/Textures/Items",
+                itemId
+            );
 
-        if (ResourceLoader.Exists(orePath))
+        if (!string.IsNullOrEmpty(itemTexturePath) &&
+            ResourceLoader.Exists(itemTexturePath))
         {
             tex =
                 ResourceLoader.Load<Texture2D>(
-                    orePath
+                    itemTexturePath
                 );
         }
     }
 
 
     // ------------------------------------------------------------
-    // 4. Block texture fallback
+    // 3. Block texture fallback
     // ------------------------------------------------------------
 
     if (tex == null)
@@ -336,7 +326,7 @@ public partial class Player : CharacterBody3D
 
 
     // ------------------------------------------------------------
-    // 5. Unknown item placeholder
+    // 4. Unknown item placeholder
     // ------------------------------------------------------------
 
     if (tex == null)
@@ -355,7 +345,7 @@ public partial class Player : CharacterBody3D
 
 
     // ------------------------------------------------------------
-    // 6. Cache the result
+    // 5. Cache the result
     // ------------------------------------------------------------
 
     _iconCache[itemId] =
@@ -364,6 +354,82 @@ public partial class Player : CharacterBody3D
     return tex;
 }
 
+
+// =========================================================================
+// RECURSIVE ITEM TEXTURE SEARCH
+// =========================================================================
+
+private string FindItemTexturePath(
+    string folderPath,
+    string itemId)
+{
+    if (string.IsNullOrWhiteSpace(itemId))
+        return "";
+
+    DirAccess dir =
+        DirAccess.Open(folderPath);
+
+    if (dir == null)
+        return "";
+
+
+    // ------------------------------------------------------------
+    // Check files in this folder
+    // ------------------------------------------------------------
+
+    string[] files =
+        dir.GetFiles();
+
+    foreach (string fileName in files)
+    {
+        if (!fileName.EndsWith(
+                ".png",
+                StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        string baseName =
+            System.IO.Path.GetFileNameWithoutExtension(
+                fileName
+            );
+
+        if (!string.Equals(
+                baseName,
+                itemId,
+                StringComparison.OrdinalIgnoreCase))
+            continue;
+
+        string fullPath =
+            $"{folderPath}/{fileName}";
+
+        if (ResourceLoader.Exists(fullPath))
+            return fullPath;
+    }
+
+
+    // ------------------------------------------------------------
+    // Search every subfolder
+    // ------------------------------------------------------------
+
+    string[] directories =
+        dir.GetDirectories();
+
+    foreach (string directoryName in directories)
+    {
+        string childPath =
+            $"{folderPath}/{directoryName}";
+
+        string result =
+            FindItemTexturePath(
+                childPath,
+                itemId
+            );
+
+        if (!string.IsNullOrWhiteSpace(result))
+            return result;
+    }
+
+    return "";
+}
     // =========================================================================
     // UI BUILDERS
     // =========================================================================

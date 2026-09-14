@@ -19,6 +19,7 @@ using System.Collections.Generic;
 // - Health bar
 // - GLTF models
 // - Walking animation
+// - Sleeping
 // - Male / Female gender
 // - Male / Female models
 // - Male / Female textures
@@ -28,7 +29,10 @@ using System.Collections.Generic;
 // - Custom baby models
 // - Custom baby textures
 // - Baby growth
+// - Fur
+// - Shearing
 // - JSON-configurable drops
+// - Automatic fur death drops
 // - Automatic model-based collision
 //
 // IMPORTANT:
@@ -114,6 +118,21 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // FUR / SHEARING
+    // =========================================================
+
+    public bool HasFur { get; private set; }
+    public bool CanBeSheared { get; private set; }
+    public string FurItem { get; private set; } = "";
+    public int FurShearAmount { get; private set; } = 1;
+    public int FurDeathAmount { get; private set; } = 1;
+    public bool RequiresSleepingToShear { get; private set; }
+    public bool AngerWhenShearedAwake { get; private set; }
+
+    private bool _angeredByShearing = false;
+
+
+    // =========================================================
     // BREEDING
     // =========================================================
 
@@ -195,7 +214,8 @@ public partial class Mob : CharacterBody3D
         Wander,
         Chase,
         Attack,
-        Flee
+        Flee,
+        Sleep
     }
 
     private State _state = State.Idle;
@@ -203,8 +223,23 @@ public partial class Mob : CharacterBody3D
     private float _idleTimer;
     private float _attackTimer;
     private float _repathTimer;
-
     private bool _fleeSpeedApplied = false;
+    private bool _isAngry = false;
+
+
+    // =========================================================
+    // SLEEP
+    // =========================================================
+
+    private bool _sleepEnabled = false;
+
+    private float _sleepStartHour = 20f;
+
+    private float _sleepEndHour = 6f;
+
+    private bool _isSleeping = false;
+
+    private DayNightCycle _dayNightCycle;
 
 
     // =========================================================
@@ -264,12 +299,7 @@ public partial class Mob : CharacterBody3D
 
     private Node3D _mobModel;
 
-    private Node3D _frontRightLeg;
-    private Node3D _frontLeftLeg;
-    private Node3D _backRightLeg;
-    private Node3D _backLeftLeg;
-
-    private float _walkAnimationTime = 0f;
+    private MobAnimation _animation;
 
 
     // =========================================================
@@ -322,6 +352,9 @@ public partial class Mob : CharacterBody3D
 
     public bool IsBaby => _isBaby;
 
+    public bool IsSleeping =>
+        _isSleeping;
+
 
     // =========================================================
     // READY
@@ -334,6 +367,13 @@ public partial class Mob : CharacterBody3D
         _rng.Randomize();
 
         LoadDefinition();
+
+        // Find the global day/night system.
+        _dayNightCycle =
+            GetTree()
+                .GetFirstNodeInGroup(
+                    "day_night_cycle"
+                ) as DayNightCycle;
 
         // IMPORTANT:
         // Gender must be assigned BEFORE building the model.
@@ -651,9 +691,287 @@ public partial class Mob : CharacterBody3D
                 _definition.flee.speedMultiplier;
         }
 
+
+        // -----------------------------------------------------
+        // FUR / SHEARING
+        // -----------------------------------------------------
+
+        if (_definition.fur != null)
+        {
+            HasFur = _definition.fur.enabled;
+
+            FurItem =
+                _definition.fur.item ?? "";
+
+            FurShearAmount =
+                Mathf.Max(
+                    1,
+                    _definition.fur.shearAmount
+                );
+
+            FurDeathAmount =
+                Mathf.Max(
+                    1,
+                    _definition.fur.deathAmount
+                );
+        }
+
+        if (_definition.shearing != null)
+        {
+            CanBeSheared =
+                _definition.shearing.enabled;
+
+            RequiresSleepingToShear =
+                _definition.shearing.requiresSleeping;
+
+            AngerWhenShearedAwake =
+                _definition.shearing.angerWhenAwake;
+        }
+        else
+        {
+            CanBeSheared = false;
+            RequiresSleepingToShear = false;
+            AngerWhenShearedAwake = false;
+        }
+
+
+        // -----------------------------------------------------
+        // SLEEP
+        // -----------------------------------------------------
+
+        if (_definition.sleep != null)
+        {
+            _sleepEnabled =
+                _definition.sleep.enabled;
+
+            _sleepStartHour =
+                _definition.sleep.startHour;
+
+            _sleepEndHour =
+                _definition.sleep.endHour;
+        }
+        else
+        {
+            _sleepEnabled = false;
+            _sleepStartHour = 20f;
+            _sleepEndHour = 6f;
+        }
+
         GD.Print(
             $"[Mob] Loaded definition: {_definition.displayName}"
         );
+    }
+
+
+    // =========================================================
+    // SLEEP SCHEDULE
+    // =========================================================
+
+    private void UpdateSleepState()
+    {
+        if (!_sleepEnabled)
+            return;
+
+        if (_health <= 0f)
+            return;
+
+        if (_dayNightCycle == null ||
+            !IsInstanceValid(_dayNightCycle))
+        {
+            _dayNightCycle =
+                GetTree()
+                    .GetFirstNodeInGroup(
+                        "day_night_cycle"
+                    ) as DayNightCycle;
+
+            if (_dayNightCycle == null)
+                return;
+        }
+
+        float gameHour =
+            _dayNightCycle.GetGameHour();
+
+        bool shouldSleep =
+            IsWithinSleepWindow(
+                gameHour
+            );
+
+
+        // -----------------------------------------------------
+        // WAKE
+        // -----------------------------------------------------
+
+        if (_isSleeping)
+        {
+            if (!shouldSleep)
+            {
+                SetSleeping(false);
+            }
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // DO NOT AUTOMATICALLY SLEEP WHILE BUSY
+        // -----------------------------------------------------
+
+        if (!shouldSleep)
+            return;
+
+        if (_state == State.Chase ||
+            _state == State.Attack ||
+            _state == State.Flee)
+        {
+            return;
+        }
+
+        if (_angeredByShearing ||
+            BehaviorType == MobBehaviorType.Hostile)
+        {
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // SLEEP
+        // -----------------------------------------------------
+
+        SetSleeping(true);
+    }
+
+
+    // =========================================================
+    // CHECK SLEEP WINDOW
+    // =========================================================
+
+    private bool IsWithinSleepWindow(
+        float gameHour)
+    {
+        float start =
+            Mathf.PosMod(
+                _sleepStartHour,
+                24f
+            );
+
+        float end =
+            Mathf.PosMod(
+                _sleepEndHour,
+                24f
+            );
+
+        // Same start/end means the mob sleeps all day.
+        if (Mathf.IsEqualApprox(
+                start,
+                end))
+        {
+            return true;
+        }
+
+        // Normal window.
+        if (start < end)
+        {
+            return gameHour >= start &&
+                   gameHour < end;
+        }
+
+        // Overnight window.
+        // Example:
+        // 20 -> 6
+        //
+        // Sleep from 20:00 through midnight
+        // and continue sleeping until 06:00.
+        return gameHour >= start ||
+               gameHour < end;
+    }
+
+
+    // =========================================================
+    // SET SLEEPING
+    // =========================================================
+
+    public void SetSleeping(
+        bool sleeping)
+    {
+        if (!_sleepEnabled)
+            return;
+
+        if (_health <= 0f)
+            return;
+
+        if (_isSleeping == sleeping)
+            return;
+
+        _isSleeping =
+            sleeping;
+
+        if (_isSleeping)
+        {
+            _state =
+                State.Sleep;
+
+            _hasTarget =
+                false;
+
+            _currentPath.Clear();
+
+            _repathTimer = 0f;
+
+            _pathTimeoutTimer = 0f;
+
+            _stuckCheckTimer = 0f;
+
+            _stuckCheckFailCount = 0;
+
+            Velocity =
+                new Vector3(
+                    0f,
+                    Velocity.Y,
+                    0f
+                );
+
+            if (_animation != null)
+            {
+                _animation.SetSleeping(true);
+            }
+
+            GD.Print(
+                $"[Mob] {Name} is going to sleep."
+            );
+        }
+        else
+        {
+            _state =
+                State.Idle;
+
+            _hasTarget =
+                false;
+
+            _currentPath.Clear();
+
+            _repathTimer = 0f;
+
+            _pathTimeoutTimer = 0f;
+
+            _stuckCheckTimer = 0f;
+
+            _stuckCheckFailCount = 0;
+
+            _idleTimer =
+                _rng.RandfRange(
+                    MinIdleTime,
+                    MaxIdleTime
+                );
+
+            if (_animation != null)
+            {
+                _animation.SetSleeping(false);
+            }
+
+            GD.Print(
+                $"[Mob] {Name} woke up."
+            );
+        }
     }
 
 
@@ -840,132 +1158,69 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-// APPLY TEXTURE
-// =========================================================
-
-private void ApplyMobTexture(
-    Texture2D texture)
-{
-    if (_mobModel == null ||
-        texture == null)
-    {
-        return;
-    }
-
-    foreach (Node node in
-             _mobModel.FindChildren(
-                 "*",
-                 "MeshInstance3D",
-                 true,
-                 false
-             ))
-    {
-        if (node is not MeshInstance3D mesh)
-            continue;
-
-        // -------------------------------------------------
-        // Get the existing material from the GLTF.
-        // -------------------------------------------------
-
-        Material existingMaterial =
-            mesh.GetActiveMaterial(0);
-
-        StandardMaterial3D material;
-
-        if (existingMaterial is StandardMaterial3D existingStandard)
-        {
-            material =
-                existingStandard.Duplicate()
-                    as StandardMaterial3D;
-        }
-        else
-        {
-            material =
-                new StandardMaterial3D();
-        }
-
-        if (material == null)
-            continue;
-
-        // -------------------------------------------------
-        // Replace ONLY the texture.
-        // Keep the GLTF material's other settings.
-        // -------------------------------------------------
-
-        material.AlbedoTexture =
-            texture;
-
-        material.TextureFilter =
-            BaseMaterial3D.TextureFilterEnum.Nearest;
-
-        // -------------------------------------------------
-        // Preserve transparency.
-        // -------------------------------------------------
-
-        if (texture.HasAlpha())
-        {
-            material.Transparency =
-                BaseMaterial3D.TransparencyEnum.Alpha;
-
-            material.ShadingMode =
-                BaseMaterial3D.ShadingModeEnum.PerPixel;
-
-            material.CullMode =
-                BaseMaterial3D.CullModeEnum.Disabled;
-        }
-
-        // -------------------------------------------------
-        // Apply the duplicated material.
-        // -------------------------------------------------
-
-        mesh.MaterialOverride =
-            material;
-    }
-}
-
-
-    // =========================================================
-    // FIND LEG NODES
+    // APPLY TEXTURE
     // =========================================================
 
-    private void FindLegNodes()
+    private void ApplyMobTexture(
+        Texture2D texture)
     {
-        _frontRightLeg =
-            _mobModel?.FindChild(
-                "front_right",
-                true,
-                false
-            ) as Node3D;
-
-        _frontLeftLeg =
-            _mobModel?.FindChild(
-                "front_left",
-                true,
-                false
-            ) as Node3D;
-
-        _backRightLeg =
-            _mobModel?.FindChild(
-                "back_right",
-                true,
-                false
-            ) as Node3D;
-
-        _backLeftLeg =
-            _mobModel?.FindChild(
-                "back_left",
-                true,
-                false
-            ) as Node3D;
-
-        if (_frontRightLeg == null ||
-            _frontLeftLeg == null ||
-            _backRightLeg == null ||
-            _backLeftLeg == null)
+        if (_mobModel == null ||
+            texture == null)
         {
-            GD.PrintErr(
-                $"[Mob] {Name}: Could not find all four leg nodes in active mob model."
-            );
+            return;
+        }
+
+        foreach (Node node in
+                 _mobModel.FindChildren(
+                     "*",
+                     "MeshInstance3D",
+                     true,
+                     false
+                 ))
+        {
+            if (node is not MeshInstance3D mesh)
+                continue;
+
+            Material existingMaterial =
+                mesh.GetActiveMaterial(0);
+
+            StandardMaterial3D material;
+
+            if (existingMaterial is StandardMaterial3D existingStandard)
+            {
+                material =
+                    existingStandard.Duplicate()
+                        as StandardMaterial3D;
+            }
+            else
+            {
+                material =
+                    new StandardMaterial3D();
+            }
+
+            if (material == null)
+                continue;
+
+            material.AlbedoTexture =
+                texture;
+
+            material.TextureFilter =
+                BaseMaterial3D.TextureFilterEnum.Nearest;
+
+            if (texture.HasAlpha())
+            {
+                material.Transparency =
+                    BaseMaterial3D.TransparencyEnum.Alpha;
+
+                material.ShadingMode =
+                    BaseMaterial3D.ShadingModeEnum.PerPixel;
+
+                material.CullMode =
+                    BaseMaterial3D.CullModeEnum.Disabled;
+            }
+
+            mesh.MaterialOverride =
+                material;
         }
     }
 
@@ -1009,7 +1264,14 @@ private void ApplyMobTexture(
         _adultModelScale =
             _mobModel.Scale;
 
-        FindLegNodes();
+        // Create animation controller for this model.
+        _animation =
+            new MobAnimation();
+
+        _animation.Setup(
+            _mobModel,
+            MoveSpeed
+        );
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
@@ -1083,11 +1345,8 @@ private void ApplyMobTexture(
 
         _mobModel = null;
 
-        // Clear animation references.
-        _frontRightLeg = null;
-        _frontLeftLeg = null;
-        _backRightLeg = null;
-        _backLeftLeg = null;
+        // Remove old animation controller.
+        _animation = null;
 
         // Build new model.
         _mobModel =
@@ -1103,7 +1362,14 @@ private void ApplyMobTexture(
         _usingCustomBabyModel =
             customBabyModel;
 
-        FindLegNodes();
+        // Create fresh animation controller for new model.
+        _animation =
+            new MobAnimation();
+
+        _animation.Setup(
+            _mobModel,
+            MoveSpeed
+        );
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
@@ -1126,131 +1392,6 @@ private void ApplyMobTexture(
         );
 
         return true;
-    }
-
-
-    // =========================================================
-    // WALK ANIMATION
-    // =========================================================
-
-    private void UpdateWalkAnimation(float dt)
-    {
-        if (_mobModel == null ||
-            _frontRightLeg == null ||
-            _frontLeftLeg == null ||
-            _backRightLeg == null ||
-            _backLeftLeg == null)
-        {
-            return;
-        }
-
-        bool walking =
-            Mathf.Abs(Velocity.X) > 0.05f ||
-            Mathf.Abs(Velocity.Z) > 0.05f;
-
-        if (!walking)
-        {
-            _frontRightLeg.Rotation =
-                new Vector3(
-                    Mathf.LerpAngle(
-                        _frontRightLeg.Rotation.X,
-                        0f,
-                        dt * 8f
-                    ),
-                    _frontRightLeg.Rotation.Y,
-                    _frontRightLeg.Rotation.Z
-                );
-
-            _frontLeftLeg.Rotation =
-                new Vector3(
-                    Mathf.LerpAngle(
-                        _frontLeftLeg.Rotation.X,
-                        0f,
-                        dt * 8f
-                    ),
-                    _frontLeftLeg.Rotation.Y,
-                    _frontLeftLeg.Rotation.Z
-                );
-
-            _backRightLeg.Rotation =
-                new Vector3(
-                    Mathf.LerpAngle(
-                        _backRightLeg.Rotation.X,
-                        0f,
-                        dt * 8f
-                    ),
-                    _backRightLeg.Rotation.Y,
-                    _backRightLeg.Rotation.Z
-                );
-
-            _backLeftLeg.Rotation =
-                new Vector3(
-                    Mathf.LerpAngle(
-                        _backLeftLeg.Rotation.X,
-                        0f,
-                        dt * 8f
-                    ),
-                    _backLeftLeg.Rotation.Y,
-                    _backLeftLeg.Rotation.Z
-                );
-
-            return;
-        }
-
-        float speed =
-            new Vector2(
-                Velocity.X,
-                Velocity.Z
-            ).Length();
-
-        float animationSpeed =
-            Mathf.Clamp(
-                speed /
-                Mathf.Max(
-                    MoveSpeed,
-                    0.01f
-                ),
-                0.5f,
-                2f
-            );
-
-        _walkAnimationTime +=
-            dt *
-            animationSpeed *
-            7f;
-
-        float swing =
-            Mathf.Sin(
-                _walkAnimationTime
-            ) * 0.45f;
-
-        _frontRightLeg.Rotation =
-            new Vector3(
-                swing,
-                _frontRightLeg.Rotation.Y,
-                _frontRightLeg.Rotation.Z
-            );
-
-        _backLeftLeg.Rotation =
-            new Vector3(
-                swing,
-                _backLeftLeg.Rotation.Y,
-                _backLeftLeg.Rotation.Z
-            );
-
-        _frontLeftLeg.Rotation =
-            new Vector3(
-                -swing,
-                _frontLeftLeg.Rotation.Y,
-                _frontLeftLeg.Rotation.Z
-            );
-
-        _backRightLeg.Rotation =
-            new Vector3(
-                -swing,
-                _backRightLeg.Rotation.Y,
-                _backRightLeg.Rotation.Z
-            );
     }
 
 
@@ -1548,6 +1689,13 @@ private void ApplyMobTexture(
 
 
         // -----------------------------------------------------
+        // SLEEP SCHEDULE
+        // -----------------------------------------------------
+
+        UpdateSleepState();
+
+
+        // -----------------------------------------------------
         // KNOCKBACK
         // -----------------------------------------------------
 
@@ -1569,6 +1717,34 @@ private void ApplyMobTexture(
 
 
         // -----------------------------------------------------
+        // SLEEPING
+        // -----------------------------------------------------
+
+        if (_isSleeping) 
+{
+    velocity.X = 0f;
+    velocity.Z = 0f;
+
+    if (_animation != null)
+    {
+        _animation.Update(
+            dt,
+            velocity
+        );
+    }
+
+    UpdateHealthBar();
+
+    Velocity =
+        velocity;
+
+    MoveAndSlide();
+
+    return;
+}
+
+
+        // -----------------------------------------------------
         // AI
         // -----------------------------------------------------
 
@@ -1586,7 +1762,13 @@ private void ApplyMobTexture(
         // VISUALS
         // -----------------------------------------------------
 
-        UpdateWalkAnimation(dt);
+        if (_animation != null)
+{
+    _animation.Update(
+        dt,
+        velocity
+    );
+}
 
         UpdateHealthBar();
 
@@ -1661,6 +1843,13 @@ private void ApplyMobTexture(
         float dt,
         ref Vector3 velocity)
     {
+        if (_isSleeping)
+        {
+            velocity.X = 0f;
+            velocity.Z = 0f;
+            return;
+        }
+
         if (_hasTarget)
         {
             CheckIfStuck(dt);
@@ -1742,6 +1931,141 @@ private void ApplyMobTexture(
                     dt *
                     4f
                 );
+        }
+    }
+
+
+    // =========================================================
+    // FUR / SHEARING
+    // =========================================================
+
+    public bool TryShear(bool isSleeping)
+    {
+        if (!HasFur)
+        {
+            return false;
+        }
+
+        if (!CanBeSheared)
+        {
+            return false;
+        }
+
+
+        // -----------------------------------------------------
+        // SLEEPING REQUIREMENT
+        // -----------------------------------------------------
+
+        if (RequiresSleepingToShear &&
+            !isSleeping)
+        {
+            if (AngerWhenShearedAwake)
+            {
+                BecomeAngry();
+            }
+
+            GD.Print(
+                $"[Mob] {Name} cannot be sheared while awake."
+            );
+
+            return false;
+        }
+
+
+        // -----------------------------------------------------
+        // AWAKE SHEARING ANGER
+        // -----------------------------------------------------
+
+        if (!isSleeping &&
+            AngerWhenShearedAwake)
+        {
+            BecomeAngry();
+        }
+
+
+        // -----------------------------------------------------
+        // REMOVE FUR
+        // -----------------------------------------------------
+
+        HasFur = false;
+
+        if (!string.IsNullOrWhiteSpace(FurItem))
+        {
+            var pickup = new ItemPickup();
+
+            pickup.ItemId = FurItem;
+            pickup.Count = FurShearAmount;
+
+            pickup.TossVelocity = new Vector3(
+                _rng.RandfRange(-0.8f, 0.8f),
+                _rng.RandfRange(1.5f, 2.2f),
+                _rng.RandfRange(-0.8f, 0.8f)
+            );
+
+            pickup.GlobalPosition =
+                GlobalPosition +
+                Vector3.Up * 0.5f;
+
+            GetParent().AddChild(pickup);
+        }
+
+        GD.Print(
+            $"[Mob] {Name} was sheared. " +
+            $"Fur={FurItem} Amount={FurShearAmount}"
+        );
+
+        return true;
+    }
+
+
+    // =========================================================
+    // BECOME ANGRY FROM SHEARING
+    // =========================================================
+
+    private void BecomeAngryFromShearing()
+    {
+        _angeredByShearing = true;
+
+        SetSleeping(false);
+
+        if (_player != null &&
+            IsInstanceValid(_player))
+        {
+            _threat =
+                _player;
+
+            _state =
+                State.Chase;
+
+            _hasTarget =
+                false;
+
+            _currentPath.Clear();
+
+            _repathTimer =
+                0f;
+        }
+
+        GD.Print(
+            $"[Mob] {Name} became angry after being sheared awake."
+        );
+    }
+
+
+    private void BecomeAngry()
+    {
+        SetSleeping(false);
+
+        BehaviorType = MobBehaviorType.Hostile;
+
+        if (_player != null &&
+            IsInstanceValid(_player))
+        {
+            _threat = _player;
+            _state = State.Chase;
+            _currentPath.Clear();
+            _hasTarget = false;
+            _repathTimer = 0f;
         }
     }
 
@@ -2032,6 +2356,7 @@ private void ApplyMobTexture(
                 MaxIdleTime
             );
 
+
         // -----------------------------------------------------
         // CUSTOM BABY MODEL
         // -----------------------------------------------------
@@ -2190,6 +2515,11 @@ private void ApplyMobTexture(
 
     private void UpdateState(float dt)
     {
+        if (_isSleeping)
+        {
+            return;
+        }
+
         if (_state == State.Flee)
         {
             bool threatGone =
@@ -2213,6 +2543,54 @@ private void ApplyMobTexture(
 
             return;
         }
+
+
+        // -----------------------------------------------------
+        // ANGRY FROM SHEARING
+        // -----------------------------------------------------
+
+        if (_angeredByShearing &&
+            _player != null &&
+            IsInstanceValid(_player))
+        {
+            float distToPlayer =
+                GlobalPosition.DistanceTo(
+                    _player.GlobalPosition
+                );
+
+            if (distToPlayer <=
+                AttackRange)
+            {
+                _state =
+                    State.Attack;
+
+                _hasTarget =
+                    false;
+
+                return;
+            }
+
+            if (distToPlayer <=
+                DetectionRange * 2f)
+            {
+                if (_state !=
+                    State.Chase)
+                {
+                    _state =
+                        State.Chase;
+
+                    _repathTimer =
+                        0f;
+                }
+
+                return;
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // NORMAL HOSTILE BEHAVIOR
+        // -----------------------------------------------------
 
         if (BehaviorType ==
                 MobBehaviorType.Hostile &&
@@ -2271,7 +2649,6 @@ private void ApplyMobTexture(
                 PickWanderTarget();
             }
         }
-
         else if (_state ==
                  State.Wander &&
                  !_hasTarget)
@@ -2287,6 +2664,11 @@ private void ApplyMobTexture(
 
     private void RunState(float dt)
     {
+        if (_isSleeping)
+        {
+            return;
+        }
+
         switch (_state)
         {
             case State.Chase:
@@ -2298,11 +2680,14 @@ private void ApplyMobTexture(
                     _repathTimer =
                         RepathInterval;
 
-                    if (_player != null &&
-                        IsInstanceValid(_player))
+                    Node3D chaseTarget =
+                        _player;
+
+                    if (chaseTarget != null &&
+                        IsInstanceValid(chaseTarget))
                     {
                         RequestPathTo(
-                            _player.GlobalPosition,
+                            chaseTarget.GlobalPosition,
                             32
                         );
                     }
@@ -2788,6 +3173,17 @@ private void ApplyMobTexture(
             return;
         }
 
+
+        // -----------------------------------------------------
+        // DAMAGE WAKES SLEEPING MOBS
+        // -----------------------------------------------------
+
+        if (_isSleeping)
+        {
+            SetSleeping(false);
+        }
+
+
         _health -= amount;
 
         _health =
@@ -2852,6 +3248,7 @@ private void ApplyMobTexture(
         if (_fleeEnabled &&
             BehaviorType ==
                 MobBehaviorType.Passive &&
+            !_angeredByShearing &&
             _player != null &&
             IsInstanceValid(_player) &&
             _state != State.Flee)
@@ -2918,11 +3315,7 @@ private void ApplyMobTexture(
 
     private void SpawnDrops()
     {
-        if (_definition == null ||
-            _definition.drops == null ||
-            !_definition.drops.enabled ||
-            _definition.drops.items == null ||
-            _definition.drops.items.Length == 0)
+        if (_definition == null)
         {
             return;
         }
@@ -2939,122 +3332,161 @@ private void ApplyMobTexture(
             return;
         }
 
-        foreach (MobDrop drop in
-                 _definition.drops.items)
+
+        // -----------------------------------------------------
+        // NORMAL JSON DROPS
+        // -----------------------------------------------------
+
+        if (_definition.drops != null &&
+            _definition.drops.enabled &&
+            _definition.drops.items != null &&
+            _definition.drops.items.Length > 0)
         {
-            if (drop == null)
-                continue;
-
-            if (string.IsNullOrWhiteSpace(
-                drop.item))
+            foreach (MobDrop drop in
+                     _definition.drops.items)
             {
-                continue;
+                if (drop == null)
+                    continue;
+
+                if (string.IsNullOrWhiteSpace(
+                    drop.item))
+                {
+                    continue;
+                }
+
+                float chance =
+                    Mathf.Clamp(
+                        drop.chance,
+                        0f,
+                        1f
+                    );
+
+                float roll =
+                    _rng.Randf();
+
+                if (roll > chance)
+                {
+                    continue;
+                }
+
+                int min =
+                    Mathf.Max(
+                        1,
+                        drop.min
+                    );
+
+                int max =
+                    Mathf.Max(
+                        min,
+                        drop.max
+                    );
+
+                int count =
+                    _rng.RandiRange(
+                        min,
+                        max
+                    );
+
+                if (count <= 0)
+                    continue;
+
+                SpawnItemDrop(
+                    parent,
+                    drop.item,
+                    count
+                );
             }
-
-            float chance =
-                Mathf.Clamp(
-                    drop.chance,
-                    0f,
-                    1f
-                );
-
-            float roll =
-                _rng.Randf();
-
-            if (roll > chance)
-            {
-                continue;
-            }
-
-            int min =
-                Mathf.Max(
-                    1,
-                    drop.min
-                );
-
-            int max =
-                Mathf.Max(
-                    min,
-                    drop.max
-                );
-
-            int count =
-                _rng.RandiRange(
-                    min,
-                    max
-                );
-
-            if (count <= 0)
-                continue;
+        }
 
 
-            // -------------------------------------------------
-            // CREATE ITEM PICKUP
-            // -------------------------------------------------
+        // -----------------------------------------------------
+        // FUR DEATH DROP
+        // -----------------------------------------------------
 
-            ItemPickup pickup =
-                new ItemPickup();
-
-            pickup.ItemId =
-                drop.item;
-
-            pickup.Count =
-                count;
-
-
-            // -------------------------------------------------
-            // GIVE THE DROP A LITTLE POP
-            // -------------------------------------------------
-
-            float angle =
-                _rng.RandfRange(
-                    0f,
-                    Mathf.Tau
-                );
-
-            float horizontalSpeed =
-                _rng.RandfRange(
-                    0.5f,
-                    1.2f
-                );
-
-            pickup.TossVelocity =
-                new Vector3(
-                    Mathf.Cos(angle) *
-                    horizontalSpeed,
-
-                    _rng.RandfRange(
-                        1.8f,
-                        2.6f
-                    ),
-
-                    Mathf.Sin(angle) *
-                    horizontalSpeed
-                );
-
-
-            // -------------------------------------------------
-            // ADD TO WORLD
-            // -------------------------------------------------
-
-            parent.AddChild(
-                pickup
+        if (HasFur &&
+            !string.IsNullOrWhiteSpace(FurItem))
+        {
+            SpawnItemDrop(
+                parent,
+                FurItem,
+                FurDeathAmount
             );
-
-            pickup.GlobalPosition =
-                GlobalPosition +
-                new Vector3(
-                    0f,
-                    0.5f,
-                    0f
-                );
-
 
             GD.Print(
-                $"[Mob] {Name} dropped " +
-                $"{count}x {drop.item}"
+                $"[Mob] {Name} dropped fur: " +
+                $"{FurItem} x{FurDeathAmount}"
             );
         }
+    }
+
+
+    // =========================================================
+    // CREATE ITEM DROP
+    // =========================================================
+
+    private void SpawnItemDrop(
+        Node parent,
+        string itemId,
+        int count)
+    {
+        if (parent == null ||
+            string.IsNullOrWhiteSpace(itemId) ||
+            count <= 0)
+        {
+            return;
+        }
+
+        ItemPickup pickup =
+            new ItemPickup();
+
+        pickup.ItemId =
+            itemId;
+
+        pickup.Count =
+            count;
+
+        float angle =
+            _rng.RandfRange(
+                0f,
+                Mathf.Tau
+            );
+
+        float horizontalSpeed =
+            _rng.RandfRange(
+                0.5f,
+                1.2f
+            );
+
+        pickup.TossVelocity =
+            new Vector3(
+                Mathf.Cos(angle) *
+                horizontalSpeed,
+
+                _rng.RandfRange(
+                    1.8f,
+                    2.6f
+                ),
+
+                Mathf.Sin(angle) *
+                horizontalSpeed
+            );
+
+        parent.AddChild(
+            pickup
+        );
+
+        pickup.GlobalPosition =
+            GlobalPosition +
+            new Vector3(
+                0f,
+                0.5f,
+                0f
+            );
+
+        GD.Print(
+            $"[Mob] {Name} dropped " +
+            $"{count}x {itemId}"
+        );
     }
 
 
@@ -3071,17 +3503,7 @@ private void ApplyMobTexture(
 
         _currentPath.Clear();
 
-
-        // -----------------------------------------------------
-        // DROP LOOT BEFORE REMOVING MOB
-        // -----------------------------------------------------
-
         SpawnDrops();
-
-
-        // -----------------------------------------------------
-        // REMOVE MOB
-        // -----------------------------------------------------
 
         SetPhysicsProcess(false);
 

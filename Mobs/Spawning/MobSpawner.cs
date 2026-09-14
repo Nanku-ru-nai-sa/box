@@ -45,10 +45,11 @@ public partial class MobSpawner : Node3D
     /// Later add cow.json, chicken.json, sheep.json, etc.
     /// </summary>
     [Export]
-    public string[] DefinitionPaths =
-    {
-        "res://Mobs/Definitions/Animals/pig.json"
-    };
+   public string[] DefinitionPaths =
+{
+    "res://Mobs/Definitions/Animals/pig.json",
+    "res://Mobs/Definitions/Animals/beefalo.json"
+};
 
 
     [ExportGroup("Spawning")]

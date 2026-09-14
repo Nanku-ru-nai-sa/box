@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://buy43rolxb88w"
-path="res://.godot/imported/necrotic_bone.png-a7865ddef8ac8059ecc36b7f577dce0c.ctex"
+uid="uid://flqyqkqvx0w6"
+path="res://.godot/imported/beefalo.png-e854026579514c667566c02b041547c4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/necrotic_bone.png"
-dest_files=["res://.godot/imported/necrotic_bone.png-a7865ddef8ac8059ecc36b7f577dce0c.ctex"]
+source_file="res://Assets/Models/Mobs/beefalo/beefalo.png"
+dest_files=["res://.godot/imported/beefalo.png-e854026579514c667566c02b041547c4.ctex"]
 
 [params]
 

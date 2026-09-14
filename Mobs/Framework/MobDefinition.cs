@@ -11,17 +11,64 @@ public class MobDefinition
 
     public MobStats stats = new MobStats();
     public MobBehavior behavior = new MobBehavior();
+    public MobSleepSettings sleep = new MobSleepSettings();
     public MobFood food = new MobFood();
     public MobBreeding breeding = new MobBreeding();
     public MobGenderSettings gender = new MobGenderSettings();
     public MobSpawnSettings spawning = new MobSpawnSettings();
     public FleeDefinition flee = new FleeDefinition();
 
+    public MobFurSettings fur = new MobFurSettings();
+    public MobShearingSettings shearing = new MobShearingSettings();
+
     // Baby appearance.
     public MobBabySettings baby = new MobBabySettings();
 
     // Items this mob can drop when it dies.
     public MobDrops drops = new MobDrops();
+}
+
+
+// =============================================================
+// SLEEP
+// =============================================================
+
+[Serializable]
+public class MobSleepSettings
+{
+    public bool enabled = false;
+
+    // Game-clock hours.
+    // Example: 20 = 8 PM, 6 = 6 AM.
+    public float startHour = 20f;
+    public float endHour = 6f;
+}
+
+
+// =============================================================
+// FUR
+// =============================================================
+
+[Serializable]
+public class MobFurSettings
+{
+    public bool enabled = false;
+    public string item = "simple_fur";
+    public int shearAmount = 1;
+    public int deathAmount = 1;
+}
+
+
+// =============================================================
+// SHEARING
+// =============================================================
+
+[Serializable]
+public class MobShearingSettings
+{
+    public bool enabled = false;
+    public bool requiresSleeping = false;
+    public bool angerWhenAwake = false;
 }
 
 
