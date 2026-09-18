@@ -193,10 +193,15 @@ else
                 continue;
 
             if (definition.spawning == null ||
-                !definition.spawning.enabled)
-            {
-                continue;
-            }
+    !definition.spawning.enabled)
+{
+    continue;
+}
+
+if (!IsCurrentSeasonAllowed(definition.spawning))
+{
+    continue;
+}
 
             // -------------------------------------------------
             // Population limit
@@ -457,7 +462,54 @@ private void LoadSavedMobs()
     // ---------------------------------------------------------
     // FIND SPAWN POSITION
     // ---------------------------------------------------------
+private bool IsCurrentSeasonAllowed(MobSpawnSettings spawning)
+{
+    if (spawning == null)
+        return false;
 
+    // No seasons listed = allowed all year.
+    if (spawning.seasons == null ||
+        spawning.seasons.Length == 0)
+    {
+        return true;
+    }
+
+    SeasonManager seasonManager =
+        GetTree().Root.FindChild(
+            "SeasonManager",
+            true,
+            false
+        ) as SeasonManager;
+
+    if (seasonManager == null)
+    {
+        GD.PrintErr(
+            "[MobSpawner] SeasonManager not found. " +
+            "Seasonal spawning is blocked."
+        );
+
+        return false;
+    }
+
+    string currentSeason =
+        seasonManager.GetSeasonName();
+
+    foreach (string allowedSeason in spawning.seasons)
+    {
+        if (string.IsNullOrWhiteSpace(allowedSeason))
+            continue;
+
+        if (string.Equals(
+            allowedSeason.Trim(),
+            currentSeason,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
     private Vector3 FindSpawnPosition(
         MobDefinition definition)
     {

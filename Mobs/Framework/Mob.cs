@@ -1,4 +1,5 @@
 using Godot;
+using System;
 using System.Collections.Generic;
 
 // =============================================================
@@ -31,6 +32,7 @@ using System.Collections.Generic;
 // - Baby growth
 // - Fur
 // - Shearing
+// - Herd hostility
 // - JSON-configurable drops
 // - Automatic fur death drops
 // - Automatic model-based collision
@@ -122,14 +124,16 @@ public partial class Mob : CharacterBody3D
     // =========================================================
 
     public bool HasFur { get; private set; }
-    public bool CanBeSheared { get; private set; }
-    public string FurItem { get; private set; } = "";
-    public int FurShearAmount { get; private set; } = 1;
-    public int FurDeathAmount { get; private set; } = 1;
-    public bool RequiresSleepingToShear { get; private set; }
-    public bool AngerWhenShearedAwake { get; private set; }
 
-    private bool _angeredByShearing = false;
+    public bool CanBeSheared { get; private set; }
+
+    public string FurItem { get; private set; } = "";
+
+    public int FurShearAmount { get; private set; } = 1;
+
+    public int FurDeathAmount { get; private set; } = 1;
+
+    public bool AngerWhenShearedAwake { get; private set; }
 
 
     // =========================================================
@@ -137,7 +141,9 @@ public partial class Mob : CharacterBody3D
     // =========================================================
 
     private bool _breedingReady = false;
+
     private bool _isBreeding = false;
+
     private float _breedCooldownTimer = 0f;
 
     private const float BreedSearchRadius = 8f;
@@ -171,16 +177,23 @@ public partial class Mob : CharacterBody3D
     [Export]
     public float FlashDuration = 0.15f;
 
+    // Small upward movement when knockback is applied.
+    [Export]
+    public float KnockbackVerticalMultiplier = 0.2f;
+
 
     // =========================================================
     // MOVEMENT / PATHING
     // =========================================================
 
     private const float Gravity = 20f;
+
     private const float RepathInterval = 0.6f;
 
     private const float StuckCheckInterval = 0.5f;
+
     private const float StuckDistanceThreshold = 0.15f;
+
     private const int StuckChecksBeforeGivingUp = 2;
 
     [ExportGroup("Pathing Safety")]
@@ -203,7 +216,10 @@ public partial class Mob : CharacterBody3D
     private bool _hasLanded = false;
 
     private Node3D _player;
+
     private Node3D _threat;
+
+    private Node3D _hostileTarget;
 
     private readonly RandomNumberGenerator _rng =
         new RandomNumberGenerator();
@@ -221,10 +237,12 @@ public partial class Mob : CharacterBody3D
     private State _state = State.Idle;
 
     private float _idleTimer;
+
     private float _attackTimer;
+
     private float _repathTimer;
+
     private bool _fleeSpeedApplied = false;
-    private bool _isAngry = false;
 
 
     // =========================================================
@@ -289,7 +307,9 @@ public partial class Mob : CharacterBody3D
     private MeshInstance3D _healthBarBackground;
 
     private const float HealthBarWidth = 0.8f;
+
     private const float HealthBarHeight = 0.1f;
+
     private const float HealthBarYOffset = 2.05f;
 
 
@@ -368,15 +388,12 @@ public partial class Mob : CharacterBody3D
 
         LoadDefinition();
 
-        // Find the global day/night system.
         _dayNightCycle =
             GetTree()
                 .GetFirstNodeInGroup(
                     "day_night_cycle"
                 ) as DayNightCycle;
 
-        // IMPORTANT:
-        // Gender must be assigned BEFORE building the model.
         AssignGender();
 
         BuildMobModel();
@@ -390,6 +407,8 @@ public partial class Mob : CharacterBody3D
         _state = State.Idle;
 
         _hasTarget = false;
+
+        _hostileTarget = null;
 
         _currentPath.Clear();
 
@@ -576,6 +595,7 @@ public partial class Mob : CharacterBody3D
         }
 
         _modelCollision = null;
+
         _collisionBuilt = false;
     }
 
@@ -691,14 +711,12 @@ public partial class Mob : CharacterBody3D
                 _definition.flee.speedMultiplier;
         }
 
-
-        // -----------------------------------------------------
         // FUR / SHEARING
-        // -----------------------------------------------------
 
         if (_definition.fur != null)
         {
-            HasFur = _definition.fur.enabled;
+            HasFur =
+                _definition.fur.enabled;
 
             FurItem =
                 _definition.fur.item ?? "";
@@ -721,23 +739,17 @@ public partial class Mob : CharacterBody3D
             CanBeSheared =
                 _definition.shearing.enabled;
 
-            RequiresSleepingToShear =
-                _definition.shearing.requiresSleeping;
-
             AngerWhenShearedAwake =
                 _definition.shearing.angerWhenAwake;
         }
         else
         {
             CanBeSheared = false;
-            RequiresSleepingToShear = false;
+
             AngerWhenShearedAwake = false;
         }
 
-
-        // -----------------------------------------------------
         // SLEEP
-        // -----------------------------------------------------
 
         if (_definition.sleep != null)
         {
@@ -753,7 +765,9 @@ public partial class Mob : CharacterBody3D
         else
         {
             _sleepEnabled = false;
+
             _sleepStartHour = 20f;
+
             _sleepEndHour = 6f;
         }
 
@@ -826,8 +840,9 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-        if (_angeredByShearing ||
-            BehaviorType == MobBehaviorType.Hostile)
+        // A hostile mob stays hostile.
+        if (BehaviorType ==
+            MobBehaviorType.Hostile)
         {
             return;
         }
@@ -860,7 +875,6 @@ public partial class Mob : CharacterBody3D
                 24f
             );
 
-        // Same start/end means the mob sleeps all day.
         if (Mathf.IsEqualApprox(
                 start,
                 end))
@@ -868,19 +882,12 @@ public partial class Mob : CharacterBody3D
             return true;
         }
 
-        // Normal window.
         if (start < end)
         {
             return gameHour >= start &&
                    gameHour < end;
         }
 
-        // Overnight window.
-        // Example:
-        // 20 -> 6
-        //
-        // Sleep from 20:00 through midnight
-        // and continue sleeping until 06:00.
         return gameHour >= start ||
                gameHour < end;
     }
@@ -912,6 +919,8 @@ public partial class Mob : CharacterBody3D
 
             _hasTarget =
                 false;
+
+            _hostileTarget = null;
 
             _currentPath.Clear();
 
@@ -986,6 +995,7 @@ public partial class Mob : CharacterBody3D
             !_definition.gender.enabled)
         {
             _gender = MobGender.Male;
+
             return;
         }
 
@@ -1008,7 +1018,9 @@ public partial class Mob : CharacterBody3D
         if (total <= 0f)
         {
             maleChance = 0.5f;
+
             femaleChance = 0.5f;
+
             total = 1f;
         }
 
@@ -1264,7 +1276,6 @@ public partial class Mob : CharacterBody3D
         _adultModelScale =
             _mobModel.Scale;
 
-        // Create animation controller for this model.
         _animation =
             new MobAnimation();
 
@@ -1333,10 +1344,8 @@ public partial class Mob : CharacterBody3D
             return false;
         }
 
-        // Remove old collision first.
         RemoveModelCollision();
 
-        // Remove old model.
         if (_mobModel != null &&
             IsInstanceValid(_mobModel))
         {
@@ -1345,10 +1354,8 @@ public partial class Mob : CharacterBody3D
 
         _mobModel = null;
 
-        // Remove old animation controller.
         _animation = null;
 
-        // Build new model.
         _mobModel =
             scene.Instantiate<Node3D>();
 
@@ -1362,7 +1369,6 @@ public partial class Mob : CharacterBody3D
         _usingCustomBabyModel =
             customBabyModel;
 
-        // Create fresh animation controller for new model.
         _animation =
             new MobAnimation();
 
@@ -1384,7 +1390,6 @@ public partial class Mob : CharacterBody3D
             );
         }
 
-        // Rebuild collision against the new model.
         CreateCollision();
 
         GD.Print(
@@ -1666,7 +1671,8 @@ public partial class Mob : CharacterBody3D
                 _stuckCheckLastPosition =
                     GlobalPosition;
 
-                _state = State.Idle;
+                _state =
+                    State.Idle;
 
                 _hasTarget = false;
 
@@ -1704,6 +1710,9 @@ public partial class Mob : CharacterBody3D
             velocity.X =
                 _knockbackVelocity.X;
 
+            velocity.Y =
+                _knockbackVelocity.Y;
+
             velocity.Z =
                 _knockbackVelocity.Z;
 
@@ -1720,28 +1729,29 @@ public partial class Mob : CharacterBody3D
         // SLEEPING
         // -----------------------------------------------------
 
-        if (_isSleeping) 
-{
-    velocity.X = 0f;
-    velocity.Z = 0f;
+        if (_isSleeping)
+        {
+            velocity.X = 0f;
 
-    if (_animation != null)
-    {
-        _animation.Update(
-            dt,
-            velocity
-        );
-    }
+            velocity.Z = 0f;
 
-    UpdateHealthBar();
+            if (_animation != null)
+            {
+                _animation.Update(
+                    dt,
+                    velocity
+                );
+            }
 
-    Velocity =
-        velocity;
+            UpdateHealthBar();
 
-    MoveAndSlide();
+            Velocity =
+                velocity;
 
-    return;
-}
+            MoveAndSlide();
+
+            return;
+        }
 
 
         // -----------------------------------------------------
@@ -1763,12 +1773,12 @@ public partial class Mob : CharacterBody3D
         // -----------------------------------------------------
 
         if (_animation != null)
-{
-    _animation.Update(
-        dt,
-        velocity
-    );
-}
+        {
+            _animation.Update(
+                dt,
+                velocity
+            );
+        }
 
         UpdateHealthBar();
 
@@ -1836,6 +1846,60 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // APPLY KNOCKBACK
+    // =========================================================
+    //
+    // Knockback is intentionally separate from damage.
+    //
+    // An effect source can now choose to:
+    //
+    // - Apply damage only
+    // - Apply knockback only
+    // - Apply both
+    //
+    // The direction supplied here is the direction the mob
+    // should be pushed.
+    //
+    // =========================================================
+
+    public void ApplyKnockback(
+        Vector3 direction,
+        float force)
+    {
+        if (_health <= 0f)
+            return;
+
+        if (force <= 0f)
+            return;
+
+        direction.Y = 0f;
+
+        if (direction.LengthSquared() < 0.0001f)
+            return;
+
+        direction =
+            direction.Normalized();
+
+        _knockbackVelocity =
+            direction * force;
+
+        // Small vertical lift.
+        _knockbackVelocity.Y =
+            force *
+            KnockbackVerticalMultiplier;
+
+        _knockbackTimer =
+            KnockbackDuration;
+
+        _stuckCheckFailCount =
+            0;
+
+        _stuckCheckLastPosition =
+            GlobalPosition;
+    }
+
+
+    // =========================================================
     // PATH MOVEMENT
     // =========================================================
 
@@ -1846,7 +1910,9 @@ public partial class Mob : CharacterBody3D
         if (_isSleeping)
         {
             velocity.X = 0f;
+
             velocity.Z = 0f;
+
             return;
         }
 
@@ -1860,6 +1926,7 @@ public partial class Mob : CharacterBody3D
                 MaxPathDuration)
             {
                 AbandonPath();
+
                 return;
             }
 
@@ -1942,50 +2009,10 @@ public partial class Mob : CharacterBody3D
     public bool TryShear(bool isSleeping)
     {
         if (!HasFur)
-        {
             return false;
-        }
 
         if (!CanBeSheared)
-        {
             return false;
-        }
-
-
-        // -----------------------------------------------------
-        // SLEEPING REQUIREMENT
-        // -----------------------------------------------------
-
-        if (RequiresSleepingToShear &&
-            !isSleeping)
-        {
-            if (AngerWhenShearedAwake)
-            {
-                BecomeAngry();
-            }
-
-            GD.Print(
-                $"[Mob] {Name} cannot be sheared while awake."
-            );
-
-            return false;
-        }
-
-
-        // -----------------------------------------------------
-        // AWAKE SHEARING ANGER
-        // -----------------------------------------------------
-
-        if (!isSleeping &&
-            AngerWhenShearedAwake)
-        {
-            BecomeAngry();
-        }
-
-
-        // -----------------------------------------------------
-        // REMOVE FUR
-        // -----------------------------------------------------
 
         HasFur = false;
 
@@ -1993,20 +2020,45 @@ public partial class Mob : CharacterBody3D
         {
             var pickup = new ItemPickup();
 
-            pickup.ItemId = FurItem;
-            pickup.Count = FurShearAmount;
+            pickup.ItemId =
+                FurItem;
 
-            pickup.TossVelocity = new Vector3(
-                _rng.RandfRange(-0.8f, 0.8f),
-                _rng.RandfRange(1.5f, 2.2f),
-                _rng.RandfRange(-0.8f, 0.8f)
-            );
+            pickup.Count =
+                FurShearAmount;
+
+            pickup.TossVelocity =
+                new Vector3(
+                    _rng.RandfRange(
+                        -0.8f,
+                        0.8f
+                    ),
+
+                    _rng.RandfRange(
+                        1.5f,
+                        2.2f
+                    ),
+
+                    _rng.RandfRange(
+                        -0.8f,
+                        0.8f
+                    )
+                );
 
             pickup.GlobalPosition =
                 GlobalPosition +
                 Vector3.Up * 0.5f;
 
-            GetParent().AddChild(pickup);
+            GetParent().AddChild(
+                pickup
+            );
+        }
+
+        // Sleeping sheep/beefalo stay asleep.
+        // Awake ones only become hostile if the JSON says so.
+        if (!isSleeping &&
+            AngerWhenShearedAwake)
+        {
+            BecomeHostile();
         }
 
         GD.Print(
@@ -2019,54 +2071,275 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // BECOME ANGRY FROM SHEARING
+    // BECOME HOSTILE
+    // =========================================================
+    //
+    // This is the ONLY hostility switch.
+    //
+    // There is no "angry" state.
+    // Hostile mobs simply use the normal hostile AI.
+    //
+    // alertNearby:
+    // true  = this mob starts a herd alert
+    // false = this mob was alerted by another mob
     // =========================================================
 
-    private void BecomeAngryFromShearing()
+    private void BecomeHostile(
+        bool alertNearby = true)
     {
-        _angeredByShearing = true;
+        if (_health <= 0f)
+            return;
 
-        SetSleeping(false);
+        bool wasAlreadyHostile =
+            BehaviorType ==
+            MobBehaviorType.Hostile;
 
-        if (_player != null &&
-            IsInstanceValid(_player))
+        BehaviorType =
+            MobBehaviorType.Hostile;
+
+        // A hostile mob cannot remain asleep.
+        if (_isSleeping)
         {
-            _threat =
-                _player;
-
-            _state =
-                State.Chase;
-
-            _hasTarget =
-                false;
-
-            _currentPath.Clear();
-
-            _repathTimer =
-                0f;
+            SetSleeping(false);
         }
 
-        GD.Print(
-            $"[Mob] {Name} became angry after being sheared awake."
+        _threat = null;
+
+        _hostileTarget = null;
+
+        _hasTarget = false;
+
+        _currentPath.Clear();
+
+        _repathTimer = 0f;
+
+        _pathTimeoutTimer = 0f;
+
+        _pathfindCooldownTimer = 0f;
+
+        _attackTimer = 0f;
+
+
+        // -----------------------------------------------------
+        // ALERT NEARBY BEEFALO
+        // -----------------------------------------------------
+
+        if (alertNearby &&
+            IsBeefalo())
+        {
+            AlertNearbyBeefalo();
+        }
+
+
+        // -----------------------------------------------------
+        // FIND CLOSEST VALID TARGET
+        // -----------------------------------------------------
+
+        Node3D closestTarget =
+            FindClosestValidTarget();
+
+        if (closestTarget != null)
+        {
+            _hostileTarget =
+                closestTarget;
+
+            float distance =
+                GlobalPosition.DistanceTo(
+                    closestTarget.GlobalPosition
+                );
+
+            if (distance <= AttackRange)
+            {
+                _state =
+                    State.Attack;
+            }
+            else
+            {
+                _state =
+                    State.Chase;
+            }
+        }
+        else
+        {
+            _state =
+                State.Idle;
+        }
+
+        if (!wasAlreadyHostile)
+        {
+            GD.Print(
+                $"[Mob] {Name} became HOSTILE."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // CHECK IF THIS MOB IS BEEFALO
+    // =========================================================
+
+    private bool IsBeefalo()
+    {
+        if (_definition == null)
+            return false;
+
+        return string.Equals(
+            _definition.id,
+            "beefalo",
+            StringComparison.OrdinalIgnoreCase
         );
     }
 
 
-    private void BecomeAngry()
+    // =========================================================
+    // ALERT NEARBY BEEFALO
+    // =========================================================
+
+    private void AlertNearbyBeefalo()
     {
-        SetSleeping(false);
+        float alertRange =
+            Mathf.Max(
+                DetectionRange,
+                1f
+            );
 
-        BehaviorType = MobBehaviorType.Hostile;
+        float alertRangeSquared =
+            alertRange *
+            alertRange;
 
-        if (_player != null &&
+        foreach (Node node in
+                 GetTree().GetNodesInGroup("mobs"))
+        {
+            if (node == this)
+                continue;
+
+            if (node is not Mob other)
+                continue;
+
+            if (!IsInstanceValid(other))
+                continue;
+
+            if (other.Health <= 0f)
+                continue;
+
+            if (!other.IsBeefalo())
+                continue;
+
+            Vector3 difference =
+                other.GlobalPosition -
+                GlobalPosition;
+
+            if (difference.LengthSquared() >
+                alertRangeSquared)
+            {
+                continue;
+            }
+
+            other.BecomeHostile(
+                false
+            );
+        }
+    }
+
+
+    // =========================================================
+    // FIND CLOSEST VALID TARGET
+    // =========================================================
+
+    private Node3D FindClosestValidTarget()
+    {
+        Node3D closest =
+            null;
+
+        float closestDistanceSquared =
+            float.MaxValue;
+
+
+        // -----------------------------------------------------
+        // PLAYER IS VALID FOR ALL HOSTILE MOBS
+        // -----------------------------------------------------
+
+        foreach (Node node in
+                 GetTree().GetNodesInGroup("player"))
+        {
+            if (node is not Node3D candidate)
+                continue;
+
+            if (!IsInstanceValid(candidate))
+                continue;
+
+            float distanceSquared =
+                GlobalPosition.DistanceSquaredTo(
+                    candidate.GlobalPosition
+                );
+
+            if (distanceSquared <
+                closestDistanceSquared)
+            {
+                closest =
+                    candidate;
+
+                closestDistanceSquared =
+                    distanceSquared;
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // BEEFALO CAN ALSO TARGET OTHER MOBS
+        // -----------------------------------------------------
+
+        if (IsBeefalo())
+        {
+            foreach (Node node in
+                     GetTree().GetNodesInGroup("mobs"))
+            {
+                if (node == this)
+                    continue;
+
+                if (node is not Mob otherMob)
+                    continue;
+
+                if (!IsInstanceValid(otherMob))
+                    continue;
+
+                if (otherMob.Health <= 0f)
+                    continue;
+
+                if (otherMob.IsBeefalo())
+                    continue;
+
+                float distanceSquared =
+                    GlobalPosition.DistanceSquaredTo(
+                        otherMob.GlobalPosition
+                    );
+
+                if (distanceSquared <
+                    closestDistanceSquared)
+                {
+                    closest =
+                        otherMob;
+
+                    closestDistanceSquared =
+                        distanceSquared;
+                }
+            }
+        }
+
+
+        // -----------------------------------------------------
+        // FALLBACK FOR CURRENT PLAYER SETUP
+        // -----------------------------------------------------
+
+        if (closest == null &&
+            _player != null &&
             IsInstanceValid(_player))
         {
-            _threat = _player;
-            _state = State.Chase;
-            _currentPath.Clear();
-            _hasTarget = false;
-            _repathTimer = 0f;
+            closest =
+                _player;
         }
+
+        return closest;
     }
 
 
@@ -2154,9 +2427,11 @@ public partial class Mob : CharacterBody3D
         }
 
         _isBreeding = true;
+
         partner._isBreeding = true;
 
         _breedingReady = false;
+
         partner._breedingReady = false;
 
         float cooldown =
@@ -2175,6 +2450,7 @@ public partial class Mob : CharacterBody3D
         SpawnBabies(partner);
 
         _isBreeding = false;
+
         partner._isBreeding = false;
     }
 
@@ -2259,7 +2535,9 @@ public partial class Mob : CharacterBody3D
             baby.DefinitionPath =
                 DefinitionPath;
 
-            GetParent().AddChild(baby);
+            GetParent().AddChild(
+                baby
+            );
 
             Vector3 offset =
                 new Vector3(
@@ -2338,6 +2616,8 @@ public partial class Mob : CharacterBody3D
 
         _hasTarget = false;
 
+        _hostileTarget = null;
+
         _currentPath.Clear();
 
         _repathTimer = 0f;
@@ -2407,11 +2687,6 @@ public partial class Mob : CharacterBody3D
         }
         else
         {
-            // -------------------------------------------------
-            // FALLBACK:
-            // Use adult model scaled to 55%.
-            // -------------------------------------------------
-
             _usingCustomBabyModel = false;
 
             _adultModelScale =
@@ -2448,6 +2723,7 @@ public partial class Mob : CharacterBody3D
 
         _isBaby = false;
 
+
         // -----------------------------------------------------
         // CUSTOM BABY MODEL
         // -----------------------------------------------------
@@ -2470,10 +2746,6 @@ public partial class Mob : CharacterBody3D
         }
         else
         {
-            // -------------------------------------------------
-            // SCALED ADULT MODEL
-            // -------------------------------------------------
-
             if (_mobModel != null)
             {
                 _mobModel.Scale =
@@ -2488,6 +2760,8 @@ public partial class Mob : CharacterBody3D
         _state = State.Idle;
 
         _hasTarget = false;
+
+        _hostileTarget = null;
 
         _currentPath.Clear();
 
@@ -2520,6 +2794,11 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
+
+        // -----------------------------------------------------
+        // FLEE
+        // -----------------------------------------------------
+
         if (_state == State.Flee)
         {
             bool threatGone =
@@ -2546,101 +2825,68 @@ public partial class Mob : CharacterBody3D
 
 
         // -----------------------------------------------------
-        // ANGRY FROM SHEARING
-        // -----------------------------------------------------
-
-        if (_angeredByShearing &&
-            _player != null &&
-            IsInstanceValid(_player))
-        {
-            float distToPlayer =
-                GlobalPosition.DistanceTo(
-                    _player.GlobalPosition
-                );
-
-            if (distToPlayer <=
-                AttackRange)
-            {
-                _state =
-                    State.Attack;
-
-                _hasTarget =
-                    false;
-
-                return;
-            }
-
-            if (distToPlayer <=
-                DetectionRange * 2f)
-            {
-                if (_state !=
-                    State.Chase)
-                {
-                    _state =
-                        State.Chase;
-
-                    _repathTimer =
-                        0f;
-                }
-
-                return;
-            }
-        }
-
-
-        // -----------------------------------------------------
-        // NORMAL HOSTILE BEHAVIOR
+        // HOSTILE
         // -----------------------------------------------------
 
         if (BehaviorType ==
-                MobBehaviorType.Hostile &&
-            _player != null &&
-            IsInstanceValid(_player))
+            MobBehaviorType.Hostile)
         {
-            float distToPlayer =
-                GlobalPosition.DistanceTo(
-                    _player.GlobalPosition
-                );
+            Node3D closestTarget =
+                FindClosestValidTarget();
 
-            if (distToPlayer <=
-                AttackRange)
+            if (closestTarget != null)
             {
-                _state =
-                    State.Attack;
+                _hostileTarget =
+                    closestTarget;
 
-                _hasTarget =
-                    false;
+                float distance =
+                    GlobalPosition.DistanceTo(
+                        closestTarget.GlobalPosition
+                    );
 
-                return;
-            }
-
-            if (distToPlayer <=
-                DetectionRange)
-            {
-                if (_state !=
-                    State.Chase)
+                if (distance <= AttackRange)
                 {
                     _state =
-                        State.Chase;
+                        State.Attack;
 
-                    _repathTimer =
-                        0f;
+                    _hasTarget =
+                        false;
+
+                    return;
                 }
 
-                return;
+                if (distance <=
+                    DetectionRange)
+                {
+                    if (_state != State.Chase)
+                    {
+                        _state =
+                            State.Chase;
+
+                        _repathTimer =
+                            0f;
+                    }
+
+                    return;
+                }
             }
 
-            if (_state ==
-                    State.Chase ||
-                _state ==
-                    State.Attack)
+            // No target nearby.
+            if (_state == State.Chase ||
+                _state == State.Attack)
             {
+                _hostileTarget = null;
+
                 EnterIdle();
             }
         }
 
-        if (_state ==
-            State.Idle)
+
+        // -----------------------------------------------------
+        // NORMAL PASSIVE BEHAVIOR
+        // -----------------------------------------------------
+
+        if (_state == State.Idle)
         {
             _idleTimer -= dt;
 
@@ -2681,15 +2927,24 @@ public partial class Mob : CharacterBody3D
                         RepathInterval;
 
                     Node3D chaseTarget =
-                        _player;
+                        FindClosestValidTarget();
 
                     if (chaseTarget != null &&
                         IsInstanceValid(chaseTarget))
                     {
+                        _hostileTarget =
+                            chaseTarget;
+
                         RequestPathTo(
                             chaseTarget.GlobalPosition,
                             32
                         );
+                    }
+                    else
+                    {
+                        _hostileTarget = null;
+
+                        EnterIdle();
                     }
                 }
 
@@ -2720,13 +2975,169 @@ public partial class Mob : CharacterBody3D
                     _attackTimer =
                         AttackInterval;
 
-                    GD.Print(
-                        $"{Name} hits the player for {AttackDamage}"
-                    );
+                    Node3D attackTarget =
+                        FindClosestValidTarget();
+
+                    if (attackTarget != null &&
+                        IsInstanceValid(attackTarget))
+                    {
+                        _hostileTarget =
+                            attackTarget;
+
+                        float distance =
+                            GlobalPosition.DistanceTo(
+                                attackTarget.GlobalPosition
+                            );
+
+                        if (distance >
+                            AttackRange)
+                        {
+                            _state =
+                                State.Chase;
+
+                            _repathTimer =
+                                0f;
+
+                            break;
+                        }
+
+                        DealAttackDamage(
+                            attackTarget
+                        );
+                    }
+                    else
+                    {
+                        _hostileTarget = null;
+
+                        EnterIdle();
+                    }
                 }
 
                 break;
         }
+    }
+
+
+    // =========================================================
+    // DEAL ATTACK DAMAGE
+    // =========================================================
+    //
+    // Damage and knockback are separate.
+    //
+    // Mob attacks currently deal damage only.
+    //
+    // Later, an attack/effect can independently apply
+    // knockback if we want it to.
+    // =========================================================
+
+    private void DealAttackDamage(
+        Node3D target)
+    {
+        if (target == null ||
+            !IsInstanceValid(target))
+        {
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // MOB TARGET
+        // -----------------------------------------------------
+
+        if (target is Mob targetMob)
+        {
+            if (targetMob == this ||
+                targetMob.Health <= 0f)
+            {
+                return;
+            }
+
+            // Beefalo can never attack another Beefalo.
+            if (IsBeefalo() &&
+                targetMob.IsBeefalo())
+            {
+                return;
+            }
+
+            targetMob.TakeDamage(
+                AttackDamage,
+                GlobalPosition,
+                this
+            );
+
+            GD.Print(
+                $"[Mob] {Name} hits {targetMob.Name} " +
+                $"for {AttackDamage} damage."
+            );
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // PLAYER TARGET
+        // -----------------------------------------------------
+
+        if (target is Player player)
+        {
+            player.TakeDamage(
+                AttackDamage
+            );
+
+            GD.Print(
+                $"[Mob] {Name} attacks the player " +
+                $"for {AttackDamage} damage."
+            );
+
+            return;
+        }
+
+
+        // -----------------------------------------------------
+        // PLAYER GROUP FALLBACK
+        // -----------------------------------------------------
+        //
+        // Keeps the mob framework tolerant of a player node
+        // that is represented as a Node3D but is not directly
+        // recognized as Player.
+        //
+        // If the actual node is not Player, we do not attempt
+        // reflection or guess at another TakeDamage overload.
+        // -----------------------------------------------------
+
+        if (IsPlayerNode(target))
+        {
+            GD.Print(
+                $"[Mob] {Name} found a player target, " +
+                $"but the target is not a Player instance."
+            );
+        }
+    }
+
+
+    // =========================================================
+    // CHECK PLAYER NODE
+    // =========================================================
+
+    private bool IsPlayerNode(
+        Node3D node)
+    {
+        if (node == null ||
+            !IsInstanceValid(node))
+        {
+            return false;
+        }
+
+        if (node.IsInGroup("player"))
+        {
+            return true;
+        }
+
+        return node.Name.ToString()
+            .Equals(
+                "player",
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
 
@@ -3034,7 +3445,8 @@ public partial class Mob : CharacterBody3D
     // FOOD / FEEDING
     // =========================================================
 
-    private bool IsBreedingFood(string itemId)
+    private bool IsBreedingFood(
+        string itemId)
     {
         if (_definition == null ||
             _definition.breeding == null ||
@@ -3051,7 +3463,7 @@ public partial class Mob : CharacterBody3D
             if (string.Equals(
                 foodItem,
                 itemId,
-                System.StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -3061,7 +3473,8 @@ public partial class Mob : CharacterBody3D
     }
 
 
-    public bool CanEat(string itemId)
+    public bool CanEat(
+        string itemId)
     {
         if (_definition == null ||
             _definition.food == null ||
@@ -3082,7 +3495,7 @@ public partial class Mob : CharacterBody3D
             if (string.Equals(
                 foodItem,
                 itemId,
-                System.StringComparison.OrdinalIgnoreCase))
+                StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -3092,13 +3505,15 @@ public partial class Mob : CharacterBody3D
     }
 
 
-    public bool IsBreedFood(string itemId)
+    public bool IsBreedFood(
+        string itemId)
     {
         return IsBreedingFood(itemId);
     }
 
 
-    public bool TryFeed(string itemId)
+    public bool TryFeed(
+        string itemId)
     {
         if (string.IsNullOrEmpty(itemId))
         {
@@ -3114,7 +3529,8 @@ public partial class Mob : CharacterBody3D
     }
 
 
-    public bool Feed(string itemId)
+    public bool Feed(
+        string itemId)
     {
         if (!CanEat(itemId))
         {
@@ -3162,10 +3578,27 @@ public partial class Mob : CharacterBody3D
     // =========================================================
     // DAMAGE
     // =========================================================
+    //
+    // Damage is intentionally separate from knockback.
+    //
+    // This method only handles:
+    // - Health reduction
+    // - Waking a sleeping mob
+    // - Determining the attacker/source
+    // - Beefalo hostility
+    // - Passive fleeing
+    // - Death
+    //
+    // Knockback is NOT applied here.
+    //
+    // Knockback/push comes from the effect source that
+    // actually causes it.
+    // =========================================================
 
     public void TakeDamage(
         float amount,
-        Vector3? sourcePosition = null)
+        Vector3? sourcePosition = null,
+        Node3D sourceEntity = null)
     {
         if (amount <= 0f ||
             _health <= 0f)
@@ -3184,6 +3617,35 @@ public partial class Mob : CharacterBody3D
         }
 
 
+        // -----------------------------------------------------
+        // DETERMINE ATTACKER
+        // -----------------------------------------------------
+
+        Node3D sourceTarget =
+            sourceEntity;
+
+        if (sourceTarget == null &&
+            sourcePosition.HasValue)
+        {
+            sourceTarget =
+                FindClosestPlayerToPosition(
+                    sourcePosition.Value
+                );
+        }
+
+        if (sourceTarget == null &&
+            _player != null &&
+            IsInstanceValid(_player))
+        {
+            sourceTarget =
+                _player;
+        }
+
+
+        // -----------------------------------------------------
+        // DAMAGE
+        // -----------------------------------------------------
+
         _health -= amount;
 
         _health =
@@ -3192,69 +3654,38 @@ public partial class Mob : CharacterBody3D
                 0f
             );
 
-        Vector3 source;
 
-        if (sourcePosition.HasValue)
-        {
-            source =
-                sourcePosition.Value;
-        }
-        else if (_player != null &&
-                 IsInstanceValid(_player))
-        {
-            source =
-                _player.GlobalPosition;
-        }
-        else
-        {
-            source =
-                GlobalPosition -
-                Vector3.Forward;
-        }
-
-        Vector3 away =
-            GlobalPosition -
-            source;
-
-        away.Y = 0;
-
-        if (away.Length() >
-            0.01f)
-        {
-            away =
-                away.Normalized();
-        }
-        else
-        {
-            away =
-                Vector3.Forward;
-        }
-
-        _knockbackVelocity =
-            away *
-            KnockbackForce;
-
-        _knockbackTimer =
-            KnockbackDuration;
+        // -----------------------------------------------------
+        // HIT FLASH ONLY
+        // -----------------------------------------------------
 
         _flashTimer =
             FlashDuration;
 
 
         // -----------------------------------------------------
+        // HOSTILE RESPONSE
+        // -----------------------------------------------------
+
+        if (IsBeefalo())
+        {
+            BecomeHostile();
+        }
+
+
+        // -----------------------------------------------------
         // PASSIVE FLEE
         // -----------------------------------------------------
 
-        if (_fleeEnabled &&
-            BehaviorType ==
-                MobBehaviorType.Passive &&
-            !_angeredByShearing &&
-            _player != null &&
-            IsInstanceValid(_player) &&
+        if (_health > 0f &&
+            _fleeEnabled &&
+            BehaviorType == MobBehaviorType.Passive &&
+            sourceTarget != null &&
+            IsInstanceValid(sourceTarget) &&
             _state != State.Flee)
         {
             _threat =
-                _player;
+                sourceTarget;
 
             _state =
                 State.Flee;
@@ -3284,6 +3715,56 @@ public partial class Mob : CharacterBody3D
         {
             Die();
         }
+    }
+
+
+    // =========================================================
+    // FIND CLOSEST PLAYER TO POSITION
+    // =========================================================
+
+    private Node3D FindClosestPlayerToPosition(
+        Vector3 position)
+    {
+        Node3D closest =
+            null;
+
+        float closestDistanceSquared =
+            float.MaxValue;
+
+        foreach (Node node in
+                 GetTree().GetNodesInGroup("player"))
+        {
+            if (node is not Node3D candidate)
+                continue;
+
+            if (!IsInstanceValid(candidate))
+                continue;
+
+            float distanceSquared =
+                position.DistanceSquaredTo(
+                    candidate.GlobalPosition
+                );
+
+            if (distanceSquared <
+                closestDistanceSquared)
+            {
+                closest =
+                    candidate;
+
+                closestDistanceSquared =
+                    distanceSquared;
+            }
+        }
+
+        if (closest == null &&
+            _player != null &&
+            IsInstanceValid(_player))
+        {
+            closest =
+                _player;
+        }
+
+        return closest;
     }
 
 
@@ -3500,6 +3981,8 @@ public partial class Mob : CharacterBody3D
 
         _hasTarget =
             false;
+
+        _hostileTarget = null;
 
         _currentPath.Clear();
 

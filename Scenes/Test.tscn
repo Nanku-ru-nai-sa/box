@@ -26,7 +26,7 @@ script = ExtResource("1_ko2s7")
 script = ExtResource("3_f2nln")
 
 [node name="player" parent="." unique_id=189951435 instance=ExtResource("2_gxb1y")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 201, 8)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 200, 8)
 
 [node name="MobSpawner" type="Node3D" parent="." unique_id=498175751]
 script = ExtResource("6_06fis")

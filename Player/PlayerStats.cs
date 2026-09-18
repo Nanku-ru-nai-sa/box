@@ -149,6 +149,37 @@ public partial class PlayerStats : Node
         GD.Print("Player died.");
     }
 
+    public void ResetAfterDeath()
+{
+IsDead = false;
+
+Health = MaxHealth;
+Stamina = MaxStamina;
+Mana = MaxMana;
+
+_staminaRegenTimer = 0f;
+
+EmitSignal(
+    SignalName.HealthChanged,
+    Health,
+    MaxHealth
+);
+
+EmitSignal(
+    SignalName.StaminaChanged,
+    Stamina,
+    MaxStamina
+);
+
+EmitSignal(
+    SignalName.ManaChanged,
+    Mana,
+    MaxMana
+);
+
+}
+
+
     // ── Leveling ─────────────────────────────────────────────────────────────
 
     // Call this whenever your (future) XP/level system decides the player

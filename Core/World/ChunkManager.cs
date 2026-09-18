@@ -1283,6 +1283,71 @@ public Vector2? LoadPlayerLook()
 
         return result;
     }
+public Vector3 GetWorldSpawnPosition()
+{
+    const int spawnX = 0;
+    const int spawnZ = 0;
+
+    // ------------------------------------------------------------
+    // FIRST: Check the actual loaded world.
+    //
+    // This includes player-built and player-destroyed blocks,
+    // unlike GetSurfaceHeight(), which only looks at generated
+    // terrain density.
+    // ------------------------------------------------------------
+
+    Vector3I chunkPos = WorldToChunk(
+        new Vector3I(spawnX, 0, spawnZ)
+    );
+
+    if (_chunks.TryGetValue(chunkPos, out Chunk chunk))
+    {
+        int localX = spawnX - chunkPos.X * Chunk.SIZE;
+        int localZ = spawnZ - chunkPos.Z * Chunk.SIZE;
+
+        // Search from the top of the world downward.
+        for (int worldY = 287; worldY >= 0; worldY--)
+        {
+            Vector3I worldPos = new Vector3I(
+                spawnX,
+                worldY,
+                spawnZ
+            );
+
+            BlockState block = GetBlockAtWorld(worldPos);
+
+            if (block.IsAir())
+                continue;
+
+            // Water isn't a valid place to spawn.
+            if (block.BlockId == "water")
+                continue;
+
+            // Found the actual highest solid block.
+            return new Vector3(
+                spawnX + 0.5f,
+                worldY + 2.0f,
+                spawnZ + 0.5f
+            );
+        }
+    }
+
+    // ------------------------------------------------------------
+    // FALLBACK:
+    //
+    // If the chunk isn't loaded yet, use the generated terrain
+    // height so we still have a valid world spawn.
+    // ------------------------------------------------------------
+
+    int generatedSurfaceY =
+        GetSurfaceHeight(spawnX, spawnZ);
+
+    return new Vector3(
+        spawnX + 0.5f,
+        generatedSurfaceY + 2.0f,
+        spawnZ + 0.5f
+    );
+}
 
     // Dirt/sand topsoil layer thickness for this column, in
     // [MinTopsoilDepth, MaxTopsoilDepth]. Cached per column for the same

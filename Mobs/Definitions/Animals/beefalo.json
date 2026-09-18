@@ -12,7 +12,7 @@
   "behavior": {
 	"type": "passive",
 	"detectionRange": 8.0,
-	"attackRange": 1.5,
+	"attackRange": 2.0,
 	"attackDamage": 4.0,
 	"attackInterval": 1.2
   },
@@ -38,23 +38,7 @@
 
   "shearing": {
 	"enabled": true,
-	"requiresSleeping": true,
 	"angerWhenAwake": true
-  },
-
-  "inHeat": {
-	"enabled": true,
-	"seasons": [
-      "spring"
-	]
-  },
-
-  "breeding": {
-	"enabled": true,
-	"food": [
-      "wheat"
-	],
-	"babyChance": 1.0
   },
 
   "gender": {
@@ -66,12 +50,33 @@
   },
 
   "spawning": {
-	"enabled": true
+	"enabled": true,
+	"minGroupSize": 2,
+	"maxGroupSize": 4,
+	"minSpawnDistance": 12.0,
+	"maxSpawnDistance": 48.0,
+	"maxWorldCount": 12,
+	"seasons": [
+      "Spring"
+	]
+  },
+
+  "breeding": {
+	"enabled": true,
+	"foodItems": [
+      "wheat"
+	],
+	"litterMin": 1,
+	"litterMax": 1,
+	"breedCooldown": 900.0,
+	"babyGrowthMin": 300.0,
+	"babyGrowthMax": 900.0,
+	"seasons": [
+      "Spring"
+	]
   },
 
   "baby": {
-	"enabled": true,
-	"growthTime": 1200.0,
 	"model": "",
 	"texture": ""
   },

@@ -67,7 +67,6 @@ public class MobFurSettings
 public class MobShearingSettings
 {
     public bool enabled = false;
-    public bool requiresSleeping = false;
     public bool angerWhenAwake = false;
 }
 
@@ -155,6 +154,10 @@ public class MobBreeding
     // Random time for a baby to grow into an adult.
     public float babyGrowthMin = 300.0f;
     public float babyGrowthMax = 900.0f;
+
+    // Seasons when this mob can breed.
+    // Empty = can breed during every season.
+    public string[] seasons = Array.Empty<string>();
 }
 
 
@@ -222,6 +225,10 @@ public class MobSpawnSettings
     public float maxSpawnDistance = 48.0f;
 
     public int maxWorldCount = 20;
+
+    // Seasons when this mob can naturally spawn.
+    // Empty = can spawn during every season.
+    public string[] seasons = Array.Empty<string>();
 }
 
 
