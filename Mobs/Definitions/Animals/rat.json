@@ -1,0 +1,72 @@
+{
+  "id": "rat",
+  "displayName": "Rat",
+  "model": "res://Assets/Models/Mobs/rat/rat.gltf",
+
+  "stats": {
+	"maxHealth": 6.0,
+	"moveSpeed": 3.0,
+	"turnSpeed": 10.0
+  },
+
+  "behavior": {
+	"type": "hostile",
+	"wanderRadius": 8.0,
+	"minIdleTime": 1.0,
+	"maxIdleTime": 4.0,
+	"detectionRange": 12.0,
+	"attackRange": 1.0,
+	"attackDamage": 2.0,
+	"attackInterval": 1.0
+  },
+
+  "flee": {
+	"enabled": false,
+	"distance": 6.0,
+	"speedMultiplier": 1.5
+  },
+
+  "gender": {
+	"enabled": true,
+	"maleChance": 0.5,
+	"femaleChance": 0.5,
+	"maleModel": "",
+	"femaleModel": "",
+	"maleTexture": "",
+	"femaleTexture": ""
+  },
+
+  "spawning": {
+	"enabled": true,
+	"minGroupSize": 2,
+	"maxGroupSize": 5,
+	"minSpawnDistance": 12.0,
+	"maxSpawnDistance": 40.0,
+	"maxWorldCount": 30,
+	"seasons": []
+  },
+
+  "breeding": {
+	"enabled": true,
+	"foodItems": [],
+	"litterMin": 2,
+	"litterMax": 4,
+	"breedCooldown": 600.0,
+	"babyGrowthMin": 300.0,
+	"babyGrowthMax": 600.0,
+	"seasons": []
+  },
+
+  "appearance": {
+	"shinyEnabled": true,
+	"shinyChance": 0.01,
+	"bigEnabled": true,
+	"bigChance": 0.01,
+	"bigScale": 2.0
+  },
+
+  "drops": {
+	"enabled": true,
+	"items": []
+  }
+}

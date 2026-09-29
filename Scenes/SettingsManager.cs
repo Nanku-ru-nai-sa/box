@@ -27,7 +27,7 @@ public partial class SettingsManager : Node
     // Admin — unlocked by typing /admin <password> in chat
     public bool IsAdmin { get; private set; } = false;
 
-    private const string AdminPassword = "boxadmin";
+    private const string AdminPassword = "box";
 
     private const string SavePath = "user://settings.json";
 

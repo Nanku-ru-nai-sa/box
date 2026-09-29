@@ -21,11 +21,16 @@ public class MobDefinition
     public MobFurSettings fur = new MobFurSettings();
     public MobShearingSettings shearing = new MobShearingSettings();
 
+    // Mount / riding settings.
+    public MobMountSettings mount = new MobMountSettings();
+
     // Baby appearance.
     public MobBabySettings baby = new MobBabySettings();
 
     // Items this mob can drop when it dies.
     public MobDrops drops = new MobDrops();
+
+public MobAppearanceSettings appearance = new MobAppearanceSettings();
 }
 
 
@@ -72,6 +77,33 @@ public class MobShearingSettings
 
 
 // =============================================================
+// MOUNT / RIDING
+// =============================================================
+
+[Serializable]
+public class MobMountSettings
+{
+    // Can this mob be ridden?
+    public bool enabled = false;
+
+    // Can this mob accept a saddle?
+    public bool saddleAllowed = false;
+
+    // Multiplier applied to the mob's normal moveSpeed.
+    public float speedMultiplier = 1.0f;
+
+    // Additional multiplier while the player is sprinting.
+    public float sprintMultiplier = 1.5f;
+
+    // Multiplier applied to the player's normal jump strength.
+    public float jumpMultiplier = 1.0f;
+
+    // Can the player sprint while riding this mob?
+    public bool canSprint = true;
+}
+
+
+// =============================================================
 // FLEE
 // =============================================================
 
@@ -82,7 +114,26 @@ public class FleeDefinition
     public float distance = 6f;
     public float speedMultiplier = 1.8f;
 }
+// =============================================================
+// APPEARANCE
+// =============================================================
 
+[Serializable]
+public class MobAppearanceSettings
+{
+    // Chance for this mob to spawn shiny.
+    // 0.01 = 1%
+    public bool shinyEnabled = false;
+    public float shinyChance = 0.01f;
+
+    // Chance for this mob to spawn big.
+    // 0.01 = 1%
+    public bool bigEnabled = false;
+    public float bigChance = 0.01f;
+
+    // Big mob is twice the normal size.
+    public float bigScale = 2.0f;
+}
 
 // =============================================================
 // STATS

@@ -10,7 +10,21 @@
 	"moveSpeed": 2.5,
 	"turnSpeed": 8.0
   },
-
+"appearance": {
+  "shinyEnabled": true,
+  "shinyChance": 0.01,
+  "bigEnabled": true,
+  "bigChance": 0.02,
+  "bigScale": 2.0
+},
+"mount": {
+  "enabled": true,
+  "saddleAllowed": true,
+  "speedMultiplier": 1.0,
+  "sprintMultiplier": 1.5,
+  "jumpMultiplier": 1.2,
+  "canSprint": true
+},
   "behavior": {
 	"type": "passive",
 	"wanderRadius": 6.0,
@@ -22,7 +36,7 @@
 	"attackInterval": 1.2
   },
 
-"sleep": {
+  "sleep": {
 	"enabled": true,
 	"startHour": 20.0,
 	"endHour": 6.0
@@ -59,7 +73,6 @@
 	"enabled": true,
 	"maleChance": 0.5,
 	"femaleChance": 0.5,
-
 	"maleTexture": "res://Assets/Models/Mobs/pig/pig_male.png",
 	"femaleTexture": "res://Assets/Models/Mobs/pig/pig_female.png"
   },
@@ -82,6 +95,11 @@
 	"maxGroupSize": 3,
 	"minSpawnDistance": 12.0,
 	"maxSpawnDistance": 48.0,
-	"maxWorldCount": 20
+	"maxWorldCount": 20,
+	"seasons": [
+	  "Spring",
+	  "Summer",
+      "Autumn"
+	]
   }
 }

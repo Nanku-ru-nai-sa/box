@@ -18,6 +18,18 @@ public class SavedMobData
 
     // Mob's horizontal facing direction.
     public float RotationY { get; set; } = 0f;
+
+    // ---------------------------------------------------------
+    // APPEARANCE
+    // ---------------------------------------------------------
+    //
+    // Nullable so older save files that do not contain these
+    // values will simply roll appearance normally.
+    //
+
+    public bool? IsShiny { get; set; } = null;
+
+    public bool? IsBig { get; set; } = null;
 }
 
 
@@ -776,7 +788,13 @@ savedMobs.Add(
             },
 
         RotationY =
-            mob.Rotation.Y
+            mob.Rotation.Y,
+
+        IsShiny =
+            mob.IsShiny,
+
+        IsBig =
+            mob.IsBig
     }
 );
             }

@@ -1,0 +1,78 @@
+{
+  "id": "moose",
+  "displayName": "Moose",
+  "model": "res://Assets/Models/Mobs/moose/moose.gltf",
+
+  "stats": {
+	"maxHealth": 30.0,
+	"moveSpeed": 2.2,
+	"turnSpeed": 5.0
+  },
+
+  "behavior": {
+  "type": "neutral",
+  "wanderRadius": 10.0,
+  "minIdleTime": 2.0,
+  "maxIdleTime": 7.0,
+  "detectionRange": 10.0,
+  "attackRange": 2.2,
+  "attackDamage": 5.0,
+  "attackInterval": 1.5
+},
+
+  "flee": {
+	"enabled": false,
+	"distance": 8.0,
+	"speedMultiplier": 1.5
+  },
+
+  "gender": {
+	"enabled": true,
+	"maleChance": 0.5,
+	"femaleChance": 0.5,
+	"maleModel": "",
+	"femaleModel": "",
+	"maleTexture": "",
+	"femaleTexture": ""
+  },
+
+  "spawning": {
+	"enabled": true,
+	"minGroupSize": 1,
+	"maxGroupSize": 2,
+	"minSpawnDistance": 16.0,
+	"maxSpawnDistance": 48.0,
+	"maxWorldCount": 8,
+	"seasons": [
+      "winter"
+	]
+  },
+
+  "breeding": {
+	"enabled": true,
+	"foodItems": [],
+	"litterMin": 1,
+	"litterMax": 1,
+	"breedCooldown": 1200.0,
+	"babyGrowthMin": 600.0,
+	"babyGrowthMax": 1200.0,
+	"seasons": [
+	  "spring",
+	  "summer",
+      "autumn"
+	]
+  },
+
+  "appearance": {
+	"shinyEnabled": true,
+	"shinyChance": 0.01,
+	"bigEnabled": true,
+	"bigChance": 0.01,
+	"bigScale": 2.0
+  },
+
+  "drops": {
+	"enabled": true,
+	"items": []
+  }
+}

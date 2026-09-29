@@ -8,45 +8,25 @@ using System.Collections.Generic;
 //
 // Generic mob framework.
 //
-// Supports:
-// - Passive / Hostile AI
-// - VoxelPathfinder movement
-// - Wandering
-// - Hostile chasing
-// - Hostile attacking
-// - Passive fleeing
-// - Knockback
-// - Health
-// - Health bar
-// - GLTF models
-// - Walking animation
-// - Sleeping
-// - Male / Female gender
-// - Male / Female models
-// - Male / Female textures
-// - Feeding
-// - Breeding
-// - Baby mobs
-// - Custom baby models
-// - Custom baby textures
-// - Baby growth
-// - Fur
-// - Shearing
-// - Herd hostility
-// - JSON-configurable drops
-// - Automatic fur death drops
-// - Automatic model-based collision
+// MOVEMENT MODEL
+// -------------------------------------------------------------
+// Mobs use simple X/Z steering rather than vertical voxel A*.
 //
-// IMPORTANT:
-// Baby mobs are NOT created by scaling the CharacterBody3D.
-// If a custom baby model is provided, that model is used.
-// Otherwise the adult model is scaled down.
-// Collision is automatically rebuilt to match the active model.
+// - AI chooses an X/Z destination.
+// - Mob walks toward that destination.
+// - A one-block obstacle can be automatically stepped over.
+// - Two-block+ obstacles are treated as walls.
+// - Drop-offs are allowed.
+// - Gravity handles falling naturally.
+// - The automatically generated collision box is used as the
+//   physical size of the mob.
+//
 // =============================================================
 
 public enum MobBehaviorType
 {
     Passive,
+    Neutral,
     Hostile
 }
 
@@ -63,6 +43,11 @@ public partial class Mob : CharacterBody3D
         "res://Mobs/Definitions/Animals/pig.json";
 
     private MobDefinition _definition;
+
+    private Vector3 _mountedMoveDirection = Vector3.Zero;
+    private bool _mountedSprinting = false;
+    private bool _mountedJumpRequested = false;
+    private float _mountedJumpVelocity = 6f;
 
 
     // =========================================================
@@ -117,8 +102,16 @@ public partial class Mob : CharacterBody3D
     public float FleeSpeedMultiplier { get; set; } = 1.8f;
 
     private bool _fleeEnabled = true;
+    private bool _isShiny = false;
+private bool _isBig = false;
+private float _mobScaleMultiplier = 1f;
+public bool? SavedShinyOverride { get; set; }
+public bool? SavedBigOverride { get; set; }
+public bool IsShiny =>
+    _isShiny;
 
-
+public bool IsBig =>
+    _isBig;
     // =========================================================
     // FUR / SHEARING
     // =========================================================
@@ -177,33 +170,50 @@ public partial class Mob : CharacterBody3D
     [Export]
     public float FlashDuration = 0.15f;
 
-    // Small upward movement when knockback is applied.
     [Export]
     public float KnockbackVerticalMultiplier = 0.2f;
 
 
     // =========================================================
-    // MOVEMENT / PATHING
+    // MOVEMENT
     // =========================================================
 
     private const float Gravity = 20f;
 
-    private const float RepathInterval = 0.6f;
+    private const float StuckCheckInterval = 0.75f;
 
-    private const float StuckCheckInterval = 0.5f;
+    private const float StuckDistanceThreshold = 0.10f;
 
-    private const float StuckDistanceThreshold = 0.15f;
+    private const int StuckChecksBeforeGivingUp = 3;
 
-    private const int StuckChecksBeforeGivingUp = 2;
+    [ExportGroup("Movement")]
 
-    [ExportGroup("Pathing Safety")]
+    // Maximum automatic step height.
+    // One normal voxel block.
+    [Export]
+    public float StepHeight = 1.05f;
+
+    // How far ahead we test for an obstacle.
+    [Export]
+    public float StepCheckDistance = 0.45f;
+
+    // Prevents repeated stepping every physics frame.
+    [Export]
+    public float StepCooldown = 0.12f;
+
+    // How strongly a mob turns away when it encounters
+    // a wall it cannot step over.
+    [Export]
+    public float WallAvoidanceStrength = 1.5f;
+
+    private float _stepCooldownTimer = 0f;
 
     [Export]
-    public float MaxPathDuration = 4f;
+public float StepDuration = 0.3f;
 
-    [Export]
-    public float PathfindCooldown = 3f;
-
+private float _stepTimer = 0f;
+private float _stepStartY = 0f;
+private float _stepTargetY = 0f;
 
     // =========================================================
     // MOB STATE
@@ -240,8 +250,6 @@ public partial class Mob : CharacterBody3D
 
     private float _attackTimer;
 
-    private float _repathTimer;
-
     private bool _fleeSpeedApplied = false;
 
 
@@ -261,15 +269,16 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // PATH
+    // MOVEMENT TARGET
     // =========================================================
 
-    private Queue<Vector3> _currentPath =
-        new Queue<Vector3>();
+    // This is intentionally X/Z based.
+    //
+    // The Y value is ignored for AI movement.
+    // Gravity is responsible for vertical movement.
+    private Vector3 _movementTarget;
 
-    private Vector3 _currentTarget;
-
-    private bool _hasTarget = false;
+    private bool _hasMovementTarget = false;
 
 
     // =========================================================
@@ -281,10 +290,6 @@ public partial class Mob : CharacterBody3D
     private Vector3 _stuckCheckLastPosition;
 
     private int _stuckCheckFailCount;
-
-    private float _pathTimeoutTimer;
-
-    private float _pathfindCooldownTimer;
 
 
     // =========================================================
@@ -311,6 +316,34 @@ public partial class Mob : CharacterBody3D
     private const float HealthBarHeight = 0.1f;
 
     private const float HealthBarYOffset = 2.05f;
+
+
+    // =========================================================
+    // MOUNT / RIDING
+    // =========================================================
+
+    public bool MountEnabled { get; private set; } = false;
+
+    public bool SaddleAllowed { get; private set; } = false;
+
+    public float MountSpeedMultiplier { get; private set; } = 1f;
+
+    public float MountSprintMultiplier { get; private set; } = 1.5f;
+
+    public float MountJumpMultiplier { get; private set; } = 1f;
+
+    public bool MountCanSprint { get; private set; } = true;
+
+    public bool HasSaddle { get; private set; } = false;
+
+    private Player _mountedPlayer = null;
+
+    public bool IsMounted =>
+        _mountedPlayer != null &&
+        IsInstanceValid(_mountedPlayer);
+
+    public Player MountedPlayer =>
+        _mountedPlayer;
 
 
     // =========================================================
@@ -343,6 +376,8 @@ public partial class Mob : CharacterBody3D
 
     public MobGender Gender => _gender;
 
+    public MobGender? ForcedGender { get; set; }
+
 
     // =========================================================
     // PUBLIC INFORMATION
@@ -366,11 +401,33 @@ public partial class Mob : CharacterBody3D
                    _definition.breeding != null &&
                    _definition.breeding.enabled &&
                    IsHappy &&
-                   !_isBaby;
+                   !_isBaby &&
+                   IsCurrentSeasonAllowedForBreeding();
         }
     }
 
     public bool IsBaby => _isBaby;
+
+
+    public Vector3 GetMountPosition()
+    {
+        if (!_collisionBuilt)
+            return GlobalPosition + new Vector3(0f, 1.5f, 0f);
+
+        float topOfMob =
+            _adultCollisionPosition.Y +
+            (_adultCollisionSize.Y * 0.5f);
+
+        const float riderCushion = 0.15f;
+
+        return GlobalPosition +
+               new Vector3(
+                   0f,
+                   topOfMob + riderCushion,
+                   0f
+               );
+    }
+
 
     public bool IsSleeping =>
         _isSleeping;
@@ -387,6 +444,7 @@ public partial class Mob : CharacterBody3D
         _rng.Randomize();
 
         LoadDefinition();
+        RollAppearance();
 
         _dayNightCycle =
             GetTree()
@@ -406,11 +464,9 @@ public partial class Mob : CharacterBody3D
 
         _state = State.Idle;
 
-        _hasTarget = false;
+        _hasMovementTarget = false;
 
         _hostileTarget = null;
-
-        _currentPath.Clear();
 
         _idleTimer =
             _rng.RandfRange(
@@ -426,7 +482,99 @@ public partial class Mob : CharacterBody3D
         );
     }
 
+private void RollAppearance()
+{
+    _isShiny = false;
+    _isBig = false;
+    _mobScaleMultiplier = 1f;
 
+    // ---------------------------------------------------------
+    // RESTORE SAVED SHINY STATE
+    // ---------------------------------------------------------
+
+    if (SavedShinyOverride.HasValue)
+    {
+        _isShiny =
+            SavedShinyOverride.Value;
+    }
+
+    // ---------------------------------------------------------
+    // RESTORE SAVED BIG STATE
+    // ---------------------------------------------------------
+
+    if (SavedBigOverride.HasValue)
+    {
+        _isBig =
+            SavedBigOverride.Value;
+
+        if (_isBig &&
+            _definition?.appearance != null)
+        {
+            _mobScaleMultiplier =
+                Mathf.Max(
+                    1f,
+                    _definition.appearance.bigScale
+                );
+        }
+    }
+
+    // ---------------------------------------------------------
+    // IF BOTH STATES WERE PROVIDED, WE ARE DONE.
+    // ---------------------------------------------------------
+
+    if (SavedShinyOverride.HasValue &&
+        SavedBigOverride.HasValue)
+    {
+        GD.Print(
+            $"[Mob] {Name}: Restored Appearance " +
+            $"Shiny={_isShiny} " +
+            $"Big={_isBig} " +
+            $"Scale={_mobScaleMultiplier}"
+        );
+
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // NORMAL RANDOM ROLL
+    // ---------------------------------------------------------
+
+    if (_definition?.appearance == null)
+        return;
+
+    if (!SavedShinyOverride.HasValue &&
+        _definition.appearance.shinyEnabled &&
+        _definition.appearance.shinyChance > 0f)
+    {
+        _isShiny =
+            _rng.Randf() <
+            _definition.appearance.shinyChance;
+    }
+
+    if (!SavedBigOverride.HasValue &&
+        _definition.appearance.bigEnabled &&
+        _definition.appearance.bigChance > 0f)
+    {
+        if (_rng.Randf() <
+            _definition.appearance.bigChance)
+        {
+            _isBig = true;
+
+            _mobScaleMultiplier =
+                Mathf.Max(
+                    1f,
+                    _definition.appearance.bigScale
+                );
+        }
+    }
+
+    GD.Print(
+        $"[Mob] {Name}: Appearance " +
+        $"Shiny={_isShiny} " +
+        $"Big={_isBig} " +
+        $"Scale={_mobScaleMultiplier}"
+    );
+}
     // =========================================================
     // COLLISION
     // =========================================================
@@ -666,16 +814,23 @@ public partial class Mob : CharacterBody3D
             string behavior =
                 _definition.behavior.type ?? "passive";
 
-            if (behavior.ToLowerInvariant() == "hostile")
-            {
-                BehaviorType =
-                    MobBehaviorType.Hostile;
-            }
-            else
-            {
-                BehaviorType =
-                    MobBehaviorType.Passive;
-            }
+            switch (behavior.ToLowerInvariant())
+{
+    case "hostile":
+        BehaviorType =
+            MobBehaviorType.Hostile;
+        break;
+
+    case "neutral":
+        BehaviorType =
+            MobBehaviorType.Neutral;
+        break;
+
+    default:
+        BehaviorType =
+            MobBehaviorType.Passive;
+        break;
+}
 
             WanderRadius =
                 _definition.behavior.wanderRadius;
@@ -711,7 +866,9 @@ public partial class Mob : CharacterBody3D
                 _definition.flee.speedMultiplier;
         }
 
-        // FUR / SHEARING
+        // -----------------------------------------------------
+        // FUR
+        // -----------------------------------------------------
 
         if (_definition.fur != null)
         {
@@ -745,11 +902,55 @@ public partial class Mob : CharacterBody3D
         else
         {
             CanBeSheared = false;
-
             AngerWhenShearedAwake = false;
         }
 
+        // -----------------------------------------------------
+        // MOUNT
+        // -----------------------------------------------------
+
+        if (_definition.mount != null)
+        {
+            MountEnabled =
+                _definition.mount.enabled;
+
+            SaddleAllowed =
+                _definition.mount.saddleAllowed;
+
+            MountSpeedMultiplier =
+                Mathf.Max(
+                    0f,
+                    _definition.mount.speedMultiplier
+                );
+
+            MountSprintMultiplier =
+                Mathf.Max(
+                    1f,
+                    _definition.mount.sprintMultiplier
+                );
+
+            MountJumpMultiplier =
+                Mathf.Max(
+                    0f,
+                    _definition.mount.jumpMultiplier
+                );
+
+            MountCanSprint =
+                _definition.mount.canSprint;
+        }
+        else
+        {
+            MountEnabled = false;
+            SaddleAllowed = false;
+            MountSpeedMultiplier = 1f;
+            MountSprintMultiplier = 1.5f;
+            MountJumpMultiplier = 1f;
+            MountCanSprint = true;
+        }
+
+        // -----------------------------------------------------
         // SLEEP
+        // -----------------------------------------------------
 
         if (_definition.sleep != null)
         {
@@ -765,131 +966,13 @@ public partial class Mob : CharacterBody3D
         else
         {
             _sleepEnabled = false;
-
             _sleepStartHour = 20f;
-
             _sleepEndHour = 6f;
         }
 
         GD.Print(
             $"[Mob] Loaded definition: {_definition.displayName}"
         );
-    }
-
-
-    // =========================================================
-    // SLEEP SCHEDULE
-    // =========================================================
-
-    private void UpdateSleepState()
-    {
-        if (!_sleepEnabled)
-            return;
-
-        if (_health <= 0f)
-            return;
-
-        if (_dayNightCycle == null ||
-            !IsInstanceValid(_dayNightCycle))
-        {
-            _dayNightCycle =
-                GetTree()
-                    .GetFirstNodeInGroup(
-                        "day_night_cycle"
-                    ) as DayNightCycle;
-
-            if (_dayNightCycle == null)
-                return;
-        }
-
-        float gameHour =
-            _dayNightCycle.GetGameHour();
-
-        bool shouldSleep =
-            IsWithinSleepWindow(
-                gameHour
-            );
-
-
-        // -----------------------------------------------------
-        // WAKE
-        // -----------------------------------------------------
-
-        if (_isSleeping)
-        {
-            if (!shouldSleep)
-            {
-                SetSleeping(false);
-            }
-
-            return;
-        }
-
-
-        // -----------------------------------------------------
-        // DO NOT AUTOMATICALLY SLEEP WHILE BUSY
-        // -----------------------------------------------------
-
-        if (!shouldSleep)
-            return;
-
-        if (_state == State.Chase ||
-            _state == State.Attack ||
-            _state == State.Flee)
-        {
-            return;
-        }
-
-        // A hostile mob stays hostile.
-        if (BehaviorType ==
-            MobBehaviorType.Hostile)
-        {
-            return;
-        }
-
-
-        // -----------------------------------------------------
-        // SLEEP
-        // -----------------------------------------------------
-
-        SetSleeping(true);
-    }
-
-
-    // =========================================================
-    // CHECK SLEEP WINDOW
-    // =========================================================
-
-    private bool IsWithinSleepWindow(
-        float gameHour)
-    {
-        float start =
-            Mathf.PosMod(
-                _sleepStartHour,
-                24f
-            );
-
-        float end =
-            Mathf.PosMod(
-                _sleepEndHour,
-                24f
-            );
-
-        if (Mathf.IsEqualApprox(
-                start,
-                end))
-        {
-            return true;
-        }
-
-        if (start < end)
-        {
-            return gameHour >= start &&
-                   gameHour < end;
-        }
-
-        return gameHour >= start ||
-               gameHour < end;
     }
 
 
@@ -917,20 +1000,10 @@ public partial class Mob : CharacterBody3D
             _state =
                 State.Sleep;
 
-            _hasTarget =
+            _hasMovementTarget =
                 false;
 
             _hostileTarget = null;
-
-            _currentPath.Clear();
-
-            _repathTimer = 0f;
-
-            _pathTimeoutTimer = 0f;
-
-            _stuckCheckTimer = 0f;
-
-            _stuckCheckFailCount = 0;
 
             Velocity =
                 new Vector3(
@@ -953,18 +1026,8 @@ public partial class Mob : CharacterBody3D
             _state =
                 State.Idle;
 
-            _hasTarget =
+            _hasMovementTarget =
                 false;
-
-            _currentPath.Clear();
-
-            _repathTimer = 0f;
-
-            _pathTimeoutTimer = 0f;
-
-            _stuckCheckTimer = 0f;
-
-            _stuckCheckFailCount = 0;
 
             _idleTimer =
                 _rng.RandfRange(
@@ -990,12 +1053,23 @@ public partial class Mob : CharacterBody3D
 
     private void AssignGender()
     {
+        if (ForcedGender.HasValue)
+        {
+            _gender = ForcedGender.Value;
+
+            GD.Print(
+                $"[Mob] {_definition?.displayName ?? Name} " +
+                $"spawned as forced {_gender}"
+            );
+
+            return;
+        }
+
         if (_definition == null ||
             _definition.gender == null ||
             !_definition.gender.enabled)
         {
             _gender = MobGender.Male;
-
             return;
         }
 
@@ -1018,9 +1092,7 @@ public partial class Mob : CharacterBody3D
         if (total <= 0f)
         {
             maleChance = 0.5f;
-
             femaleChance = 0.5f;
-
             total = 1f;
         }
 
@@ -1031,13 +1103,9 @@ public partial class Mob : CharacterBody3D
             );
 
         if (roll < maleChance)
-        {
             _gender = MobGender.Male;
-        }
         else
-        {
             _gender = MobGender.Female;
-        }
 
         GD.Print(
             $"[Mob] {_definition.displayName} spawned as {_gender}"
@@ -1090,21 +1158,49 @@ public partial class Mob : CharacterBody3D
     // =========================================================
 
     private string GetAdultTexturePath()
+{
+    // ---------------------------------------------------------
+    // SHINY
+    // ---------------------------------------------------------
+
+    if (_isShiny)
     {
-        if (_definition == null ||
-            _definition.gender == null ||
-            !_definition.gender.enabled)
+        string modelPath =
+            GetAdultModelPath();
+
+        string shinyPath =
+            modelPath.GetBaseDir() +
+            "/shiny.png";
+
+        if (ResourceLoader.Exists(shinyPath))
         {
-            return "";
+            return shinyPath;
         }
 
-        if (_gender == MobGender.Male)
-        {
-            return _definition.gender.maleTexture ?? "";
-        }
-
-        return _definition.gender.femaleTexture ?? "";
+        GD.PrintErr(
+            $"[Mob] {Name}: Shiny was rolled, " +
+            $"but shiny.png was not found at {shinyPath}"
+        );
     }
+
+    // ---------------------------------------------------------
+    // NORMAL GENDER TEXTURES
+    // ---------------------------------------------------------
+
+    if (_definition == null ||
+        _definition.gender == null ||
+        !_definition.gender.enabled)
+    {
+        return "";
+    }
+
+    if (_gender == MobGender.Male)
+    {
+        return _definition.gender.maleTexture ?? "";
+    }
+
+    return _definition.gender.femaleTexture ?? "";
+}
 
 
     // =========================================================
@@ -1271,7 +1367,8 @@ public partial class Mob : CharacterBody3D
         );
 
         _mobModel.Scale =
-            Vector3.One;
+    Vector3.One *
+    _mobScaleMultiplier;
 
         _adultModelScale =
             _mobModel.Scale;
@@ -1364,7 +1461,8 @@ public partial class Mob : CharacterBody3D
         );
 
         _mobModel.Scale =
-            Vector3.One;
+    Vector3.One *
+    _mobScaleMultiplier;
 
         _usingCustomBabyModel =
             customBabyModel;
@@ -1564,11 +1662,40 @@ public partial class Mob : CharacterBody3D
     {
         float dt =
             (float)delta;
+            if (_stepTimer > 0f)
+{
+    _stepTimer -= dt;
 
+    float progress =
+        1f -
+        Mathf.Clamp(
+            _stepTimer / StepDuration,
+            0f,
+            1f
+        );
 
-        // -----------------------------------------------------
-        // BREEDING
-        // -----------------------------------------------------
+    progress =
+        progress * progress *
+        (3f - 2f * progress);
+
+    Vector3 pos =
+        GlobalPosition;
+
+    pos.Y =
+        Mathf.Lerp(
+            _stepStartY,
+            _stepTargetY,
+            progress
+        );
+
+    GlobalPosition =
+        pos;
+}
+
+        if (_stepCooldownTimer > 0f)
+        {
+            _stepCooldownTimer -= dt;
+        }
 
         if (_breedCooldownTimer > 0f)
         {
@@ -1583,11 +1710,6 @@ public partial class Mob : CharacterBody3D
             TryFindBreedingPartner();
         }
 
-
-        // -----------------------------------------------------
-        // BABY GROWTH
-        // -----------------------------------------------------
-
         if (_isBaby)
         {
             _babyGrowthTimer -= dt;
@@ -1597,21 +1719,6 @@ public partial class Mob : CharacterBody3D
                 GrowUp();
             }
         }
-
-
-        // -----------------------------------------------------
-        // PATHFIND COOLDOWN
-        // -----------------------------------------------------
-
-        if (_pathfindCooldownTimer > 0f)
-        {
-            _pathfindCooldownTimer -= dt;
-        }
-
-
-        // -----------------------------------------------------
-        // FIND PLAYER
-        // -----------------------------------------------------
 
         if (_player == null ||
             !IsInstanceValid(_player))
@@ -1629,20 +1736,14 @@ public partial class Mob : CharacterBody3D
                 found as Node3D;
         }
 
-
-        // -----------------------------------------------------
-        // HIT FEEDBACK
-        // -----------------------------------------------------
-
         UpdateHitFeedback(dt);
 
+        Vector3 velocity =
+            Velocity;
 
         // -----------------------------------------------------
         // GRAVITY
         // -----------------------------------------------------
-
-        Vector3 velocity =
-            Velocity;
 
         if (!IsOnFloor())
         {
@@ -1652,8 +1753,16 @@ public partial class Mob : CharacterBody3D
         else
         {
             velocity.Y = 0f;
-        }
 
+            if (_mountedJumpRequested)
+            {
+                velocity.Y =
+                    _mountedJumpVelocity *
+                    MountJumpMultiplier;
+
+                _mountedJumpRequested = false;
+            }
+        }
 
         // -----------------------------------------------------
         // INITIAL LANDING
@@ -1674,9 +1783,8 @@ public partial class Mob : CharacterBody3D
                 _state =
                     State.Idle;
 
-                _hasTarget = false;
-
-                _currentPath.Clear();
+                _hasMovementTarget =
+                    false;
 
                 _idleTimer =
                     _rng.RandfRange(
@@ -1692,14 +1800,6 @@ public partial class Mob : CharacterBody3D
 
             return;
         }
-
-
-        // -----------------------------------------------------
-        // SLEEP SCHEDULE
-        // -----------------------------------------------------
-
-        UpdateSleepState();
-
 
         // -----------------------------------------------------
         // KNOCKBACK
@@ -1724,7 +1824,6 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-
         // -----------------------------------------------------
         // SLEEPING
         // -----------------------------------------------------
@@ -1732,7 +1831,6 @@ public partial class Mob : CharacterBody3D
         if (_isSleeping)
         {
             velocity.X = 0f;
-
             velocity.Z = 0f;
 
             if (_animation != null)
@@ -1753,20 +1851,68 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-
         // -----------------------------------------------------
-        // AI
+        // MOUNTED
         // -----------------------------------------------------
 
-        UpdateState(dt);
+        if (IsMounted)
+        {
+            float mountSpeed =
+                GetMountSpeed(
+                    _mountedSprinting
+                );
 
-        RunState(dt);
+            if (_mountedMoveDirection.LengthSquared() >
+                0.0001f)
+            {
+                Vector3 moveDirection =
+                    _mountedMoveDirection.Normalized();
 
-        ApplyPathMovement(
-            dt,
-            ref velocity
-        );
+                velocity.X =
+                    moveDirection.X *
+                    mountSpeed;
 
+                velocity.Z =
+                    moveDirection.Z *
+                    mountSpeed;
+
+                FaceDirection(
+                    moveDirection,
+                    dt
+                );
+            }
+            else
+            {
+                velocity.X =
+                    Mathf.MoveToward(
+                        velocity.X,
+                        0f,
+                        mountSpeed * 10f * dt
+                    );
+
+                velocity.Z =
+                    Mathf.MoveToward(
+                        velocity.Z,
+                        0f,
+                        mountSpeed * 10f * dt
+                    );
+            }
+        }
+        else
+        {
+            // -------------------------------------------------
+            // AI
+            // -------------------------------------------------
+
+            UpdateState(dt);
+
+            RunState(dt);
+
+            ApplySimpleAIMovement(
+                dt,
+                ref velocity
+            );
+        }
 
         // -----------------------------------------------------
         // VISUALS
@@ -1782,11 +1928,6 @@ public partial class Mob : CharacterBody3D
 
         UpdateHealthBar();
 
-
-        // -----------------------------------------------------
-        // MOVEMENT
-        // -----------------------------------------------------
-
         Velocity =
             velocity;
 
@@ -1795,10 +1936,590 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // SIMPLE AI MOVEMENT
+    // =========================================================
+    //
+    // This intentionally ignores Y.
+    //
+    // The AI only decides:
+    //
+    // "I want to move in this X/Z direction."
+    //
+    // Physics decides whether that movement is possible.
+    //
+    // A one-block obstacle is handled by TryStepUp().
+    //
+    // A taller obstacle is treated as a wall and the AI
+    // chooses another direction.
+    //
+    // Falling is allowed.
+    //
+    // =========================================================
+
+    private void ApplySimpleAIMovement(
+        float dt,
+        ref Vector3 velocity)
+    {
+        if (_isSleeping)
+        {
+            velocity.X = 0f;
+            velocity.Z = 0f;
+            return;
+        }
+
+        if (!_hasMovementTarget)
+        {
+            velocity.X =
+                Mathf.MoveToward(
+                    velocity.X,
+                    0f,
+                    MoveSpeed * 6f * dt
+                );
+
+            velocity.Z =
+                Mathf.MoveToward(
+                    velocity.Z,
+                    0f,
+                    MoveSpeed * 6f * dt
+                );
+
+            return;
+        }
+
+        Vector3 toTarget =
+            _movementTarget -
+            GlobalPosition;
+
+        toTarget.Y = 0f;
+
+        float distance =
+            toTarget.Length();
+
+        // Target reached.
+        if (distance < 0.35f)
+        {
+            _hasMovementTarget = false;
+
+            velocity.X = 0f;
+            velocity.Z = 0f;
+
+            if (_state == State.Wander ||
+                _state == State.Flee)
+            {
+                EnterIdle();
+            }
+
+            return;
+        }
+
+        Vector3 direction =
+            toTarget.Normalized();
+
+        // -----------------------------------------------------
+        // CHECK WHETHER WE ARE ABOUT TO HIT A WALL
+        // -----------------------------------------------------
+
+        if (IsMovementBlocked(direction))
+        {
+            // Try walking up one normal block.
+            if (TryStepUp(direction))
+            {
+                // We stepped successfully.
+                velocity.X =
+                    direction.X * MoveSpeed;
+
+                velocity.Z =
+                    direction.Z * MoveSpeed;
+
+                FaceDirection(
+                    direction,
+                    dt
+                );
+
+                return;
+            }
+
+            // -------------------------------------------------
+            // REAL WALL
+            // -------------------------------------------------
+            //
+            // Don't push directly into it.
+            //
+            // Instead choose a sideways direction.
+            //
+
+            Vector3 alternate =
+                FindAlternateDirection(
+                    direction
+                );
+
+            if (alternate != Vector3.Zero)
+            {
+                velocity.X =
+                    alternate.X *
+                    MoveSpeed *
+                    0.8f;
+
+                velocity.Z =
+                    alternate.Z *
+                    MoveSpeed *
+                    0.8f;
+
+                FaceDirection(
+                    alternate,
+                    dt
+                );
+
+                return;
+            }
+
+            // No valid direction.
+            velocity.X =
+                Mathf.MoveToward(
+                    velocity.X,
+                    0f,
+                    MoveSpeed * 8f * dt
+                );
+
+            velocity.Z =
+                Mathf.MoveToward(
+                    velocity.Z,
+                    0f,
+                    MoveSpeed * 8f * dt
+                );
+
+            return;
+        }
+
+        // -----------------------------------------------------
+        // NORMAL MOVEMENT
+        // -----------------------------------------------------
+
+        velocity.X =
+            direction.X *
+            MoveSpeed;
+
+        velocity.Z =
+            direction.Z *
+            MoveSpeed;
+
+        FaceDirection(
+            direction,
+            dt
+        );
+
+        CheckIfStuck(dt);
+    }
+
+
+    // =========================================================
+    // MOVEMENT BLOCK CHECK
+    // =========================================================
+    //
+    // Uses the actual CharacterBody collision.
+    //
+    // This means the same code automatically works for:
+    //
+    // Pig
+    // Beefalo
+    // Baby mobs
+    // Future mobs of different sizes
+    //
+    // =========================================================
+
+    private bool IsMovementBlocked(
+        Vector3 direction)
+    {
+        if (direction.LengthSquared() <
+            0.0001f)
+        {
+            return false;
+        }
+
+        direction.Y = 0f;
+        direction = direction.Normalized();
+
+        float checkDistance =
+            Mathf.Max(
+                StepCheckDistance,
+                0.15f
+            );
+
+        Transform3D testTransform =
+            GlobalTransform;
+
+        Vector3 motion =
+            direction *
+            checkDistance;
+
+        return TestMove(
+            testTransform,
+            motion
+        );
+    }
+
+
+    // =========================================================
+    // AUTOMATIC STEP UP
+    // =========================================================
+    //
+    // We do NOT raycast for a floor and teleport onto it.
+    //
+    // Instead:
+    //
+    // 1. Test normal movement.
+    // 2. Raise the whole collision box one block.
+    // 3. Test moving forward while raised.
+    // 4. If it fits, move the body onto the raised position.
+    //
+    // Because TestMove uses this CharacterBody's actual
+    // collision shape, the mob's real size is respected.
+    //
+    // =========================================================
+
+    private bool TryStepUp(
+        Vector3 direction)
+    {
+        if (_stepCooldownTimer > 0f)
+            return false;
+
+        if (!IsOnFloor())
+            return false;
+
+        if (!_collisionBuilt ||
+            _modelCollision == null)
+        {
+            return false;
+        }
+
+        if (direction.LengthSquared() <
+            0.0001f)
+        {
+            return false;
+        }
+
+        direction.Y = 0f;
+        direction = direction.Normalized();
+
+        float step =
+            Mathf.Max(
+                0.1f,
+                StepHeight
+            );
+
+        float forwardDistance =
+            Mathf.Max(
+                StepCheckDistance,
+                0.25f
+            );
+
+        // -----------------------------------------------------
+        // FIRST:
+        // Make sure the mob actually has an obstacle ahead.
+        // -----------------------------------------------------
+
+        if (!TestMove(
+                GlobalTransform,
+                direction * forwardDistance))
+        {
+            return false;
+        }
+
+        // -----------------------------------------------------
+        // SECOND:
+        // Raise the body by one block and move forward.
+        // -----------------------------------------------------
+
+        Transform3D raisedTransform =
+            GlobalTransform;
+
+        raisedTransform.Origin +=
+            Vector3.Up * step;
+
+        Vector3 raisedMotion =
+            direction *
+            forwardDistance;
+
+        KinematicCollision3D collision =
+            new KinematicCollision3D();
+
+        bool blockedAtRaisedPosition =
+            TestMove(
+                raisedTransform,
+                raisedMotion,
+                collision
+            );
+
+        if (blockedAtRaisedPosition)
+        {
+            // This is effectively a wall.
+            return false;
+        }
+
+        // -----------------------------------------------------
+        // THIRD:
+        // Make sure there is actually something underneath
+        // the raised position.
+        //
+        // We don't want a random vertical teleport.
+        // -----------------------------------------------------
+
+        Transform3D finalTransform =
+            raisedTransform;
+
+        finalTransform.Origin +=
+            direction *
+            forwardDistance;
+
+        KinematicCollision3D downwardCollision =
+            new KinematicCollision3D();
+
+        bool wouldCollideDownward =
+            TestMove(
+                finalTransform,
+                Vector3.Down * 0.25f,
+                downwardCollision
+            );
+
+        // A downward collision here is good: it means there
+        // is floor underneath the stepped position.
+        //
+        // If there isn't floor, allow normal movement/falling
+        // instead of creating an artificial step.
+        if (!wouldCollideDownward)
+        {
+            return false;
+        }
+
+        // -----------------------------------------------------
+        // APPLY THE STEP
+        // -----------------------------------------------------
+
+        _stepTimer = StepDuration;
+
+_stepStartY =
+    GlobalPosition.Y;
+
+_stepTargetY =
+    finalTransform.Origin.Y;
+
+GlobalPosition =
+    new Vector3(
+        finalTransform.Origin.X,
+        GlobalPosition.Y,
+        finalTransform.Origin.Z
+    );
+
+velocityAfterStep();
+
+_stepCooldownTimer =
+    StepCooldown;
+
+_stuckCheckFailCount = 0;
+
+_stuckCheckLastPosition =
+    GlobalPosition;
+
+return true;
+    }
+
+
+    // =========================================================
+    // STEP VELOCITY RESET
+    // =========================================================
+
+    private void velocityAfterStep()
+    {
+        Velocity =
+            new Vector3(
+                Velocity.X,
+                0f,
+                Velocity.Z
+            );
+    }
+
+
+    // =========================================================
+    // ALTERNATE WALL DIRECTION
+    // =========================================================
+    //
+    // If the direct route is blocked by a 2+ block wall,
+    // try left and right.
+    //
+    // This is deliberately simple.
+    //
+    // It is not a heavy pathfinding system.
+    // =========================================================
+
+    private Vector3 FindAlternateDirection(
+        Vector3 desired)
+    {
+        desired.Y = 0f;
+
+        if (desired.LengthSquared() <
+            0.0001f)
+        {
+            return Vector3.Zero;
+        }
+
+        desired =
+            desired.Normalized();
+
+        Vector3 left =
+            new Vector3(
+                -desired.Z,
+                0f,
+                desired.X
+            ).Normalized();
+
+        Vector3 right =
+            -left;
+
+        // Try the side that gets us closer to the target.
+        float leftScore =
+            DirectionTargetScore(left);
+
+        float rightScore =
+            DirectionTargetScore(right);
+
+        if (leftScore >= rightScore)
+        {
+            if (IsDirectionUsable(left))
+                return left;
+
+            if (IsDirectionUsable(right))
+                return right;
+        }
+        else
+        {
+            if (IsDirectionUsable(right))
+                return right;
+
+            if (IsDirectionUsable(left))
+                return left;
+        }
+
+        return Vector3.Zero;
+    }
+
+
+    // =========================================================
+    // DIRECTION SCORE
+    // =========================================================
+
+    private float DirectionTargetScore(
+        Vector3 direction)
+    {
+        Vector3 toTarget =
+            _movementTarget -
+            GlobalPosition;
+
+        toTarget.Y = 0f;
+
+        if (toTarget.LengthSquared() <
+            0.0001f)
+        {
+            return 0f;
+        }
+
+        toTarget =
+            toTarget.Normalized();
+
+        return direction.Dot(
+            toTarget
+        );
+    }
+
+
+    // =========================================================
+    // DIRECTION USABLE
+    // =========================================================
+
+    private bool IsDirectionUsable(
+        Vector3 direction)
+    {
+        if (direction.LengthSquared() <
+            0.0001f)
+        {
+            return false;
+        }
+
+        direction.Y = 0f;
+        direction = direction.Normalized();
+
+        if (!IsMovementBlocked(direction))
+            return true;
+
+        return TryStepTestOnly(direction);
+    }
+
+
+    // =========================================================
+    // STEP TEST WITHOUT APPLYING
+    // =========================================================
+
+    private bool TryStepTestOnly(
+        Vector3 direction)
+    {
+        if (!_collisionBuilt ||
+            !IsOnFloor())
+        {
+            return false;
+        }
+
+        float step =
+            Mathf.Max(
+                0.1f,
+                StepHeight
+            );
+
+        float distance =
+            Mathf.Max(
+                StepCheckDistance,
+                0.25f
+            );
+
+        Transform3D raised =
+            GlobalTransform;
+
+        raised.Origin +=
+            Vector3.Up * step;
+
+        KinematicCollision3D collision =
+            new KinematicCollision3D();
+
+        if (TestMove(
+                raised,
+                direction * distance,
+                collision))
+        {
+            return false;
+        }
+
+        Transform3D finalTransform =
+            raised;
+
+        finalTransform.Origin +=
+            direction *
+            distance;
+
+        KinematicCollision3D floorCollision =
+            new KinematicCollision3D();
+
+        return TestMove(
+            finalTransform,
+            Vector3.Down * 0.25f,
+            floorCollision
+        );
+    }
+
+
+    // =========================================================
     // HIT FEEDBACK
     // =========================================================
 
-    private void UpdateHitFeedback(float dt)
+    private void UpdateHitFeedback(
+        float dt)
     {
         if (_knockbackTimer > 0f)
         {
@@ -1848,19 +2569,6 @@ public partial class Mob : CharacterBody3D
     // =========================================================
     // APPLY KNOCKBACK
     // =========================================================
-    //
-    // Knockback is intentionally separate from damage.
-    //
-    // An effect source can now choose to:
-    //
-    // - Apply damage only
-    // - Apply knockback only
-    // - Apply both
-    //
-    // The direction supplied here is the direction the mob
-    // should be pushed.
-    //
-    // =========================================================
 
     public void ApplyKnockback(
         Vector3 direction,
@@ -1874,8 +2582,11 @@ public partial class Mob : CharacterBody3D
 
         direction.Y = 0f;
 
-        if (direction.LengthSquared() < 0.0001f)
+        if (direction.LengthSquared() <
+            0.0001f)
+        {
             return;
+        }
 
         direction =
             direction.Normalized();
@@ -1883,7 +2594,6 @@ public partial class Mob : CharacterBody3D
         _knockbackVelocity =
             direction * force;
 
-        // Small vertical lift.
         _knockbackVelocity.Y =
             force *
             KnockbackVerticalMultiplier;
@@ -1900,113 +2610,11 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // PATH MOVEMENT
-    // =========================================================
-
-    private void ApplyPathMovement(
-        float dt,
-        ref Vector3 velocity)
-    {
-        if (_isSleeping)
-        {
-            velocity.X = 0f;
-
-            velocity.Z = 0f;
-
-            return;
-        }
-
-        if (_hasTarget)
-        {
-            CheckIfStuck(dt);
-
-            _pathTimeoutTimer += dt;
-
-            if (_pathTimeoutTimer >
-                MaxPathDuration)
-            {
-                AbandonPath();
-
-                return;
-            }
-
-            Vector3 toTarget =
-                _currentTarget -
-                GlobalPosition;
-
-            float verticalDiff =
-                toTarget.Y;
-
-            toTarget.Y = 0;
-
-            if (toTarget.Length() < 0.3f &&
-                Mathf.Abs(verticalDiff) < 0.6f)
-            {
-                AdvancePath();
-            }
-            else
-            {
-                Vector3 dir =
-                    toTarget.Length() > 0.01f
-                        ? toTarget.Normalized()
-                        : Vector3.Zero;
-
-                velocity.X =
-                    dir.X *
-                    MoveSpeed;
-
-                velocity.Z =
-                    dir.Z *
-                    MoveSpeed;
-
-                if (dir != Vector3.Zero)
-                {
-                    FaceDirection(
-                        dir,
-                        dt
-                    );
-                }
-
-                if (verticalDiff > 0.5f &&
-                    IsOnFloor())
-                {
-                    velocity.Y =
-                        Mathf.Sqrt(
-                            2f *
-                            Gravity *
-                            1.15f
-                        );
-                }
-            }
-        }
-        else
-        {
-            velocity.X =
-                Mathf.MoveToward(
-                    velocity.X,
-                    0,
-                    MoveSpeed *
-                    dt *
-                    4f
-                );
-
-            velocity.Z =
-                Mathf.MoveToward(
-                    velocity.Z,
-                    0,
-                    MoveSpeed *
-                    dt *
-                    4f
-                );
-        }
-    }
-
-
-    // =========================================================
     // FUR / SHEARING
     // =========================================================
 
-    public bool TryShear(bool isSleeping)
+    public bool TryShear(
+        bool isSleeping)
     {
         if (!HasFur)
             return false;
@@ -2018,7 +2626,8 @@ public partial class Mob : CharacterBody3D
 
         if (!string.IsNullOrWhiteSpace(FurItem))
         {
-            var pickup = new ItemPickup();
+            var pickup =
+                new ItemPickup();
 
             pickup.ItemId =
                 FurItem;
@@ -2053,8 +2662,6 @@ public partial class Mob : CharacterBody3D
             );
         }
 
-        // Sleeping sheep/beefalo stay asleep.
-        // Awake ones only become hostile if the JSON says so.
         if (!isSleeping &&
             AngerWhenShearedAwake)
         {
@@ -2073,16 +2680,6 @@ public partial class Mob : CharacterBody3D
     // =========================================================
     // BECOME HOSTILE
     // =========================================================
-    //
-    // This is the ONLY hostility switch.
-    //
-    // There is no "angry" state.
-    // Hostile mobs simply use the normal hostile AI.
-    //
-    // alertNearby:
-    // true  = this mob starts a herd alert
-    // false = this mob was alerted by another mob
-    // =========================================================
 
     private void BecomeHostile(
         bool alertNearby = true)
@@ -2097,7 +2694,6 @@ public partial class Mob : CharacterBody3D
         BehaviorType =
             MobBehaviorType.Hostile;
 
-        // A hostile mob cannot remain asleep.
         if (_isSleeping)
         {
             SetSleeping(false);
@@ -2107,33 +2703,15 @@ public partial class Mob : CharacterBody3D
 
         _hostileTarget = null;
 
-        _hasTarget = false;
-
-        _currentPath.Clear();
-
-        _repathTimer = 0f;
-
-        _pathTimeoutTimer = 0f;
-
-        _pathfindCooldownTimer = 0f;
+        _hasMovementTarget = false;
 
         _attackTimer = 0f;
-
-
-        // -----------------------------------------------------
-        // ALERT NEARBY BEEFALO
-        // -----------------------------------------------------
 
         if (alertNearby &&
             IsBeefalo())
         {
             AlertNearbyBeefalo();
         }
-
-
-        // -----------------------------------------------------
-        // FIND CLOSEST VALID TARGET
-        // -----------------------------------------------------
 
         Node3D closestTarget =
             FindClosestValidTarget();
@@ -2175,7 +2753,7 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // CHECK IF THIS MOB IS BEEFALO
+    // CHECK BEEFALO
     // =========================================================
 
     private bool IsBeefalo()
@@ -2192,7 +2770,7 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // ALERT NEARBY BEEFALO
+    // ALERT BEEFALO
     // =========================================================
 
     private void AlertNearbyBeefalo()
@@ -2235,9 +2813,7 @@ public partial class Mob : CharacterBody3D
                 continue;
             }
 
-            other.BecomeHostile(
-                false
-            );
+            other.BecomeHostile(false);
         }
     }
 
@@ -2248,16 +2824,10 @@ public partial class Mob : CharacterBody3D
 
     private Node3D FindClosestValidTarget()
     {
-        Node3D closest =
-            null;
+        Node3D closest = null;
 
         float closestDistanceSquared =
             float.MaxValue;
-
-
-        // -----------------------------------------------------
-        // PLAYER IS VALID FOR ALL HOSTILE MOBS
-        // -----------------------------------------------------
 
         foreach (Node node in
                  GetTree().GetNodesInGroup("player"))
@@ -2276,18 +2846,11 @@ public partial class Mob : CharacterBody3D
             if (distanceSquared <
                 closestDistanceSquared)
             {
-                closest =
-                    candidate;
-
+                closest = candidate;
                 closestDistanceSquared =
                     distanceSquared;
             }
         }
-
-
-        // -----------------------------------------------------
-        // BEEFALO CAN ALSO TARGET OTHER MOBS
-        // -----------------------------------------------------
 
         if (IsBeefalo())
         {
@@ -2317,19 +2880,12 @@ public partial class Mob : CharacterBody3D
                 if (distanceSquared <
                     closestDistanceSquared)
                 {
-                    closest =
-                        otherMob;
-
+                    closest = otherMob;
                     closestDistanceSquared =
                         distanceSquared;
                 }
             }
         }
-
-
-        // -----------------------------------------------------
-        // FALLBACK FOR CURRENT PLAYER SETUP
-        // -----------------------------------------------------
 
         if (closest == null &&
             _player != null &&
@@ -2349,11 +2905,8 @@ public partial class Mob : CharacterBody3D
 
     private void TryFindBreedingPartner()
     {
-        if (_definition == null ||
-            _definition.breeding == null ||
-            !_definition.breeding.enabled ||
-            !_breedingReady ||
-            _isBaby)
+        if (!CanBreed ||
+            !_breedingReady)
         {
             return;
         }
@@ -2371,7 +2924,8 @@ public partial class Mob : CharacterBody3D
                 continue;
 
             if (other._definition == null ||
-                other._definition.id != _definition.id)
+                other._definition.id !=
+                _definition.id)
             {
                 continue;
             }
@@ -2398,11 +2952,72 @@ public partial class Mob : CharacterBody3D
         return _breedingReady &&
                _breedCooldownTimer <= 0f &&
                !_isBreeding &&
-               !_isBaby;
+               !_isBaby &&
+               IsCurrentSeasonAllowedForBreeding();
     }
 
 
-    private void BreedWith(Mob partner)
+    private bool IsCurrentSeasonAllowedForBreeding()
+    {
+        if (_definition == null ||
+            _definition.breeding == null)
+        {
+            return false;
+        }
+
+        string[] allowedSeasons =
+            _definition.breeding.seasons;
+
+        if (allowedSeasons == null ||
+            allowedSeasons.Length == 0)
+        {
+            return true;
+        }
+
+        SeasonManager seasonManager =
+            GetTree().Root.FindChild(
+                "SeasonManager",
+                true,
+                false
+            ) as SeasonManager;
+
+        if (seasonManager == null)
+        {
+            GD.PrintErr(
+                $"[Mob] {Name}: SeasonManager not found. " +
+                "Seasonal breeding is blocked."
+            );
+
+            return false;
+        }
+
+        string currentSeason =
+            seasonManager.GetSeasonName();
+
+        foreach (string allowedSeason in
+                 allowedSeasons)
+        {
+            if (string.IsNullOrWhiteSpace(
+                allowedSeason))
+            {
+                continue;
+            }
+
+            if (string.Equals(
+                allowedSeason.Trim(),
+                currentSeason,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+    private void BreedWith(
+        Mob partner)
     {
         if (partner == null ||
             partner == this ||
@@ -2427,11 +3042,9 @@ public partial class Mob : CharacterBody3D
         }
 
         _isBreeding = true;
-
         partner._isBreeding = true;
 
         _breedingReady = false;
-
         partner._breedingReady = false;
 
         float cooldown =
@@ -2450,7 +3063,6 @@ public partial class Mob : CharacterBody3D
         SpawnBabies(partner);
 
         _isBreeding = false;
-
         partner._isBreeding = false;
     }
 
@@ -2459,7 +3071,8 @@ public partial class Mob : CharacterBody3D
     // SPAWN BABIES
     // =========================================================
 
-    private void SpawnBabies(Mob partner)
+    private void SpawnBabies(
+        Mob partner)
     {
         if (partner == null ||
             _definition == null ||
@@ -2518,7 +3131,9 @@ public partial class Mob : CharacterBody3D
                 partner.GlobalPosition
             ) * 0.5f;
 
-        for (int i = 0; i < litterSize; i++)
+        for (int i = 0;
+             i < litterSize;
+             i++)
         {
             Mob baby =
                 mobScene.Instantiate<Mob>();
@@ -2582,11 +3197,8 @@ public partial class Mob : CharacterBody3D
     {
         _isBaby = true;
 
-        float growthMin =
-            300f;
-
-        float growthMax =
-            900f;
+        float growthMin = 300f;
+        float growthMax = 900f;
 
         if (_definition != null &&
             _definition.breeding != null)
@@ -2612,34 +3224,19 @@ public partial class Mob : CharacterBody3D
 
         _breedingReady = false;
 
-        _state = State.Idle;
+        _state =
+            State.Idle;
 
-        _hasTarget = false;
+        _hasMovementTarget =
+            false;
 
         _hostileTarget = null;
-
-        _currentPath.Clear();
-
-        _repathTimer = 0f;
-
-        _pathTimeoutTimer = 0f;
-
-        _pathfindCooldownTimer = 0f;
-
-        _stuckCheckTimer = 0f;
-
-        _stuckCheckFailCount = 0;
 
         _idleTimer =
             _rng.RandfRange(
                 MinIdleTime,
                 MaxIdleTime
             );
-
-
-        // -----------------------------------------------------
-        // CUSTOM BABY MODEL
-        // -----------------------------------------------------
 
         bool hasCustomBabyModel =
             _definition != null &&
@@ -2723,11 +3320,6 @@ public partial class Mob : CharacterBody3D
 
         _isBaby = false;
 
-
-        // -----------------------------------------------------
-        // CUSTOM BABY MODEL
-        // -----------------------------------------------------
-
         if (_usingCustomBabyModel)
         {
             string adultModel =
@@ -2757,19 +3349,13 @@ public partial class Mob : CharacterBody3D
             );
         }
 
-        _state = State.Idle;
+        _state =
+            State.Idle;
 
-        _hasTarget = false;
+        _hasMovementTarget =
+            false;
 
         _hostileTarget = null;
-
-        _currentPath.Clear();
-
-        _pathTimeoutTimer = 0f;
-
-        _stuckCheckTimer = 0f;
-
-        _stuckCheckFailCount = 0;
 
         _idleTimer =
             _rng.RandfRange(
@@ -2787,13 +3373,11 @@ public partial class Mob : CharacterBody3D
     // STATE MACHINE
     // =========================================================
 
-    private void UpdateState(float dt)
+    private void UpdateState(
+        float dt)
     {
         if (_isSleeping)
-        {
             return;
-        }
-
 
         // -----------------------------------------------------
         // FLEE
@@ -2816,13 +3400,11 @@ public partial class Mob : CharacterBody3D
                 threatFar)
             {
                 RestoreNormalSpeed();
-
                 EnterIdle();
             }
 
             return;
         }
-
 
         // -----------------------------------------------------
         // HOSTILE
@@ -2849,7 +3431,7 @@ public partial class Mob : CharacterBody3D
                     _state =
                         State.Attack;
 
-                    _hasTarget =
+                    _hasMovementTarget =
                         false;
 
                     return;
@@ -2862,28 +3444,22 @@ public partial class Mob : CharacterBody3D
                     {
                         _state =
                             State.Chase;
-
-                        _repathTimer =
-                            0f;
                     }
 
                     return;
                 }
             }
 
-            // No target nearby.
             if (_state == State.Chase ||
                 _state == State.Attack)
             {
                 _hostileTarget = null;
-
                 EnterIdle();
             }
         }
 
-
         // -----------------------------------------------------
-        // NORMAL PASSIVE BEHAVIOR
+        // PASSIVE
         // -----------------------------------------------------
 
         if (_state == State.Idle)
@@ -2895,9 +3471,8 @@ public partial class Mob : CharacterBody3D
                 PickWanderTarget();
             }
         }
-        else if (_state ==
-                 State.Wander &&
-                 !_hasTarget)
+        else if (_state == State.Wander &&
+                 !_hasMovementTarget)
         {
             EnterIdle();
         }
@@ -2908,44 +3483,50 @@ public partial class Mob : CharacterBody3D
     // STATE ACTIONS
     // =========================================================
 
-    private void RunState(float dt)
+    private void RunState(
+        float dt)
     {
         if (_isSleeping)
-        {
             return;
-        }
 
         switch (_state)
         {
             case State.Chase:
 
-                _repathTimer -= dt;
-
-                if (_repathTimer <= 0f)
+                if (_hostileTarget != null &&
+                    IsInstanceValid(_hostileTarget))
                 {
-                    _repathTimer =
-                        RepathInterval;
+                    float distance =
+                        GlobalPosition.DistanceTo(
+                            _hostileTarget.GlobalPosition
+                        );
 
-                    Node3D chaseTarget =
-                        FindClosestValidTarget();
-
-                    if (chaseTarget != null &&
-                        IsInstanceValid(chaseTarget))
+                    if (distance <= AttackRange)
                     {
-                        _hostileTarget =
-                            chaseTarget;
+                        _state =
+                            State.Attack;
 
-                        RequestPathTo(
-                            chaseTarget.GlobalPosition,
-                            32
+                        _hasMovementTarget =
+                            false;
+
+                        return;
+                    }
+
+                    if (distance <=
+                        DetectionRange)
+                    {
+                        SetMovementTarget(
+                            _hostileTarget.GlobalPosition
                         );
                     }
                     else
                     {
-                        _hostileTarget = null;
-
                         EnterIdle();
                     }
+                }
+                else
+                {
+                    EnterIdle();
                 }
 
                 break;
@@ -2953,14 +3534,31 @@ public partial class Mob : CharacterBody3D
 
             case State.Flee:
 
-                _repathTimer -= dt;
-
-                if (_repathTimer <= 0f)
+                if (_threat != null &&
+                    IsInstanceValid(_threat))
                 {
-                    _repathTimer =
-                        RepathInterval;
+                    Vector3 away =
+                        GlobalPosition -
+                        _threat.GlobalPosition;
 
-                    RequestFleePath();
+                    away.Y = 0f;
+
+                    if (away.LengthSquared() <
+                        0.0001f)
+                    {
+                        away =
+                            Vector3.Forward;
+                    }
+                    else
+                    {
+                        away =
+                            away.Normalized();
+                    }
+
+                    SetMovementTarget(
+                        GlobalPosition +
+                        away * FleeDistance
+                    );
                 }
 
                 break;
@@ -2995,10 +3593,7 @@ public partial class Mob : CharacterBody3D
                             _state =
                                 State.Chase;
 
-                            _repathTimer =
-                                0f;
-
-                            break;
+                            return;
                         }
 
                         DealAttackDamage(
@@ -3008,7 +3603,6 @@ public partial class Mob : CharacterBody3D
                     else
                     {
                         _hostileTarget = null;
-
                         EnterIdle();
                     }
                 }
@@ -3019,15 +3613,26 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // DEAL ATTACK DAMAGE
+    // SET MOVEMENT TARGET
     // =========================================================
-    //
-    // Damage and knockback are separate.
-    //
-    // Mob attacks currently deal damage only.
-    //
-    // Later, an attack/effect can independently apply
-    // knockback if we want it to.
+
+    private void SetMovementTarget(
+        Vector3 target)
+    {
+        _movementTarget =
+            new Vector3(
+                target.X,
+                GlobalPosition.Y,
+                target.Z
+            );
+
+        _hasMovementTarget =
+            true;
+    }
+
+
+    // =========================================================
+    // DEAL ATTACK DAMAGE
     // =========================================================
 
     private void DealAttackDamage(
@@ -3039,11 +3644,6 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-
-        // -----------------------------------------------------
-        // MOB TARGET
-        // -----------------------------------------------------
-
         if (target is Mob targetMob)
         {
             if (targetMob == this ||
@@ -3052,7 +3652,6 @@ public partial class Mob : CharacterBody3D
                 return;
             }
 
-            // Beefalo can never attack another Beefalo.
             if (IsBeefalo() &&
                 targetMob.IsBeefalo())
             {
@@ -3073,11 +3672,6 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-
-        // -----------------------------------------------------
-        // PLAYER TARGET
-        // -----------------------------------------------------
-
         if (target is Player player)
         {
             player.TakeDamage(
@@ -3091,19 +3685,6 @@ public partial class Mob : CharacterBody3D
 
             return;
         }
-
-
-        // -----------------------------------------------------
-        // PLAYER GROUP FALLBACK
-        // -----------------------------------------------------
-        //
-        // Keeps the mob framework tolerant of a player node
-        // that is represented as a Node3D but is not directly
-        // recognized as Player.
-        //
-        // If the actual node is not Player, we do not attempt
-        // reflection or guess at another TakeDamage overload.
-        // -----------------------------------------------------
 
         if (IsPlayerNode(target))
         {
@@ -3129,9 +3710,7 @@ public partial class Mob : CharacterBody3D
         }
 
         if (node.IsInGroup("player"))
-        {
             return true;
-        }
 
         return node.Name.ToString()
             .Equals(
@@ -3150,10 +3729,8 @@ public partial class Mob : CharacterBody3D
         _state =
             State.Idle;
 
-        _hasTarget =
+        _hasMovementTarget =
             false;
-
-        _currentPath.Clear();
 
         _idleTimer =
             _rng.RandfRange(
@@ -3186,120 +3763,16 @@ public partial class Mob : CharacterBody3D
             _homePosition +
             new Vector3(
                 offset.X,
-                0,
+                0f,
                 offset.Y
             );
 
-        if (RequestPathTo(
-            target,
-            24))
-        {
-            _state =
-                State.Wander;
-        }
-        else
-        {
-            _idleTimer =
-                _rng.RandfRange(
-                    MinIdleTime,
-                    MaxIdleTime
-                );
-        }
-    }
-
-
-    // =========================================================
-    // REQUEST PATH
-    // =========================================================
-
-    private bool RequestPathTo(
-        Vector3 worldTarget,
-        int maxRange)
-    {
-        if (_pathfindCooldownTimer > 0f)
-        {
-            return false;
-        }
-
-        var path =
-            VoxelPathfinder.FindPath(
-                GlobalPosition,
-                worldTarget,
-                maxRange
-            );
-
-        if (path == null ||
-            path.Count == 0)
-        {
-            return false;
-        }
-
-        _currentPath =
-            new Queue<Vector3>(
-                path
-            );
-
-        _pathTimeoutTimer =
-            0f;
-
-        _stuckCheckTimer =
-            0f;
-
-        _stuckCheckFailCount =
-            0;
-
-        _stuckCheckLastPosition =
-            GlobalPosition;
-
-        AdvancePath();
-
-        return true;
-    }
-
-
-    // =========================================================
-    // FLEE PATH
-    // =========================================================
-
-    private void RequestFleePath()
-    {
-        if (!_fleeEnabled)
-        {
-            return;
-        }
-
-        if (_threat == null ||
-            !IsInstanceValid(_threat))
-        {
-            return;
-        }
-
-        Vector3 away =
-            GlobalPosition -
-            _threat.GlobalPosition;
-
-        away.Y = 0;
-
-        if (away.Length() < 0.01f)
-        {
-            away =
-                Vector3.Forward;
-        }
-        else
-        {
-            away =
-                away.Normalized();
-        }
-
-        Vector3 fleeTarget =
-            GlobalPosition +
-            away *
-            FleeDistance;
-
-        RequestPathTo(
-            fleeTarget,
-            24
+        SetMovementTarget(
+            target
         );
+
+        _state =
+            State.Wander;
     }
 
 
@@ -3307,7 +3780,8 @@ public partial class Mob : CharacterBody3D
     // STUCK CHECK
     // =========================================================
 
-    private void CheckIfStuck(float dt)
+    private void CheckIfStuck(
+        float dt)
     {
         _stuckCheckTimer += dt;
 
@@ -3336,57 +3810,22 @@ public partial class Mob : CharacterBody3D
             if (_stuckCheckFailCount >=
                 StuckChecksBeforeGivingUp)
             {
-                AbandonPath();
+                _hasMovementTarget =
+                    false;
+
+                _stuckCheckFailCount = 0;
+
+                _idleTimer =
+                    _rng.RandfRange(
+                        MinIdleTime,
+                        MaxIdleTime
+                    );
             }
         }
         else
         {
             _stuckCheckFailCount =
                 0;
-        }
-    }
-
-
-    // =========================================================
-    // ABANDON PATH
-    // =========================================================
-
-    private void AbandonPath()
-    {
-        _currentPath.Clear();
-
-        _hasTarget =
-            false;
-
-        _pathTimeoutTimer =
-            0f;
-
-        _stuckCheckFailCount =
-            0;
-
-        _pathfindCooldownTimer =
-            PathfindCooldown;
-    }
-
-
-    // =========================================================
-    // ADVANCE PATH
-    // =========================================================
-
-    private void AdvancePath()
-    {
-        if (_currentPath.Count > 0)
-        {
-            _currentTarget =
-                _currentPath.Dequeue();
-
-            _hasTarget =
-                true;
-        }
-        else
-        {
-            _hasTarget =
-                false;
         }
     }
 
@@ -3442,6 +3881,228 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
+    // MOUNT / RIDING
+    // =========================================================
+
+    public bool CanRide()
+    {
+        if (!MountEnabled)
+            return false;
+
+        if (IsMounted)
+            return false;
+
+        if (_health <= 0f)
+            return false;
+
+        if (HasSaddle)
+            return true;
+
+        return _health >= MaxHealth;
+    }
+
+
+    public bool EquipSaddle()
+    {
+        if (!MountEnabled)
+            return false;
+
+        if (!SaddleAllowed)
+            return false;
+
+        if (HasSaddle)
+            return false;
+
+        if (_health <= 0f)
+            return false;
+
+        HasSaddle = true;
+
+        GD.Print(
+            $"[Mob] {Name} was saddled."
+        );
+
+        return true;
+    }
+
+
+    public bool RemoveSaddle()
+    {
+        if (!HasSaddle)
+            return false;
+
+        if (IsMounted)
+            return false;
+
+        HasSaddle = false;
+
+        GD.Print(
+            $"[Mob] {Name} saddle removed."
+        );
+
+        return true;
+    }
+
+
+    public bool StartRiding(
+        Player player)
+    {
+        if (player == null ||
+            !IsInstanceValid(player))
+        {
+            return false;
+        }
+
+        if (!CanRide())
+            return false;
+
+        _mountedPlayer =
+            player;
+
+        _mountedMoveDirection =
+            Vector3.Zero;
+
+        _mountedSprinting = false;
+
+        _mountedJumpRequested = false;
+
+        _state =
+            State.Idle;
+
+        _hasMovementTarget =
+            false;
+
+        _hostileTarget = null;
+
+        _threat = null;
+
+        Velocity =
+            Vector3.Zero;
+
+        GD.Print(
+            $"[Mob] {Name} is now being ridden by {player.Name}."
+        );
+
+        return true;
+    }
+
+
+    public void StopRiding()
+    {
+        if (!IsMounted)
+        {
+            _mountedPlayer = null;
+            return;
+        }
+
+        Player rider =
+            _mountedPlayer;
+
+        _mountedMoveDirection =
+            Vector3.Zero;
+
+        _mountedSprinting = false;
+
+        _mountedJumpRequested = false;
+
+        _mountedPlayer = null;
+
+        Velocity =
+            Vector3.Zero;
+
+        _state =
+            State.Idle;
+
+        _hasMovementTarget =
+            false;
+
+        _hostileTarget = null;
+
+        _idleTimer =
+            _rng.RandfRange(
+                MinIdleTime,
+                MaxIdleTime
+            );
+
+        GD.Print(
+            $"[Mob] {Name} was dismounted by {rider.Name}."
+        );
+    }
+
+
+    public float GetMountSpeed(
+        bool sprinting)
+    {
+        float speed =
+            MoveSpeed *
+            MountSpeedMultiplier;
+
+        if (sprinting &&
+            MountCanSprint)
+        {
+            speed *=
+                MountSprintMultiplier;
+        }
+
+        return speed;
+    }
+
+
+    public void JumpFromPlayer(
+        float playerJumpVelocity)
+    {
+        if (!IsMounted)
+            return;
+
+        if (!IsOnFloor())
+            return;
+
+        _mountedJumpVelocity =
+            playerJumpVelocity;
+
+        _mountedJumpRequested =
+            true;
+    }
+
+
+    public float GetMountJumpVelocity(
+        float playerJumpVelocity)
+    {
+        return playerJumpVelocity *
+               MountJumpMultiplier;
+    }
+
+
+    public void DriveFromPlayer(
+        Vector3 direction,
+        bool sprinting)
+    {
+        if (!IsMounted)
+            return;
+
+        direction.Y = 0f;
+
+        if (direction.LengthSquared() >
+            0.0001f)
+        {
+            direction =
+                direction.Normalized();
+        }
+        else
+        {
+            direction =
+                Vector3.Zero;
+        }
+
+        _mountedMoveDirection =
+            direction;
+
+        _mountedSprinting =
+            sprinting;
+    }
+
+
+    // =========================================================
     // FOOD / FEEDING
     // =========================================================
 
@@ -3485,9 +4146,7 @@ public partial class Mob : CharacterBody3D
         }
 
         if (_definition.food.items == null)
-        {
             return false;
-        }
 
         foreach (string foodItem in
                  _definition.food.items)
@@ -3516,14 +4175,10 @@ public partial class Mob : CharacterBody3D
         string itemId)
     {
         if (string.IsNullOrEmpty(itemId))
-        {
             return false;
-        }
 
         if (!CanEat(itemId))
-        {
             return false;
-        }
 
         return Feed(itemId);
     }
@@ -3533,9 +4188,7 @@ public partial class Mob : CharacterBody3D
         string itemId)
     {
         if (!CanEat(itemId))
-        {
             return false;
-        }
 
         bool breedingFood =
             IsBreedFood(itemId);
@@ -3578,22 +4231,6 @@ public partial class Mob : CharacterBody3D
     // =========================================================
     // DAMAGE
     // =========================================================
-    //
-    // Damage is intentionally separate from knockback.
-    //
-    // This method only handles:
-    // - Health reduction
-    // - Waking a sleeping mob
-    // - Determining the attacker/source
-    // - Beefalo hostility
-    // - Passive fleeing
-    // - Death
-    //
-    // Knockback is NOT applied here.
-    //
-    // Knockback/push comes from the effect source that
-    // actually causes it.
-    // =========================================================
 
     public void TakeDamage(
         float amount,
@@ -3606,20 +4243,10 @@ public partial class Mob : CharacterBody3D
             return;
         }
 
-
-        // -----------------------------------------------------
-        // DAMAGE WAKES SLEEPING MOBS
-        // -----------------------------------------------------
-
         if (_isSleeping)
         {
             SetSleeping(false);
         }
-
-
-        // -----------------------------------------------------
-        // DETERMINE ATTACKER
-        // -----------------------------------------------------
 
         Node3D sourceTarget =
             sourceEntity;
@@ -3641,11 +4268,6 @@ public partial class Mob : CharacterBody3D
                 _player;
         }
 
-
-        // -----------------------------------------------------
-        // DAMAGE
-        // -----------------------------------------------------
-
         _health -= amount;
 
         _health =
@@ -3654,32 +4276,18 @@ public partial class Mob : CharacterBody3D
                 0f
             );
 
-
-        // -----------------------------------------------------
-        // HIT FLASH ONLY
-        // -----------------------------------------------------
-
         _flashTimer =
             FlashDuration;
-
-
-        // -----------------------------------------------------
-        // HOSTILE RESPONSE
-        // -----------------------------------------------------
 
         if (IsBeefalo())
         {
             BecomeHostile();
         }
 
-
-        // -----------------------------------------------------
-        // PASSIVE FLEE
-        // -----------------------------------------------------
-
         if (_health > 0f &&
             _fleeEnabled &&
-            BehaviorType == MobBehaviorType.Passive &&
+            BehaviorType ==
+                MobBehaviorType.Passive &&
             sourceTarget != null &&
             IsInstanceValid(sourceTarget) &&
             _state != State.Flee)
@@ -3696,20 +4304,9 @@ public partial class Mob : CharacterBody3D
                 MoveSpeed *=
                     FleeSpeedMultiplier;
 
-                _fleeSpeedApplied =
-                    true;
+                _fleeSpeedApplied = true;
             }
-
-            _repathTimer =
-                0f;
-
-            RequestFleePath();
         }
-
-
-        // -----------------------------------------------------
-        // DEATH
-        // -----------------------------------------------------
 
         if (_health <= 0f)
         {
@@ -3719,14 +4316,13 @@ public partial class Mob : CharacterBody3D
 
 
     // =========================================================
-    // FIND CLOSEST PLAYER TO POSITION
+    // FIND CLOSEST PLAYER
     // =========================================================
 
     private Node3D FindClosestPlayerToPosition(
         Vector3 position)
     {
-        Node3D closest =
-            null;
+        Node3D closest = null;
 
         float closestDistanceSquared =
             float.MaxValue;
@@ -3775,9 +4371,7 @@ public partial class Mob : CharacterBody3D
     private void RestoreNormalSpeed()
     {
         if (!_fleeSpeedApplied)
-        {
             return;
-        }
 
         if (FleeSpeedMultiplier > 0f)
         {
@@ -3785,8 +4379,7 @@ public partial class Mob : CharacterBody3D
                 FleeSpeedMultiplier;
         }
 
-        _fleeSpeedApplied =
-            false;
+        _fleeSpeedApplied = false;
     }
 
 
@@ -3797,9 +4390,7 @@ public partial class Mob : CharacterBody3D
     private void SpawnDrops()
     {
         if (_definition == null)
-        {
             return;
-        }
 
         Node parent =
             GetParent();
@@ -3812,11 +4403,6 @@ public partial class Mob : CharacterBody3D
 
             return;
         }
-
-
-        // -----------------------------------------------------
-        // NORMAL JSON DROPS
-        // -----------------------------------------------------
 
         if (_definition.drops != null &&
             _definition.drops.enabled &&
@@ -3846,9 +4432,7 @@ public partial class Mob : CharacterBody3D
                     _rng.Randf();
 
                 if (roll > chance)
-                {
                     continue;
-                }
 
                 int min =
                     Mathf.Max(
@@ -3879,13 +4463,9 @@ public partial class Mob : CharacterBody3D
             }
         }
 
-
-        // -----------------------------------------------------
-        // FUR DEATH DROP
-        // -----------------------------------------------------
-
         if (HasFur &&
-            !string.IsNullOrWhiteSpace(FurItem))
+            !string.IsNullOrWhiteSpace(
+                FurItem))
         {
             SpawnItemDrop(
                 parent,
@@ -3979,12 +4559,10 @@ public partial class Mob : CharacterBody3D
     {
         RestoreNormalSpeed();
 
-        _hasTarget =
+        _hasMovementTarget =
             false;
 
         _hostileTarget = null;
-
-        _currentPath.Clear();
 
         SpawnDrops();
 

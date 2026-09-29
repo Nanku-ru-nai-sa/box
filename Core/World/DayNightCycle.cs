@@ -1725,237 +1725,303 @@ _moonCube.Visible =
     // ============================================================
 
     private void UpdateLightColor()
+{
+    if (Sun == null)
+        return;
+
+    float daylightProgress =
+        GetDaylightProgress();
+
+    float daylightSeconds =
+        GetDaylightSeconds();
+
+    float sunsetLength =
+        Mathf.Clamp(
+            SunsetDurationSeconds,
+            1f,
+            300f
+        );
+
+    // Final twilight after the sun reaches the horizon.
+    // This is intentionally shorter than the full sunset duration
+    // so nighttime does not take too long to arrive.
+    float sunsetTwilightSeconds = 15f;
+
+    // ========================================================
+    // SUNSET TWILIGHT
+    // ========================================================
+
+    bool inSunsetTwilight =
+        _timeOfDay >= daylightProgress &&
+        _timeOfDay <
+        daylightProgress +
+        (
+            sunsetTwilightSeconds /
+            DayDurationSeconds
+        );
+
+    Color lightColor;
+    Color skyColor;
+    float energy;
+
+    // ========================================================
+    // FINAL TWILIGHT
+    // ========================================================
+
+    if (inSunsetTwilight)
     {
-        if (Sun == null)
-            return;
+        float sunsetProgress =
+            (
+                _timeOfDay -
+                daylightProgress
+            ) *
+            DayDurationSeconds /
+            sunsetTwilightSeconds;
 
-        bool sunUp =
-            IsSunUp();
+        sunsetProgress =
+            Mathf.Clamp(
+                sunsetProgress,
+                0f,
+                1f
+            );
 
-        float daylightProgress =
-            GetDaylightProgress();
+        lightColor =
+            _sunsetColor.Lerp(
+                _nightColor,
+                sunsetProgress
+            );
 
+        skyColor =
+            _sunsetSky.Lerp(
+                _nightSky,
+                sunsetProgress
+            );
+
+        energy =
+            Mathf.Lerp(
+                _sunsetEnergy,
+                _nightEnergy,
+                sunsetProgress
+            );
+    }
+
+    // ========================================================
+    // FULL NIGHT
+    // ========================================================
+
+    else if (_timeOfDay >= daylightProgress)
+    {
+        lightColor =
+            _nightColor;
+
+        skyColor =
+            _nightSky;
+
+        energy =
+            _nightEnergy;
+    }
+
+    // ========================================================
+    // DAY
+    // ========================================================
+
+    else
+    {
         float daylightPosition =
-            sunUp
-                ? _timeOfDay /
-                  Mathf.Max(
-                      daylightProgress,
-                      0.0001f
-                  )
-                : 0f;
+            _timeOfDay /
+            Mathf.Max(
+                daylightProgress,
+                0.0001f
+            );
 
-        Color lightColor;
-        Color skyColor;
-        float energy;
+        float sunriseLength =
+            SunriseDurationSeconds /
+            daylightSeconds;
 
-        if (!sunUp)
+        sunriseLength =
+            Mathf.Clamp(
+                sunriseLength,
+                0.01f,
+                0.25f
+            );
+
+        float sunsetDayLength =
+            sunsetLength /
+            daylightSeconds;
+
+        sunsetDayLength =
+            Mathf.Clamp(
+                sunsetDayLength,
+                0.01f,
+                0.25f
+            );
+
+        // ====================================================
+        // SUNRISE
+        // ====================================================
+
+        if (daylightPosition < sunriseLength)
         {
+            float t =
+                daylightPosition /
+                sunriseLength;
+
             lightColor =
-                _nightColor;
+                _nightColor.Lerp(
+                    _sunriseColor,
+                    t
+                );
 
             skyColor =
-                _nightSky;
+                _nightSky.Lerp(
+                    _sunriseSky,
+                    t
+                );
 
             energy =
-                0f;
+                Mathf.Lerp(
+                    _nightEnergy,
+                    _sunriseEnergy,
+                    t
+                );
         }
-        else
+
+        // ====================================================
+        // SUNSET APPROACH
+        // ====================================================
+
+        else if (
+            daylightPosition >
+            1f -
+            sunsetDayLength
+        )
         {
-            float daylightSeconds =
-                GetDaylightSeconds();
-
-            float sunriseLength =
-                SunriseDurationSeconds /
-                daylightSeconds;
-
-            float sunsetLength =
-                SunsetDurationSeconds /
-                daylightSeconds;
-
-            sunriseLength =
-                Mathf.Clamp(
-                    sunriseLength,
-                    0.01f,
-                    0.25f
-                );
-
-            sunsetLength =
-                Mathf.Clamp(
-                    sunsetLength,
-                    0.01f,
-                    0.25f
-                );
-
-            if (
-                daylightPosition <
-                sunriseLength
-            )
-            {
-                float t =
-                    daylightPosition /
-                    sunriseLength;
-
-                lightColor =
-                    _nightColor.Lerp(
-                        _sunriseColor,
-                        t
-                    );
-
-                skyColor =
-                    _nightSky.Lerp(
-                        _sunriseSky,
-                        t
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _nightEnergy,
-                        _sunriseEnergy,
-                        t
-                    );
-            }
-            else if (
-                daylightPosition >
-                1f -
-                sunsetLength
-            )
-            {
-                float t =
+            float t =
+                (
+                    daylightPosition -
                     (
-                        daylightPosition -
-                        (
-                            1f -
-                            sunsetLength
-                        )
-                    ) /
-                    sunsetLength;
-
-                lightColor =
-                    _noonColor.Lerp(
-                        _sunsetColor,
-                        t
-                    );
-
-                skyColor =
-                    _noonSky.Lerp(
-                        _sunsetSky,
-                        t
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _noonEnergy,
-                        _sunsetEnergy,
-                        t
-                    );
-            }
-            else
-            {
-                float noonDistance =
-                    Mathf.Abs(
-                        daylightPosition -
-                        0.5f
-                    ) *
-                    2f;
-
-                float noonFactor =
-                    1f -
-                    Mathf.Clamp(
-                        noonDistance,
-                        0f,
-                        1f
-                    );
-
-                lightColor =
-                    _sunriseColor.Lerp(
-                        _noonColor,
-                        noonFactor
-                    );
-
-                skyColor =
-                    _sunriseSky.Lerp(
-                        _noonSky,
-                        noonFactor
-                    );
-
-                energy =
-                    Mathf.Lerp(
-                        _sunriseEnergy,
-                        _noonEnergy,
-                        noonFactor
-                    );
-            }
-        }
-
-        // ========================================================
-        // NIGHT = ZERO SUNLIGHT
-        // ========================================================
-
-        if (!sunUp)
-        {
-            energy =
-                0f;
+                        1f -
+                        sunsetDayLength
+                    )
+                ) /
+                sunsetDayLength;
 
             lightColor =
-                _nightColor;
+                _noonColor.Lerp(
+                    _sunsetColor,
+                    t
+                );
+
+            skyColor =
+                _noonSky.Lerp(
+                    _sunsetSky,
+                    t
+                );
+
+            energy =
+                Mathf.Lerp(
+                    _noonEnergy,
+                    _sunsetEnergy,
+                    t
+                );
         }
 
-        Sun.LightColor =
-            lightColor;
+        // ====================================================
+        // NORMAL DAY
+        // ====================================================
 
-        Sun.LightEnergy =
-            energy;
-
-        // ========================================================
-        // AMBIENT
-        // ========================================================
-
-        if (_env != null)
+        else
         {
-            if (!sunUp)
-            {
-                _env.AmbientLightEnergy =
-                    0.015f;
-            }
-            else
-            {
-                float ambientFactor =
-                    Mathf.Clamp(
-                        energy /
-                        _noonEnergy,
-                        0f,
-                        1f
-                    );
+            float noonDistance =
+                Mathf.Abs(
+                    daylightPosition -
+                    0.5f
+                ) *
+                2f;
 
-                _env.AmbientLightEnergy =
-                    Mathf.Lerp(
-                        0.02f,
-                        0.35f,
-                        ambientFactor
-                    );
-            }
-        }
+            float noonFactor =
+                1f -
+                Mathf.Clamp(
+                    noonDistance,
+                    0f,
+                    1f
+                );
 
-        // ========================================================
-        // SKY
-        // ========================================================
+            lightColor =
+                _sunriseColor.Lerp(
+                    _noonColor,
+                    noonFactor
+                );
 
-        if (_skyMaterial != null)
-        {
-            _skyMaterial.SkyTopColor =
-                skyColor;
+            skyColor =
+                _sunriseSky.Lerp(
+                    _noonSky,
+                    noonFactor
+                );
 
-            _skyMaterial.SkyHorizonColor =
-                skyColor;
-
-            _skyMaterial.GroundBottomColor =
-                skyColor;
-
-            _skyMaterial.GroundHorizonColor =
-                skyColor;
+            energy =
+                Mathf.Lerp(
+                    _sunriseEnergy,
+                    _noonEnergy,
+                    noonFactor
+                );
         }
     }
 
+    // ========================================================
+    // SUN LIGHT
+    // ========================================================
+
+    Sun.LightColor =
+        lightColor;
+
+    Sun.LightEnergy =
+        energy;
+
+    // ========================================================
+    // AMBIENT
+    // ========================================================
+
+    if (_env != null)
+    {
+        float ambientFactor =
+            Mathf.Clamp(
+                energy /
+                Mathf.Max(
+                    _noonEnergy,
+                    0.0001f
+                ),
+                0f,
+                1f
+            );
+
+        _env.AmbientLightEnergy =
+            Mathf.Lerp(
+                0.015f,
+                0.35f,
+                ambientFactor
+            );
+    }
+
+    // ========================================================
+    // SKY
+    // ========================================================
+
+    if (_skyMaterial != null)
+    {
+        _skyMaterial.SkyTopColor =
+            skyColor;
+
+        _skyMaterial.SkyHorizonColor =
+            skyColor;
+
+        _skyMaterial.GroundBottomColor =
+            skyColor;
+
+        _skyMaterial.GroundHorizonColor =
+            skyColor;
+    }
+}
     // ============================================================
     // SEASON CHANGE
     // ============================================================

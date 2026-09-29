@@ -8,9 +8,24 @@
 	"moveSpeed": 2.0,
 	"turnSpeed": 6.0
   },
+"appearance": {
+  "shinyEnabled": true,
+  "shinyChance": 0.01,
+  "bigEnabled": true,
+  "bigChance": 0.02,
+  "bigScale": 2.0
+},
+"mount": {
+  "enabled": true,
+  "saddleAllowed": true,
+  "speedMultiplier": 1.0,
+  "sprintMultiplier": 1.5,
+  "jumpMultiplier": 1.0,
+  "canSprint": true
+},
 
   "behavior": {
-	"type": "passive",
+	"type": "neutral",
 	"detectionRange": 8.0,
 	"attackRange": 2.0,
 	"attackDamage": 4.0,
