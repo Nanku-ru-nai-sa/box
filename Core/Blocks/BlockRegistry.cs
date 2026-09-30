@@ -41,14 +41,12 @@ public partial class BlockRegistry : Node
         var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
 
         var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/bamboo_shoot.png");
+        var saplingTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/sapling.png");
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/clover.png");
         var dandelionTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/dandelion.png");
 
-        // Geology Layer rocks - fill for ChunkManager's Layers list (the
-        // geology/soil-band system). diorite/gabbro previously only had
-        // item-icon art (Items/rock/) - now using the proper tileable
-        // block-face textures added alongside the rest of this set.
+        // Geology Layer rocks
         var basaltTex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/basalt.png");
         var graniteTex     = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/granite.png");
         var magmaTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/magma.png");
@@ -58,7 +56,7 @@ public partial class BlockRegistry : Node
         var deepStoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/deep_stone.png");
         var denserStoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/denser_stone.png");
         var slateTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/slate.png");
-        var slate2Tex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/slate2.png"); // registered but not used in Layers yet - alt texture to try later
+        var slate2Tex      = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/slate2.png");
         var limestoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/limestone.png");
         var shaleTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/shale.png");
         var siltTex        = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/silt.png");
@@ -66,9 +64,7 @@ public partial class BlockRegistry : Node
         var softStoneTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soft_stone.png");
         var chalkTex       = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/chalk.png");
 
-        // Ore Hint Rocks - small flat-ground pebbles, same rendering
-        // mechanism as clover. Using the existing Items/ icon art instead of
-        // making new dedicated rock textures.
+        // Ore Hint Rocks
         var rockFlintTex  = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/flint.png");
         var rockCoalTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/coal_ore.png");
         var rockIronTex   = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/iron_ore.png");
@@ -86,7 +82,7 @@ public partial class BlockRegistry : Node
         dirt.TextureTop = dirtTex; dirt.TextureSide = dirtTex; dirt.TextureBottom = dirtTex;
         Register(dirt);
 
-        // Grass Block (full block, no overlay needed)
+        // Grass Block
         var grassBlock = new BlockResource();
         grassBlock.BlockId = "grass_block"; grassBlock.DisplayName = "Grass";
         grassBlock.IsSolid = true; grassBlock.CanChisel = true; grassBlock.GrassCanGrow = false; grassBlock.Hardness = 0.5f;
@@ -135,11 +131,69 @@ public partial class BlockRegistry : Node
         clay.TextureTop = clayTex; clay.TextureSide = clayTex; clay.TextureBottom = clayTex;
         Register(clay);
 
+        // ============================================================
+        // FULL LOG
+        // ============================================================
+
         var log = new BlockResource();
         log.BlockId = "log"; log.DisplayName = "Log";
         log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f;
         log.TextureTop = logTopTex; log.TextureSide = logSideTex; log.TextureBottom = logTopTex;
         Register(log);
+
+        // ============================================================
+        // SMALL LOG MATERIALS
+        // These are real placeable/breakable blocks using the same
+        // textures as the normal Log for now.
+        // ============================================================
+
+        // Twig - 2x16x2 pixels
+        var twig = new BlockResource();
+        twig.BlockId = "twig";
+        twig.DisplayName = "Twig";
+        twig.IsSolid = true;
+        twig.CanChisel = false;
+        twig.IsTransparent = false;
+        twig.Hardness = 0.5f;
+        twig.IsFlammable = true;
+        twig.IsCustomShape = true;
+        twig.CustomShapeSize = new Vector3(2f / 16f, 1f, 2f / 16f);
+        twig.TextureTop = logTopTex;
+        twig.TextureSide = logSideTex;
+        twig.TextureBottom = logTopTex;
+        Register(twig);
+
+        // Tiny Log - 4x16x4 pixels
+        var tinyLog = new BlockResource();
+        tinyLog.BlockId = "tiny_log";
+        tinyLog.DisplayName = "Tiny Log";
+        tinyLog.IsSolid = true;
+        tinyLog.CanChisel = false;
+        tinyLog.IsTransparent = false;
+        tinyLog.Hardness = 0.75f;
+        tinyLog.IsFlammable = true;
+        tinyLog.IsCustomShape = true;
+        tinyLog.CustomShapeSize = new Vector3(4f / 16f, 1f, 4f / 16f);
+        tinyLog.TextureTop = logTopTex;
+        tinyLog.TextureSide = logSideTex;
+        tinyLog.TextureBottom = logTopTex;
+        Register(tinyLog);
+
+        // Small Log - 6x16x6 pixels
+        var smallLog = new BlockResource();
+        smallLog.BlockId = "small_log";
+        smallLog.DisplayName = "Small Log";
+        smallLog.IsSolid = true;
+        smallLog.CanChisel = false;
+        smallLog.IsTransparent = false;
+        smallLog.Hardness = 1.0f;
+        smallLog.IsFlammable = true;
+        smallLog.IsCustomShape = true;
+        smallLog.CustomShapeSize = new Vector3(8f / 16f, 1f, 8f / 16f);
+        smallLog.TextureTop = logTopTex;
+        smallLog.TextureSide = logSideTex;
+        smallLog.TextureBottom = logTopTex;
+        Register(smallLog);
 
         var planks = new BlockResource();
         planks.BlockId = "planks"; planks.DisplayName = "Planks";
@@ -153,10 +207,6 @@ public partial class BlockRegistry : Node
         crafter.TextureTop = crafterTex; crafter.TextureSide = crafterTex; crafter.TextureBottom = crafterTex;
         Register(crafter);
 
-        // Tool Bench — new station block. Same shape as Crafter (full block,
-        // no overlay), opened the same way (right-click), but drives the
-        // ToolBenchPanel UI instead of CraftingPanel. See Player.cs proximity
-        // + TryOpenCraftingTable / OpenStationMenu.
         var toolBench = new BlockResource();
         toolBench.BlockId = "tool_bench"; toolBench.DisplayName = "Tool Bench";
         toolBench.IsSolid = true; toolBench.CanChisel = false; toolBench.Hardness = 1.0f;
@@ -199,6 +249,23 @@ public partial class BlockRegistry : Node
         melon.TextureTop = melonTopTex; melon.TextureSide = melonSideTex; melon.TextureBottom = melonSideTex;
         Register(melon);
 
+        // ============================================================
+        // SAPLING
+        // ============================================================
+
+        var sapling = new BlockResource();
+        sapling.BlockId = "sapling";
+        sapling.DisplayName = "Sapling";
+        sapling.IsSolid = false;
+        sapling.CanChisel = false;
+        sapling.IsTransparent = true;
+        sapling.IsCross = true;
+        sapling.Hardness = 0f;
+        sapling.TextureTop = saplingTex;
+        sapling.TextureSide = saplingTex;
+        sapling.TextureBottom = saplingTex;
+        Register(sapling);
+
         var rose = new BlockResource();
         rose.BlockId = "rose"; rose.DisplayName = "Rose";
         rose.IsSolid = false; rose.CanChisel = false; rose.IsTransparent = true; rose.IsCross = true; rose.Hardness = 0f;
@@ -217,11 +284,7 @@ public partial class BlockRegistry : Node
         clover.TextureTop = cloverTex; clover.TextureSide = cloverTex; clover.TextureBottom = cloverTex;
         Register(clover);
 
-        // Ore Hint Rocks: flat-ground, instant-break, no chiseling - just a
-        // little visual tell. IsFlatGround also makes them placeable by the
-        // player through the normal block-placement path for free, same as
-        // clover, so "placing rocks/items down for fun" doesn't need any
-        // extra placement code.
+        // Ore Hint Rocks
         var rockFlint = new BlockResource();
         rockFlint.BlockId = "rock_flint"; rockFlint.DisplayName = "Flint";
         rockFlint.IsSolid = false; rockFlint.CanChisel = false; rockFlint.IsTransparent = true; rockFlint.IsFlatGround = true; rockFlint.IsThinItem = true; rockFlint.Hardness = 0f;
@@ -253,12 +316,6 @@ public partial class BlockRegistry : Node
         Register(rockCopper);
 
         // ---- Geology Layer rocks ----
-        // Fill for ChunkManager's Layers list. Hardness roughly climbs
-        // with rock "grade" - soft soils lowest, sedimentary next,
-        // transitional/metamorphic higher, crystalline/deep igneous
-        // highest - loosely mirroring how dirt (0.5) through obsidian
-        // (50) are already spread out above. Ordered here shallow-to-deep
-        // to match the Layers list.
 
         var silt = new BlockResource();
         silt.BlockId = "silt"; silt.DisplayName = "Silt";
@@ -302,8 +359,6 @@ public partial class BlockRegistry : Node
         slate.TextureTop = slateTex; slate.TextureSide = slateTex; slate.TextureBottom = slateTex;
         Register(slate);
 
-        // Not in the Layers list yet - registered so it's ready to drop
-        // in whenever you want to try it (per your note).
         var slate2 = new BlockResource();
         slate2.BlockId = "slate2"; slate2.DisplayName = "Slate (Alt)";
         slate2.IsSolid = true; slate2.CanChisel = true; slate2.Hardness = 1.6f;
@@ -359,30 +414,30 @@ public partial class BlockRegistry : Node
         Register(magma);
 
         var bomb = new BlockResource();
-bomb.BlockId = "bomb";
-bomb.DisplayName = "Bomb";
-bomb.IsSolid = true;
-bomb.CanChisel = false;
-bomb.IsTransparent = false;
-bomb.CanRotate = false;
-bomb.Hardness = 1.0f;
-bomb.TextureTop = bombTex;
-bomb.TextureSide = bombTex;
-bomb.TextureBottom = bombTex;
-Register(bomb);
+        bomb.BlockId = "bomb";
+        bomb.DisplayName = "Bomb";
+        bomb.IsSolid = true;
+        bomb.CanChisel = false;
+        bomb.IsTransparent = false;
+        bomb.CanRotate = false;
+        bomb.Hardness = 1.0f;
+        bomb.TextureTop = bombTex;
+        bomb.TextureSide = bombTex;
+        bomb.TextureBottom = bombTex;
+        Register(bomb);
 
-var bambooShoot = new BlockResource();
-bambooShoot.BlockId = "bamboo_shoot";
-bambooShoot.DisplayName = "Bamboo Shoot";
-bambooShoot.IsSolid = false;
-bambooShoot.CanChisel = false;
-bambooShoot.IsTransparent = true;
-bambooShoot.IsCross = true;
-bambooShoot.Hardness = 0f;
-bambooShoot.TextureTop = bambooShootTex;
-bambooShoot.TextureSide = bambooShootTex;
-bambooShoot.TextureBottom = bambooShootTex;
-Register(bambooShoot);
+        var bambooShoot = new BlockResource();
+        bambooShoot.BlockId = "bamboo_shoot";
+        bambooShoot.DisplayName = "Bamboo Shoot";
+        bambooShoot.IsSolid = false;
+        bambooShoot.CanChisel = false;
+        bambooShoot.IsTransparent = true;
+        bambooShoot.IsCross = true;
+        bambooShoot.Hardness = 0f;
+        bambooShoot.TextureTop = bambooShootTex;
+        bambooShoot.TextureSide = bambooShootTex;
+        bambooShoot.TextureBottom = bambooShootTex;
+        Register(bambooShoot);
 
         GD.Print("Blocks registered.");
     }
@@ -397,6 +452,7 @@ Register(bambooShoot);
     {
         if (_blocks.TryGetValue(blockId, out BlockResource block))
             return block;
+
         GD.PrintErr($"BlockRegistry: Block not found: {blockId}");
         return null;
     }

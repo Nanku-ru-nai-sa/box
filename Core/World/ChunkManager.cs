@@ -16,6 +16,7 @@ public partial class ChunkManager : Node3D
     // Defaults here only matter if you run this scene directly without going through the menu.
     public WorldGenType WorldType { get; set; } = WorldGenType.Normal;
     public WorldGenTheme WorldTheme { get; set; } = WorldGenTheme.Normal;
+    private TreeGrowth _treeGrowth;
 
     // ---- FLAT WORLD SETTINGS ----
     [ExportGroup("Flat World")]
@@ -402,10 +403,13 @@ public partial class ChunkManager : Node3D
         GD.Print("Calling UpdateChunks...");
         UpdateChunks();
 
-       VoxelPathfinder.IsSolidBlock = pos =>
+        _treeGrowth = new TreeGrowth(this);
+
+        VoxelPathfinder.IsSolidBlock = pos =>
 {
     var block = GetBlockAtWorld(pos);
     return !block.IsAir() && block.BlockId != "water";
+    
 };
         SetProcess(true);
     }

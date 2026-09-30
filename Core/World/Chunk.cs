@@ -41,9 +41,12 @@ public partial class Chunk : Node3D
 
     private static readonly Vector3I[] OrthogonalOffsets = new Vector3I[]
     {
-        new Vector3I(1, 0, 0), new Vector3I(-1, 0, 0),
-        new Vector3I(0, 1, 0), new Vector3I(0, -1, 0),
-        new Vector3I(0, 0, 1), new Vector3I(0, 0, -1)
+        new Vector3I(1, 0, 0),
+        new Vector3I(-1, 0, 0),
+        new Vector3I(0, 1, 0),
+        new Vector3I(0, -1, 0),
+        new Vector3I(0, 0, 1),
+        new Vector3I(0, 0, -1)
     };
 
     public override void _Ready()
@@ -99,49 +102,57 @@ public partial class Chunk : Node3D
     }
 
     private void TryDecayGrassBelow(
-        int x,
-        int y,
-        int z,
-        BlockState placedBlock)
+    int x,
+    int y,
+    int z,
+    BlockState placedBlock)
+{
+    if (placedBlock.IsAir())
+        return;
+
+    BlockResource resource =
+        BlockRegistry.Instance.GetBlock(placedBlock.BlockId);
+
+    if (resource == null)
+        return;
+
+    if (resource.IsTransparent)
+        return;
+
+    if (resource.IsCross || resource.IsFlatGround)
+        return;
+
+    // Custom shapes are solid for gameplay,
+    // but they are not full cubes.
+    //
+    // Twig, Tiny Log, and Small Log should
+    // therefore leave grass underneath them.
+    if (resource.IsCustomShape)
+        return;
+
+    if (!placedBlock.IsFullBlock())
+        return;
+
+    int by = y - 1;
+
+    if (!IsInBounds(x, by, z))
+        return;
+
+    BlockState below = _blocks[x, by, z];
+
+    if (below.BlockId != "grass_block")
+        return;
+
+    var dirtBlock = new BlockState
     {
-        if (placedBlock.IsAir())
-            return;
+        BlockId = "dirt",
+        BitMask = 0xFF
+    };
 
-        BlockResource resource =
-            BlockRegistry.Instance.GetBlock(placedBlock.BlockId);
-
-        if (resource == null)
-            return;
-
-        if (resource.IsTransparent)
-            return;
-
-        if (resource.IsCross || resource.IsFlatGround)
-            return;
-
-        if (!placedBlock.IsFullBlock())
-            return;
-
-        int by = y - 1;
-
-        if (!IsInBounds(x, by, z))
-            return;
-
-        BlockState below = _blocks[x, by, z];
-
-        if (below.BlockId != "grass_block")
-            return;
-
-        var dirtBlock = new BlockState
-        {
-            BlockId = "dirt",
-            BitMask = 0xFF
-        };
-
-        _blocks[x, by, z] = dirtBlock;
-        _modifiedBlocks[new Vector3I(x, by, z)] = dirtBlock;
-        _isDirty = true;
-    }
+    _blocks[x, by, z] = dirtBlock;
+    _modifiedBlocks[new Vector3I(x, by, z)] = dirtBlock;
+    _isDirty = true;
+}
 
     private bool IsSolidSupport(BlockState block)
     {
@@ -227,6 +238,7 @@ public partial class Chunk : Node3D
                 };
 
                 WritePersisted(x, restY, z, sandBlock);
+
                 WritePersisted(
                     x,
                     currentY,
@@ -303,21 +315,21 @@ public partial class Chunk : Node3D
     }
 
     public void SetBlockNaturalGrowth(
-    int x,
-    int y,
-    int z,
-    BlockState block)
-{
-    if (!IsInBounds(x, y, z))
-        return;
+        int x,
+        int y,
+        int z,
+        BlockState block)
+    {
+        if (!IsInBounds(x, y, z))
+            return;
 
-    _blocks[x, y, z] = block;
+        _blocks[x, y, z] = block;
 
-    // Natural growth must persist just like player changes.
-    _modifiedBlocks[new Vector3I(x, y, z)] = block;
+        // Natural growth must persist just like player changes.
+        _modifiedBlocks[new Vector3I(x, y, z)] = block;
 
-    _isDirty = true;
-}
+        _isDirty = true;
+    }
 
     private BlockState GetBlockCrossChunk(
         int x,
@@ -721,6 +733,22 @@ public partial class Chunk : Node3D
                             );
                         }
                     }
+                    else if (resource.IsCustomShape)
+                    {
+                        // Custom solid shapes such as Twig, Tiny Log,
+                        // and Small Log.
+                        //
+                        // These are real solid blocks, so their geometry
+                        // goes into solidSurfaces and therefore also into
+                        // solidOnlyMesh for normal world collision.
+                        AddCustomShapeFaces(
+                            surfaces,
+                            resource,
+                            x,
+                            y,
+                            z
+                        );
+                    }
                     else if (block.IsFullBlock())
                     {
                         AddFullBlockFaces(
@@ -772,6 +800,7 @@ public partial class Chunk : Node3D
         if (hasPlantTargets)
         {
             plantTargetSurface.GenerateNormals();
+
             plantTargetSurface.Commit(
                 plantTargetMesh
             );
@@ -819,6 +848,7 @@ public partial class Chunk : Node3D
         foreach (var kvp in solidSurfaces)
         {
             kvp.Value.GenerateNormals();
+
             kvp.Value.Commit(arrayMesh);
             kvp.Value.Commit(solidOnlyMesh);
 
@@ -901,6 +931,372 @@ public partial class Chunk : Node3D
         IsGenerated = true;
     }
 
+    // ============================================================
+    // CUSTOM SHAPE BLOCKS
+    // ============================================================
+    //
+    // Creates a centered rectangular box inside the normal
+    // 1x1x1 world block.
+    //
+    // Example:
+    // Twig = 2x16x2
+    //       width  = 2/16
+    //       height = 16/16
+    //       depth  = 2/16
+    //
+    // The custom shape always starts at the bottom of the block
+    // and is centered horizontally.
+    //
+    // All six faces are rendered. We intentionally do not use
+    // normal full-block face culling here because a small custom
+    // block next to a full block still has visible faces.
+    // ============================================================
+
+private void AddCustomShapeFaces(
+    Dictionary<Texture2D, SurfaceTool> surfaces,
+    BlockResource resource,
+    int x,
+    int y,
+    int z)
+{
+    Vector3 size = resource.CustomShapeSize;
+
+    float width =
+        Mathf.Clamp(size.X, 0.001f, 1.0f);
+
+    float height =
+        Mathf.Clamp(size.Y, 0.001f, 1.0f);
+
+    float depth =
+        Mathf.Clamp(size.Z, 0.001f, 1.0f);
+
+    float offsetX =
+        (1.0f - width) * 0.5f;
+
+    float offsetZ =
+        (1.0f - depth) * 0.5f;
+
+    float shapeX =
+        x + offsetX;
+
+    float shapeY =
+        y;
+
+    float shapeZ =
+        z + offsetZ;
+
+    Texture2D topTexture =
+        resource.TextureTop;
+
+    Texture2D bottomTexture =
+        resource.TextureBottom;
+
+    Texture2D sideTexture =
+        resource.TextureSide;
+
+
+    // ============================================================
+    // TEXTURE CROPPING
+    //
+    // The model width/depth determines how much of the 16x16
+    // texture is visible.
+    //
+    // 2/16 = center 2 pixels
+    // 4/16 = center 4 pixels
+    // 8/16 = center 8 pixels
+    // 16/16 = full texture
+    // ============================================================
+
+    float cropU =
+        (1.0f - width) * 0.5f;
+
+    float cropV =
+        (1.0f - depth) * 0.5f;
+
+    float uMin =
+        cropU;
+
+    float uMax =
+        1.0f - cropU;
+
+    float vMin =
+        cropV;
+
+    float vMax =
+        1.0f - cropV;
+
+
+    // ============================================================
+    // TOP
+    //
+    // Top is a square texture crop.
+    // ============================================================
+
+    if (topTexture != null)
+    {
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                topTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.Top
+            ),
+            uMin,
+            uMax,
+            vMin,
+            vMax
+        );
+    }
+
+
+    // ============================================================
+    // BOTTOM
+    //
+    // Bottom is also a square texture crop.
+    // ============================================================
+
+    if (bottomTexture != null)
+    {
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                bottomTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.Bottom
+            ),
+            uMin,
+            uMax,
+            vMin,
+            vMax
+        );
+    }
+
+
+    // ============================================================
+    // SIDES
+    //
+    // IMPORTANT:
+    // U is cropped to the center of the texture.
+    //
+    // V stays FULL HEIGHT.
+    //
+    // This means:
+    //
+    // Twig:
+    //   center 2 pixels wide
+    //   full 16 pixels tall
+    //
+    // Tiny Log:
+    //   center 4 pixels wide
+    //   full 16 pixels tall
+    //
+    // Small Log:
+    //   center 8 pixels wide
+    //   full 16 pixels tall
+    // ============================================================
+
+    if (sideTexture != null)
+    {
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                sideTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.North
+            ),
+            uMin,
+            uMax,
+            0.0f,
+            1.0f
+        );
+
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                sideTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.South
+            ),
+            uMin,
+            uMax,
+            0.0f,
+            1.0f
+        );
+
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                sideTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.West
+            ),
+            uMin,
+            uMax,
+            0.0f,
+            1.0f
+        );
+
+        AddQuadUV(
+            GetOrCreateSurface(
+                surfaces,
+                sideTexture
+            ),
+            GetCustomShapeFaceVertices(
+                shapeX,
+                shapeY,
+                shapeZ,
+                width,
+                height,
+                depth,
+                FaceDirection.East
+            ),
+            uMin,
+            uMax,
+            0.0f,
+            1.0f
+        );
+    }
+}
+private void AddQuadCropped(
+    SurfaceTool surface,
+    Vector3[] verts,
+    float uvMin,
+    float uvMax)
+{
+    Vector2[] uvs =
+    {
+        new Vector2(uvMin, uvMax),
+        new Vector2(uvMax, uvMax),
+        new Vector2(uvMax, uvMin),
+        new Vector2(uvMin, uvMin)
+    };
+
+    surface.SetUV(uvs[0]);
+    surface.AddVertex(verts[0]);
+
+    surface.SetUV(uvs[1]);
+    surface.AddVertex(verts[1]);
+
+    surface.SetUV(uvs[2]);
+    surface.AddVertex(verts[2]);
+
+    surface.SetUV(uvs[0]);
+    surface.AddVertex(verts[0]);
+
+    surface.SetUV(uvs[2]);
+    surface.AddVertex(verts[2]);
+
+    surface.SetUV(uvs[3]);
+    surface.AddVertex(verts[3]);
+}
+    private Vector3[] GetCustomShapeFaceVertices(
+        float x,
+        float y,
+        float z,
+        float width,
+        float height,
+        float depth,
+        FaceDirection dir)
+    {
+        float x2 = x + width;
+        float y2 = y + height;
+        float z2 = z + depth;
+
+        return dir switch
+        {
+            FaceDirection.Top =>
+                new Vector3[]
+                {
+                    new Vector3(x, y2, z),
+                    new Vector3(x2, y2, z),
+                    new Vector3(x2, y2, z2),
+                    new Vector3(x, y2, z2)
+                },
+
+            FaceDirection.Bottom =>
+                new Vector3[]
+                {
+                    new Vector3(x, y, z2),
+                    new Vector3(x2, y, z2),
+                    new Vector3(x2, y, z),
+                    new Vector3(x, y, z)
+                },
+
+            FaceDirection.North =>
+                new Vector3[]
+                {
+                    new Vector3(x, y, z),
+                    new Vector3(x2, y, z),
+                    new Vector3(x2, y2, z),
+                    new Vector3(x, y2, z)
+                },
+
+            FaceDirection.South =>
+                new Vector3[]
+                {
+                    new Vector3(x2, y, z2),
+                    new Vector3(x, y, z2),
+                    new Vector3(x, y2, z2),
+                    new Vector3(x2, y2, z2)
+                },
+
+            FaceDirection.East =>
+                new Vector3[]
+                {
+                    new Vector3(x2, y, z),
+                    new Vector3(x2, y, z2),
+                    new Vector3(x2, y2, z2),
+                    new Vector3(x2, y2, z)
+                },
+
+            FaceDirection.West =>
+                new Vector3[]
+                {
+                    new Vector3(x, y, z2),
+                    new Vector3(x, y, z),
+                    new Vector3(x, y2, z),
+                    new Vector3(x, y2, z2)
+                },
+
+            _ => new Vector3[4]
+        };
+    }
+
     private void AddCrossFaces(
         Dictionary<Texture2D, SurfaceTool> surfaces,
         BlockResource resource,
@@ -920,6 +1316,7 @@ public partial class Chunk : Node3D
                 out SurfaceTool st))
         {
             st = new SurfaceTool();
+
             st.Begin(
                 Mesh.PrimitiveType.Triangles
             );
@@ -1016,63 +1413,111 @@ public partial class Chunk : Node3D
         // Diagonal 2
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x + 1, y + 1, z)
+            new Vector3(
+                x + 1,
+                y + 1,
+                z
+            )
         );
 
         st.SetUV(new Vector2(1, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z + 1)
+            new Vector3(
+                x,
+                y + 1,
+                z + 1
+            )
         );
 
         st.SetUV(new Vector2(1, 1));
         st.AddVertex(
-            new Vector3(x, y, z + 1)
+            new Vector3(
+                x,
+                y,
+                z + 1
+            )
         );
 
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x + 1, y + 1, z)
+            new Vector3(
+                x + 1,
+                y + 1,
+                z
+            )
         );
 
         st.SetUV(new Vector2(1, 1));
         st.AddVertex(
-            new Vector3(x, y, z + 1)
+            new Vector3(
+                x,
+                y,
+                z + 1
+            )
         );
 
         st.SetUV(new Vector2(0, 1));
         st.AddVertex(
-            new Vector3(x + 1, y, z)
+            new Vector3(
+                x + 1,
+                y,
+                z
+            )
         );
 
         // Back side of diagonal 2
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z + 1)
+            new Vector3(
+                x,
+                y + 1,
+                z + 1
+            )
         );
 
         st.SetUV(new Vector2(1, 0));
         st.AddVertex(
-            new Vector3(x + 1, y + 1, z)
+            new Vector3(
+                x + 1,
+                y + 1,
+                z
+            )
         );
 
         st.SetUV(new Vector2(1, 1));
         st.AddVertex(
-            new Vector3(x + 1, y, z)
+            new Vector3(
+                x + 1,
+                y,
+                z
+            )
         );
 
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z + 1)
+            new Vector3(
+                x,
+                y + 1,
+                z + 1
+            )
         );
 
         st.SetUV(new Vector2(1, 1));
         st.AddVertex(
-            new Vector3(x + 1, y, z)
+            new Vector3(
+                x + 1,
+                y,
+                z
+            )
         );
 
         st.SetUV(new Vector2(0, 1));
         st.AddVertex(
-            new Vector3(x, y, z + 1)
+            new Vector3(
+                x,
+                y,
+                z + 1
+            )
         );
     }
 
@@ -1169,6 +1614,7 @@ public partial class Chunk : Node3D
                 out SurfaceTool st))
         {
             st = new SurfaceTool();
+
             st.Begin(
                 Mesh.PrimitiveType.Triangles
             );
@@ -2272,38 +2718,46 @@ public partial class Chunk : Node3D
     }
 
     private bool ShouldDrawFace(
-        int nx,
-        int ny,
-        int nz,
-        bool currentIsTransparent)
-    {
-        if (!IsInBounds(nx, ny, nz))
-            return true;
+    int nx,
+    int ny,
+    int nz,
+    bool currentIsTransparent)
+{
+    if (!IsInBounds(nx, ny, nz))
+        return true;
 
-        BlockState neighbor =
-            _blocks[nx, ny, nz];
+    BlockState neighbor =
+        _blocks[nx, ny, nz];
 
-        if (neighbor.IsAir())
-            return true;
+    if (neighbor.IsAir())
+        return true;
 
-        BlockResource neighborResource =
-            BlockRegistry.Instance.GetBlock(
-                neighbor.BlockId
-            );
+    BlockResource neighborResource =
+        BlockRegistry.Instance.GetBlock(
+            neighbor.BlockId
+        );
 
-        if (neighborResource == null)
-            return true;
+    if (neighborResource == null)
+        return true;
 
-        if (neighborResource.IsTransparent &&
-            !currentIsTransparent)
-            return true;
+    if (neighborResource.IsTransparent &&
+        !currentIsTransparent)
+        return true;
 
-        if (!neighbor.IsFullBlock())
-            return true;
+    // Custom shapes such as Twig, Tiny Log,
+    // and Small Log are solid for gameplay,
+    // but they are NOT full 16x16x16 cubes.
+    //
+    // Therefore they must not completely hide
+    // the face of the block next to them.
+    if (neighborResource.IsCustomShape)
+        return true;
 
-        return false;
-    }
+    if (!neighbor.IsFullBlock())
+        return true;
 
+    return false;
+}
     private Vector3[] GetFaceVertices(
         float x,
         float y,
@@ -2500,6 +2954,40 @@ public partial class Chunk : Node3D
         surface.SetUV(uvs[3]);
         surface.AddVertex(verts[3]);
     }
+private void AddQuadUV(
+    SurfaceTool surface,
+    Vector3[] verts,
+    float uMin,
+    float uMax,
+    float vMin,
+    float vMax)
+{
+    Vector2[] uvs =
+    {
+        new Vector2(uMin, vMax),
+        new Vector2(uMax, vMax),
+        new Vector2(uMax, vMin),
+        new Vector2(uMin, vMin)
+    };
+
+    surface.SetUV(uvs[0]);
+    surface.AddVertex(verts[0]);
+
+    surface.SetUV(uvs[1]);
+    surface.AddVertex(verts[1]);
+
+    surface.SetUV(uvs[2]);
+    surface.AddVertex(verts[2]);
+
+    surface.SetUV(uvs[0]);
+    surface.AddVertex(verts[0]);
+
+    surface.SetUV(uvs[2]);
+    surface.AddVertex(verts[2]);
+
+    surface.SetUV(uvs[3]);
+    surface.AddVertex(verts[3]);
+}
 
     public void ExplodeAtWorld(
         Vector3I center,
