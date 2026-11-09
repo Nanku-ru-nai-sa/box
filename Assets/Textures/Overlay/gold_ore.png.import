@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bdt0ivi85ofr2"
-path="res://.godot/imported/coal_ore.png-0fcbf59e3d04eeec96e5924c1a476d11.ctex"
+uid="uid://di15mdbvmul5c"
+path="res://.godot/imported/gold_ore.png-73dc18e20601f00ac3d729dbc51b062c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/coal_ore.png"
-dest_files=["res://.godot/imported/coal_ore.png-0fcbf59e3d04eeec96e5924c1a476d11.ctex"]
+source_file="res://Assets/Textures/Overlay/gold_ore.png"
+dest_files=["res://.godot/imported/gold_ore.png-73dc18e20601f00ac3d729dbc51b062c.ctex"]
 
 [params]
 

@@ -440,16 +440,18 @@ public partial class Player : CharacterBody3D
                 );
             }
 
-            var oreC =
-                OreRegistry.Instance?.GetOreFromBlockState(b);
+            var overlayC =
+    OverlayRegistry.Instance?
+        .GetOverlayFromBlockState(b);
 
-            if (oreC != null)
-            {
-                AddItemToInventory(
-                    oreC.ItemId,
-                    1
-                );
-            }
+if (overlayC != null &&
+    !string.IsNullOrEmpty(overlayC.ItemId))
+{
+    AddItemToInventory(
+        overlayC.ItemId,
+        1
+    );
+}
 
             chunk.SetBlock(
                 bx,
@@ -539,19 +541,19 @@ public partial class Player : CharacterBody3D
                     dropWorldPos
                 );
 
-                var ore =
-                    OreRegistry.Instance?
-                        .GetOreFromBlockState(b);
+                var overlay =
+    OverlayRegistry.Instance?
+        .GetOverlayFromBlockState(b);
 
-                if (ore != null)
-                {
-                    SpawnItemDrop(
-                        ore.ItemId,
-                        1,
-                        dropWorldPos
-                    );
-                }
-            }
+if (overlay != null &&
+    !string.IsNullOrEmpty(overlay.ItemId))
+{
+    SpawnItemDrop(
+        overlay.ItemId,
+        1,
+        dropWorldPos
+    );
+}
 
             chunk.SetBlock(
                 bx,
@@ -564,7 +566,7 @@ public partial class Player : CharacterBody3D
 
             ResetBreak();
         }
-    }
+    }}
 
     // =========================================================================
     // BOMB

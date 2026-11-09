@@ -281,38 +281,233 @@ public partial class Player : CharacterBody3D
         );
     }
 
-    private void OnSlotMouseEntered(int slotIndex)
+// =========================================================================
+// CONTAINER WINDOW
+// =========================================================================
+
+private void BuildContainerWindow()
+{
+    // Remove the previous window if this crate is being reopened.
+    if (_containerPanel != null &&
+        GodotObject.IsInstanceValid(_containerPanel))
     {
-        if (_invTooltip == null)
-            return;
+        _containerPanel.QueueFree();
+    }
 
-        if (slotIndex < 0 ||
-            slotIndex >= _inventory.Slots.Length)
-        {
-            _invTooltip.HideTooltip();
-            return;
-        }
+    _containerSlotPanels.Clear();
+    _containerSlotLabels.Clear();
 
-        var slot =
-            _inventory.Slots[slotIndex];
+    if (_activeContainerSlots == null ||
+        _activeContainerSlots.Count == 0)
+        return;
 
-        if (slot.IsEmpty)
-        {
-            _invTooltip.HideTooltip();
-            return;
-        }
+    int slotCount = _activeContainerSlots.Count;
 
-        var item =
-            ItemRegistry.Instance.GetItem(
-                slot.ItemId
+    // Every crate contributes four slots arranged as two columns.
+    int crateCount = Mathf.CeilToInt(slotCount / 4f);
+    int columns = Mathf.Min(12, Mathf.Max(2, crateCount * 2));
+    int rows = Mathf.CeilToInt(slotCount / (float)columns);
+
+    float pad = 16f;
+    float titleHeight = 26f;
+    float titleGap = 8f;
+
+    float gridWidth =
+        columns * SlotSize +
+        (columns - 1) * SlotGap;
+
+    float gridHeight =
+        rows * SlotSize +
+        (rows - 1) * SlotGap;
+
+    float panelWidth = gridWidth + pad * 2f;
+
+    float panelHeight =
+        pad +
+        titleHeight +
+        titleGap +
+        gridHeight +
+        pad;
+
+    _containerPanel = new Panel();
+
+    _containerPanel.AnchorLeft = 0.5f;
+    _containerPanel.AnchorRight = 0.5f;
+    _containerPanel.AnchorTop = 0.5f;
+    _containerPanel.AnchorBottom = 0.5f;
+
+    // Position directly above the existing inventory window.
+    _containerPanel.OffsetLeft = -panelWidth / 2f;
+    _containerPanel.OffsetRight = panelWidth / 2f;
+
+    _containerPanel.OffsetTop = -180f - 10f - panelHeight;
+    _containerPanel.OffsetBottom = -190f;
+
+    _containerPanel.AddThemeStyleboxOverride(
+        "panel",
+        MakePanelStyle(
+            new Color(0.08f, 0.08f, 0.08f, 0.95f),
+            new Color(0.5f, 0.5f, 0.5f)
+        )
+    );
+
+    // Title
+    _containerTitle = new Label();
+    _containerTitle.Text = "Crate Storage";
+    _containerTitle.Position = new Vector2(pad, pad);
+    _containerTitle.Size = new Vector2(gridWidth, titleHeight);
+
+    _containerTitle.HorizontalAlignment =
+        HorizontalAlignment.Center;
+
+    _containerTitle.VerticalAlignment =
+        VerticalAlignment.Center;
+
+    _containerTitle.AddThemeFontSizeOverride("font_size", 14);
+
+    _containerPanel.AddChild(_containerTitle);
+
+    // Storage grid
+    _containerGrid = new GridContainer();
+    _containerGrid.Columns = columns;
+
+    _containerGrid.Position = new Vector2(
+        pad,
+        pad + titleHeight + titleGap
+    );
+
+    _containerGrid.AddThemeConstantOverride(
+        "h_separation",
+        SlotGap
+    );
+
+    _containerGrid.AddThemeConstantOverride(
+        "v_separation",
+        SlotGap
+    );
+
+    for (int i = 0; i < slotCount; i++)
+    {
+        var slotPanel = MakeSlotPanel(SlotSize);
+
+        slotPanel.AddChild(MakeSlotTexRect());
+        slotPanel.AddChild(MakeCountLabel(10));
+
+        int idx = i;
+
+        slotPanel.GuiInput += (InputEvent ev) =>
+            OnContainerSlotInput(ev, idx);
+
+        slotPanel.MouseEntered += () =>
+            OnSlotMouseEntered(TotalSlots + idx);
+
+        slotPanel.MouseExited += () =>
+            _invTooltip?.HideTooltip();
+
+        slotPanel.MouseFilter =
+            Control.MouseFilterEnum.Stop;
+
+        slotPanel.MouseEntered += () =>
+            slotPanel.AddThemeStyleboxOverride(
+                "panel",
+                MakePanelStyle(
+                    new Color(0.15f, 0.15f, 0.15f, 0.85f),
+                    new Color(0.75f, 0.75f, 0.75f)
+                )
             );
 
-        _invTooltip.ShowFor(
-            item,
-            GetSlotControl(slotIndex),
-            slot.CurrentDurability
-        );
+        slotPanel.MouseExited += () =>
+            slotPanel.AddThemeStyleboxOverride(
+                "panel",
+                MakePanelStyle(
+                    new Color(0.15f, 0.15f, 0.15f, 0.85f),
+                    new Color(0.4f, 0.4f, 0.4f)
+                )
+            );
+
+        _containerSlotPanels.Add(slotPanel);
+        _containerSlotLabels.Add(slotPanel.GetChild<Label>(1));
+
+        _containerGrid.AddChild(slotPanel);
     }
+
+    _containerPanel.AddChild(_containerGrid);
+
+    _inventoryLayer.AddChild(_containerPanel);
+
+    RefreshContainerSlotVisuals();
+}
+
+// =========================================================================
+// CONTAINER SLOT VISUALS
+// =========================================================================
+
+private void RefreshContainerSlotVisuals()
+{
+    if (!_containerOpen ||
+        _activeContainerSlots == null)
+        return;
+
+    int count = Mathf.Min(
+        _activeContainerSlots.Count,
+        _containerSlotPanels.Count
+    );
+
+    for (int i = 0; i < count; i++)
+    {
+        var slot = _activeContainerSlots[i];
+
+        var panel = _containerSlotPanels[i];
+
+        if (slot == null ||
+            panel == null ||
+            !GodotObject.IsInstanceValid(panel))
+            continue;
+
+        panel.GetChild<TextureRect>(0).Texture =
+            slot.IsEmpty
+                ? null
+                : GetItemIcon(slot.ItemId);
+
+        _containerSlotLabels[i].Text =
+            !slot.IsEmpty && slot.Count > 1
+                ? slot.Count.ToString()
+                : "";
+    }
+}
+
+    
+private void OnSlotMouseEntered(int slotIndex)
+{
+    if (_invTooltip == null)
+        return;
+
+    var slot = GetUiSlot(slotIndex);
+    var control = GetSlotControl(slotIndex);
+
+    if (slot == null ||
+        slot.IsEmpty ||
+        control == null)
+    {
+        _invTooltip.HideTooltip();
+        return;
+    }
+
+    var item = ItemRegistry.Instance?.GetItem(slot.ItemId);
+
+    if (item == null)
+    {
+        _invTooltip.HideTooltip();
+        return;
+    }
+
+    _invTooltip.ShowFor(
+        item,
+        control,
+        slot.CurrentDurability
+    );
+}
+
 
     // =========================================================================
     // CURSOR ITEM PANEL
@@ -1022,14 +1217,36 @@ public partial class Player : CharacterBody3D
     // SLOT LOOKUP / TOOLTIP
     // =========================================================================
 
-    private Control GetSlotControl(int slotIndex)
+    
+private Control GetSlotControl(int slotIndex)
+{
+    // Container slots
+    if (_containerOpen && IsContainerSlot(slotIndex))
     {
-        return slotIndex < MainInvSize
-            ? _invSlotPanels[slotIndex]
-            : _invHotbarSlots[
-                slotIndex - MainInvSize
-            ];
+        int containerIndex = slotIndex - TotalSlots;
+
+        if (containerIndex >= 0 &&
+            containerIndex < _containerSlotPanels.Count)
+        {
+            return _containerSlotPanels[containerIndex];
+        }
+
+        return null;
     }
+
+    // Main inventory
+    if (slotIndex >= 0 && slotIndex < MainInvSize)
+        return _invSlotPanels[slotIndex];
+
+    // Hotbar
+    int hotbarIndex = slotIndex - MainInvSize;
+
+    if (hotbarIndex >= 0 && hotbarIndex < HotbarSize)
+        return _invHotbarSlots[hotbarIndex];
+
+    return null;
+}
+
 
     private void OnHudHotbarSlotMouseEntered(int hotbarIdx)
     {
@@ -1172,6 +1389,7 @@ public partial class Player : CharacterBody3D
 
         UpdateHotbarSelectionBorder();
         UpdateCursorVisual();
+        RefreshContainerSlotVisuals();
     }
 
     private void UpdateHotbarSelectionBorder()
@@ -1245,6 +1463,14 @@ public partial class Player : CharacterBody3D
             _inventoryOpen;
     }
 
-    private void FireChanged() =>
-        _inventory.OnInventoryChanged?.Invoke();
+    private void FireChanged()
+{
+    _inventory.OnInventoryChanged?.Invoke();
+
+    if (_containerOpen)
+    {
+        RefreshContainerSlotVisuals();
+        ContainerManager.Instance?.SaveContainers();
+    }
+}
 }

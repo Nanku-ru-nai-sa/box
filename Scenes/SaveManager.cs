@@ -33,6 +33,25 @@ public class SavedMobData
 }
 
 
+[Serializable]
+public class SavedContainerSlotData
+{
+    public string ItemId { get; set; } = "";
+    public int Count { get; set; } = 0;
+    public int CurrentDurability { get; set; } = 0;
+    public string CustomName { get; set; } = "";
+}
+
+[Serializable]
+public class SavedContainerData
+{
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Z { get; set; }
+
+    public List<SavedContainerSlotData> Slots { get; set; } = new();
+}
+
 // ============================================================
 // SAVE MANAGER
 // ============================================================
@@ -919,6 +938,115 @@ savedMobs.Add(
         return results;
     }
 
+
+    // ============================================================
+    // CONTAINER STORAGE
+    // ============================================================
+
+    private string GetContainerSavePath()
+    {
+        if (string.IsNullOrEmpty(ActiveWorldId))
+            return "";
+
+        return $"{WorldsRoot}{ActiveWorldId}/containers.json";
+    }
+
+    public void SaveWorldContainers(
+        List<SavedContainerData> containers)
+    {
+        if (string.IsNullOrEmpty(ActiveWorldId))
+        {
+            GD.PrintErr(
+                "[SaveManager] Cannot save containers. No active world."
+            );
+            return;
+        }
+
+        string path = GetContainerSavePath();
+
+        DirAccess.MakeDirRecursiveAbsolute(
+            $"{WorldsRoot}{ActiveWorldId}/"
+        );
+
+        using var file = FileAccess.Open(
+            path,
+            FileAccess.ModeFlags.Write
+        );
+
+        if (file == null)
+        {
+            GD.PrintErr(
+                $"[SaveManager] Could not open container save: {path}"
+            );
+            return;
+        }
+
+        file.StoreString(
+            JsonSerializer.Serialize(
+                containers ?? new List<SavedContainerData>(),
+                JsonOpts
+            )
+        );
+
+        GD.Print(
+            $"[SaveManager] Saved {containers?.Count ?? 0} container records."
+        );
+    }
+
+    public List<SavedContainerData> LoadWorldContainers()
+    {
+        var results = new List<SavedContainerData>();
+
+        if (string.IsNullOrEmpty(ActiveWorldId))
+            return results;
+
+        string path = GetContainerSavePath();
+
+        if (!FileAccess.FileExists(path))
+            return results;
+
+        using var file = FileAccess.Open(
+            path,
+            FileAccess.ModeFlags.Read
+        );
+
+        if (file == null)
+            return results;
+
+        try
+        {
+            var loaded =
+                JsonSerializer.Deserialize<List<SavedContainerData>>(
+                    file.GetAsText()
+                );
+
+            if (loaded == null)
+                return results;
+
+            foreach (var container in loaded)
+            {
+                if (container == null)
+                    continue;
+
+                container.Slots ??= new List<SavedContainerSlotData>();
+
+                results.Add(container);
+            }
+
+            GD.Print(
+                $"[SaveManager] Loaded {results.Count} container records."
+            );
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr(
+                "[SaveManager] containers.json parse failed: " +
+                e.Message
+            );
+        }
+
+        return results;
+    }
 
     // ============================================================
     // DELETE WORLD

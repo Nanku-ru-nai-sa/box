@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dc0ph8la1ar1r"
-path="res://.godot/imported/diamond_ore.png-19eb308292cb36b8b5b2a01e73442f67.ctex"
+uid="uid://cfueoewsqrect"
+path="res://.godot/imported/iron_ore.png-1a999b7d1d9c99217c4d59f8924c89cc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Blocks/diamond_ore.png"
-dest_files=["res://.godot/imported/diamond_ore.png-19eb308292cb36b8b5b2a01e73442f67.ctex"]
+source_file="res://Assets/Textures/Overlay/iron_ore.png"
+dest_files=["res://.godot/imported/iron_ore.png-1a999b7d1d9c99217c4d59f8924c89cc.ctex"]
 
 [params]
 

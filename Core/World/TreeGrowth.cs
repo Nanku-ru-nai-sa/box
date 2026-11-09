@@ -1,6 +1,5 @@
 using Godot;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 
@@ -10,475 +9,712 @@ using System.Reflection;
 /// This is intentionally NOT a Godot Node.
 /// SeasonManager calls OnDayChanged() once per in-game day.
 ///
-/// Growth stages:
-///   Stage 1 = Sapling
-///   Stage 2 = Twig
-///   Stage 3 = Tiny Log
-///   Stage 4 = Small Log
-///   Stage 5 = Mature Tree
+/// Growth is tracked by the tree's root overlay:
+///
+///   Sapling
+///      ↓
+///   Twig + root1
+///      ↓
+///   Tiny Log + root2
+///      ↓
+///   Small Log + root3
+///      ↓
+///   Mature Tree + root block
 ///
 /// A tree can advance at most one stage per in-game day.
+///
+/// root1/root2/root3 are overlays stored on the soil below the tree.
+/// The final "root" is a normal full block.
 /// </summary>
 public partial class TreeGrowth
 {
-// ============================================================
-// SETTINGS
-// ============================================================
-private const int WorldMaxY = 288;
+    // ============================================================
+    // SETTINGS
+    // ============================================================
 
-// Only chunks within this distance from the player are checked.
-// This matches the normal horizontal streaming area reasonably well.
-private const int ChunkScanRadius = 7;
+    private const int WorldMaxY = 288;
 
-// ============================================================
-// REFERENCES
-// ============================================================
+    // Only chunks within this distance from the player are checked.
+    private const int ChunkScanRadius = 7;
 
-private readonly ChunkManager _chunkManager;
+    // ============================================================
+    // REFERENCES
+    // ============================================================
 
-private SeasonManager _seasonManager;
+    private readonly ChunkManager _chunkManager;
 
-private bool _initialized;
+    private SeasonManager _seasonManager;
 
-// ============================================================
-// CONSTRUCTOR
-// ============================================================
+    private bool _initialized;
 
-public TreeGrowth(ChunkManager chunkManager)
-{
-    _chunkManager = chunkManager;
+    // ============================================================
+    // CONSTRUCTOR
+    // ============================================================
 
-    if (_chunkManager == null)
+    public TreeGrowth(ChunkManager chunkManager)
     {
-        GD.PrintErr("[TreeGrowth] ChunkManager was null.");
-        return;
-    }
+        _chunkManager = chunkManager;
 
-    FindSeasonManager();
+        if (_chunkManager == null)
+        {
+            GD.PrintErr("[TreeGrowth] ChunkManager was null.");
+            return;
+        }
 
-    if (_seasonManager != null)
-    {
-        _seasonManager.DayChanged += OnDayChanged;
-        _initialized = true;
+        FindSeasonManager();
 
-        GD.Print("[TreeGrowth] Initialized.");
-    }
-    else
-    {
-        GD.PrintErr("[TreeGrowth] Could not find SeasonManager.");
-    }
-}
+        if (_seasonManager != null)
+        {
+            _seasonManager.DayChanged += OnDayChanged;
+            _initialized = true;
 
-// ============================================================
-// CLEANUP
-// ============================================================
-
-public void Dispose()
-{
-    if (_seasonManager != null)
-        _seasonManager.DayChanged -= OnDayChanged;
-
-    _initialized = false;
-}
-
-// ============================================================
-// SEASON MANAGER
-// ============================================================
-
-private void FindSeasonManager()
-{
-    SceneTree tree = Engine.GetMainLoop() as SceneTree;
-
-    if (tree == null)
-        return;
-
-    _seasonManager =
-        tree.Root.GetNodeOrNull<SeasonManager>("SeasonManager");
-
-    if (_seasonManager != null)
-        return;
-
-    _seasonManager =
-        tree.Root.GetNodeOrNull<SeasonManager>("/root/SeasonManager");
-}
-
-// ============================================================
-// DAILY GROWTH
-// ============================================================
-
-private void OnDayChanged(
-    int newDay,
-    SeasonManager.Season currentSeason)
-{
-    if (!_initialized)
-        return;
-
-    if (_chunkManager == null)
-        return;
-
-    GrowLoadedTrees();
-}
-
-// ============================================================
-// FIND LOADED CHUNKS
-// ============================================================
-
-private void GrowLoadedTrees()
-{
-    SceneTree tree = Engine.GetMainLoop() as SceneTree;
-    if (tree == null)
-        return;
-
-    Node3D player =
-        tree.GetFirstNodeInGroup("player") as Node3D;
-
-    if (player == null)
-    {
-        GD.Print(
-            "[TreeGrowth] No player found; skipping daily growth."
-        );
-        return;
-    }
-
-    Vector3I playerChunk =
-        _chunkManager.WorldToChunk(
-            player.GlobalPosition
-        );
-
-    Dictionary<Vector3I, Chunk> loadedChunks =
-        GetLoadedChunks();
-
-    if (loadedChunks == null)
-    {
-        GD.PrintErr(
-            "[TreeGrowth] Could not access loaded chunks."
-        );
-        return;
+            GD.Print("[TreeGrowth] Initialized.");
+        }
+        else
+        {
+            GD.PrintErr("[TreeGrowth] Could not find SeasonManager.");
+        }
     }
 
     // ============================================================
-    // IMPORTANT:
-    //
-    // First collect all trees that existed BEFORE growth began.
-    // We must not grow newly-created tree blocks during this
-    // same scan.
+    // CLEANUP
     // ============================================================
 
-    List<(Vector3I Position, int Stage)> treesToGrow =
-        new List<(Vector3I Position, int Stage)>();
-
-    foreach (
-        KeyValuePair<Vector3I, Chunk> pair
-        in loadedChunks)
+    public void Dispose()
     {
-        Vector3I chunkPosition = pair.Key;
-        Chunk chunk = pair.Value;
+        if (_seasonManager != null)
+            _seasonManager.DayChanged -= OnDayChanged;
 
-        if (chunk == null)
-            continue;
+        _initialized = false;
+    }
 
-        if (
-            Mathf.Abs(
-                chunkPosition.X - playerChunk.X
-            ) > ChunkScanRadius)
+    // ============================================================
+    // SEASON MANAGER
+    // ============================================================
+
+    private void FindSeasonManager()
+    {
+        SceneTree tree = Engine.GetMainLoop() as SceneTree;
+
+        if (tree == null)
+            return;
+
+        _seasonManager =
+            tree.Root.GetNodeOrNull<SeasonManager>("SeasonManager");
+
+        if (_seasonManager != null)
+            return;
+
+        _seasonManager =
+            tree.Root.GetNodeOrNull<SeasonManager>("/root/SeasonManager");
+    }
+
+    // ============================================================
+    // DAILY GROWTH
+    // ============================================================
+
+    private void OnDayChanged(
+        int newDay,
+        SeasonManager.Season currentSeason)
+    {
+        if (!_initialized)
+            return;
+
+        if (_chunkManager == null)
+            return;
+
+        GrowLoadedTrees();
+    }
+
+    // ============================================================
+    // FIND LOADED TREES
+    // ============================================================
+
+    private void GrowLoadedTrees()
+    {
+        SceneTree tree = Engine.GetMainLoop() as SceneTree;
+
+        if (tree == null)
+            return;
+
+        Node3D player =
+            tree.GetFirstNodeInGroup("player") as Node3D;
+
+        if (player == null)
         {
-            continue;
-        }
-
-        if (
-            Mathf.Abs(
-                chunkPosition.Z - playerChunk.Z
-            ) > ChunkScanRadius)
-        {
-            continue;
-        }
-
-        int startY =
-            Mathf.Max(
-                0,
-                Chunk.HEIGHT - 32
+            GD.Print(
+                "[TreeGrowth] No player found; skipping daily growth."
             );
 
-        for (
-            int y = startY;
-            y < Chunk.HEIGHT;
-            y++)
+            return;
+        }
+
+        Vector3I playerChunk =
+            _chunkManager.WorldToChunk(
+                player.GlobalPosition
+            );
+
+        Dictionary<Vector3I, Chunk> loadedChunks =
+            GetLoadedChunks();
+
+        if (loadedChunks == null)
         {
-            for (int x = 0; x < Chunk.SIZE; x++)
+            GD.PrintErr(
+                "[TreeGrowth] Could not access loaded chunks."
+            );
+
+            return;
+        }
+
+        // ========================================================
+        // FIRST:
+        //
+        // Find trees that existed BEFORE this growth pass.
+        // ========================================================
+
+        List<(Vector3I BasePosition, int Stage)> treesToGrow =
+            new List<(Vector3I BasePosition, int Stage)>();
+
+        foreach (
+            KeyValuePair<Vector3I, Chunk> pair
+            in loadedChunks)
+        {
+            Vector3I chunkPosition = pair.Key;
+            Chunk chunk = pair.Value;
+
+            if (chunk == null)
+                continue;
+
+            if (
+                Mathf.Abs(
+                    chunkPosition.X - playerChunk.X
+                ) > ChunkScanRadius)
             {
-                for (int z = 0; z < Chunk.SIZE; z++)
+                continue;
+            }
+
+            if (
+                Mathf.Abs(
+                    chunkPosition.Z - playerChunk.Z
+                ) > ChunkScanRadius)
+            {
+                continue;
+            }
+
+            int startY =
+                Mathf.Max(
+                    0,
+                    Chunk.HEIGHT - 32
+                );
+
+            for (
+                int y = startY;
+                y < Chunk.HEIGHT;
+                y++)
+            {
+                for (int x = 0; x < Chunk.SIZE; x++)
                 {
-                    BlockState block =
-                        chunk.GetBlock(
-                            x,
-                            y,
-                            z
+                    for (int z = 0; z < Chunk.SIZE; z++)
+                    {
+                        BlockState block =
+                            chunk.GetBlock(
+                                x,
+                                y,
+                                z
+                            );
+
+                        // ------------------------------------------------
+                        // NEW TREE
+                        // ------------------------------------------------
+
+                        if (block.BlockId == "sapling")
+                        {
+                            Vector3I saplingPosition =
+                                new Vector3I(
+                                    chunkPosition.X *
+                                        Chunk.SIZE + x,
+
+                                    chunkPosition.Y *
+                                        Chunk.HEIGHT + y,
+
+                                    chunkPosition.Z *
+                                        Chunk.SIZE + z
+                                );
+
+                            treesToGrow.Add(
+                                (
+                                    saplingPosition,
+                                    1
+                                )
+                            );
+
+                            continue;
+                        }
+
+                        // ------------------------------------------------
+                        // EXISTING TREE
+                        //
+                        // Root overlays are the authoritative
+                        // growth marker.
+                        // ------------------------------------------------
+
+                        int rootStage =
+                            GetRootStage(block);
+
+                        if (rootStage <= 0)
+                            continue;
+
+                        Vector3I rootPosition =
+                            new Vector3I(
+                                chunkPosition.X *
+                                    Chunk.SIZE + x,
+
+                                chunkPosition.Y *
+                                    Chunk.HEIGHT + y,
+
+                                chunkPosition.Z *
+                                    Chunk.SIZE + z
+                            );
+
+                        Vector3I treeBasePosition =
+                            rootPosition + Vector3I.Up;
+
+                        int treeStage =
+                            rootStage + 1;
+
+                        treesToGrow.Add(
+                            (
+                                treeBasePosition,
+                                treeStage
+                            )
                         );
+                    }
+                }
+            }
+        }
 
-                    int stage =
-                        GetTreeStage(
-                            block.BlockId
-                        );
+        // ========================================================
+        // NOW GROW.
+        // ========================================================
 
-                    if (stage <= 0)
-                        continue;
+        int treesFound =
+            treesToGrow.Count;
 
-                    Vector3I worldPosition =
-                        new Vector3I(
-                            chunkPosition.X *
-                                Chunk.SIZE + x,
+        int treesGrown = 0;
 
-                            chunkPosition.Y *
-                                Chunk.HEIGHT + y,
-
-                            chunkPosition.Z *
-                                Chunk.SIZE + z
-                        );
-
-                    treesToGrow.Add(
-                        (
-                            worldPosition,
-                            stage
-                        )
+        foreach (
+            (Vector3I BasePosition, int Stage) treeData
+            in treesToGrow)
+        {
+            if (treeData.Stage == 1)
+            {
+                BlockState currentBlock =
+                    _chunkManager.GetBlockAtWorld(
+                        treeData.BasePosition
                     );
+
+                if (currentBlock.BlockId != "sapling")
+                    continue;
+            }
+            else
+            {
+                Vector3I rootPosition =
+                    treeData.BasePosition + Vector3I.Down;
+
+                BlockState rootBlock =
+                    _chunkManager.GetBlockAtWorld(
+                        rootPosition
+                    );
+
+                int currentRootStage =
+                    GetRootStage(rootBlock);
+
+                int expectedRootStage =
+                    treeData.Stage - 1;
+
+                if (currentRootStage != expectedRootStage)
+                    continue;
+            }
+
+            if (
+                TryGrowTree(
+                    treeData.BasePosition,
+                    treeData.Stage
+                ))
+            {
+                treesGrown++;
+            }
+        }
+
+        GD.Print(
+            $"[TreeGrowth] Daily growth check complete. " +
+            $"Trees found: {treesFound}, " +
+            $"trees grown: {treesGrown}"
+        );
+    }
+
+    // ============================================================
+    // LOADED CHUNK ACCESS
+    // ============================================================
+
+    private Dictionary<Vector3I, Chunk> GetLoadedChunks()
+    {
+        try
+        {
+            FieldInfo field =
+                typeof(ChunkManager).GetField(
+                    "_chunks",
+                    BindingFlags.Instance |
+                    BindingFlags.NonPublic
+                );
+
+            if (field == null)
+            {
+                GD.PrintErr(
+                    "[TreeGrowth] Could not find ChunkManager._chunks."
+                );
+
+                return null;
+            }
+
+            object value =
+                field.GetValue(_chunkManager);
+
+            return value as Dictionary<Vector3I, Chunk>;
+        }
+        catch (Exception ex)
+        {
+            GD.PrintErr(
+                $"[TreeGrowth] Failed to access loaded chunks: {ex.Message}"
+            );
+
+            return null;
+        }
+    }
+
+    // ============================================================
+    // ROOT STAGE
+    // ============================================================
+
+    private int GetRootStage(BlockState block)
+    {
+        if (block.Features == null)
+            return 0;
+
+        foreach (string feature in block.Features)
+        {
+            switch (feature)
+            {
+                case "root:root1":
+                    return 1;
+
+                case "root:root2":
+                    return 2;
+
+                case "root:root3":
+                    return 3;
+            }
+        }
+
+        return 0;
+    }
+
+    // ============================================================
+    // GROW TREE
+    // ============================================================
+
+    private bool TryGrowTree(
+        Vector3I basePosition,
+        int currentStage)
+    {
+        if (currentStage < 1 || currentStage > 4)
+            return false;
+
+        int nextStage =
+            currentStage + 1;
+
+        if (!HasRoomForStage(
+                basePosition,
+                nextStage))
+        {
+            return false;
+        }
+
+        if (!HasGrowthLight(basePosition))
+            return false;
+
+        switch (nextStage)
+        {
+            case 2:
+                GrowToTwig(basePosition);
+                return true;
+
+            case 3:
+                GrowToTinyLog(basePosition);
+                return true;
+
+            case 4:
+                GrowToSmallLog(basePosition);
+                return true;
+
+            case 5:
+                GrowToMatureTree(basePosition);
+                return true;
+        }
+
+        return false;
+    }
+
+    // ============================================================
+    // STAGE 2
+    // ============================================================
+
+    private void GrowToTwig(
+        Vector3I basePosition)
+    {
+        SetTreeBlock(
+            basePosition,
+            "twig"
+        );
+
+        SetTreeBlock(
+            basePosition + Vector3I.Up,
+            "leaves"
+        );
+
+        SetRootOverlay(
+            basePosition + Vector3I.Down,
+            "root:root1"
+        );
+    }
+
+    // ============================================================
+    // STAGE 3
+    // ============================================================
+
+    private void GrowToTinyLog(Vector3I basePosition)
+{
+    // ------------------------------------------------------------
+    // TRUNK
+    // ------------------------------------------------------------
+
+    for (int y = 0; y < 3; y++)
+    {
+        SetTreeBlock(
+            basePosition + Vector3I.Up * y,
+            "tiny_log"
+        );
+    }
+
+    // ------------------------------------------------------------
+    // CANOPY - 3x3
+    // ------------------------------------------------------------
+
+    int canopyY = basePosition.Y + 2;
+
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int z = -1; z <= 1; z++)
+        {
+            Vector3I position =
+                new Vector3I(
+                    basePosition.X + x,
+                    canopyY,
+                    basePosition.Z + z
+                );
+
+            if (x == 0 && z == 0)
+                SetTreeBlock(position, "tiny_log");
+            else
+                SetTreeBlock(position, "leaves");
+        }
+    }
+
+    // ------------------------------------------------------------
+    // TOP LEAF - SMALL PLUS SHAPE
+    // ------------------------------------------------------------
+
+    int topY = basePosition.Y + 3;
+
+    SetTreeBlock(
+        new Vector3I(basePosition.X, topY, basePosition.Z),
+        "leaves"
+    );
+
+    SetTreeBlock(
+        new Vector3I(basePosition.X + 1, topY, basePosition.Z),
+        "leaves"
+    );
+
+    SetTreeBlock(
+        new Vector3I(basePosition.X - 1, topY, basePosition.Z),
+        "leaves"
+    );
+
+    SetTreeBlock(
+        new Vector3I(basePosition.X, topY, basePosition.Z + 1),
+        "leaves"
+    );
+
+    SetTreeBlock(
+        new Vector3I(basePosition.X, topY, basePosition.Z - 1),
+        "leaves"
+    );
+
+    // ------------------------------------------------------------
+    // ROOT STAGE
+    // ------------------------------------------------------------
+
+    SetRootOverlay(
+        basePosition + Vector3I.Down,
+        "root:root2"
+    );
+}
+
+    // ============================================================
+    // STAGE 4
+    // ============================================================
+
+    private void GrowToSmallLog(Vector3I basePosition)
+{
+    // ------------------------------------------------------------
+    // TRUNK
+    // ------------------------------------------------------------
+
+    for (int y = 0; y < 4; y++)
+    {
+        SetTreeBlock(
+            basePosition + Vector3I.Up * y,
+            "small_log"
+        );
+    }
+
+    // ------------------------------------------------------------
+    // LOWER CANOPY - 5x5
+    // ------------------------------------------------------------
+
+    int lowerCanopyY = basePosition.Y + 2;
+
+    for (int x = -2; x <= 2; x++)
+    {
+        for (int z = -2; z <= 2; z++)
+        {
+            // Cut the four corners to keep the canopy rounded.
+            if (Mathf.Abs(x) == 2 && Mathf.Abs(z) == 2)
+                continue;
+
+            Vector3I position =
+                new Vector3I(
+                    basePosition.X + x,
+                    lowerCanopyY,
+                    basePosition.Z + z
+                );
+
+            if (x == 0 && z == 0)
+                SetTreeBlock(position, "small_log");
+            else
+                SetTreeBlock(position, "leaves");
+        }
+    }
+
+    // ------------------------------------------------------------
+    // UPPER CANOPY - 3x3
+    // ------------------------------------------------------------
+
+    int upperCanopyY = basePosition.Y + 3;
+
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int z = -1; z <= 1; z++)
+        {
+            Vector3I position =
+                new Vector3I(
+                    basePosition.X + x,
+                    upperCanopyY,
+                    basePosition.Z + z
+                );
+
+            if (x == 0 && z == 0)
+                SetTreeBlock(position, "small_log");
+            else
+                SetTreeBlock(position, "leaves");
+        }
+    }
+
+    // ------------------------------------------------------------
+// TOP LEAF - SMALL PLUS SHAPE
+// ------------------------------------------------------------
+
+int topY = basePosition.Y + 4;
+
+SetTreeBlock(
+    new Vector3I(basePosition.X, topY, basePosition.Z),
+    "leaves"
+);
+
+SetTreeBlock(
+    new Vector3I(basePosition.X + 1, topY, basePosition.Z),
+    "leaves"
+);
+
+SetTreeBlock(
+    new Vector3I(basePosition.X - 1, topY, basePosition.Z),
+    "leaves"
+);
+
+SetTreeBlock(
+    new Vector3I(basePosition.X, topY, basePosition.Z + 1),
+    "leaves"
+);
+
+SetTreeBlock(
+    new Vector3I(basePosition.X, topY, basePosition.Z - 1),
+    "leaves"
+);
+
+    // ------------------------------------------------------------
+    // ROOT STAGE
+    // ------------------------------------------------------------
+
+    SetRootOverlay(
+        basePosition + Vector3I.Down,
+        "root:root3"
+    );
+}
+
+    // ============================================================
+    // STAGE 5
+    // ============================================================
+
+    private void GrowToMatureTree(Vector3I basePosition)
+{
+    // Remove the leaves created by Stage 4.
+    for (int y = 2; y <= 4; y++)
+    {
+        for (int x = -2; x <= 2; x++)
+        {
+            for (int z = -2; z <= 2; z++)
+            {
+                Vector3I position =
+                    basePosition + new Vector3I(x, y, z);
+
+                BlockState block =
+                    _chunkManager.GetBlockAtWorld(position);
+
+                if (block.BlockId == "leaves")
+                {
+                    SetTreeBlock(position, "air");
                 }
             }
         }
     }
 
-    // ============================================================
-    // NOW grow the trees.
-    //
-    // Because the list above was created before any changes,
-    // newly-created Tiny Logs / Small Logs / Logs cannot grow
-    // again during this same day.
-    // ============================================================
+    // Mature trees naturally vary between 3 and 5 total logs.
+    int trunkHeight = GD.RandRange(3, 5);
 
-    int treesFound =
-        treesToGrow.Count;
-
-    int treesGrown = 0;
-
-    foreach (
-        (Vector3I Position, int Stage) treeData
-        in treesToGrow)
-    {
-        // The tree may have changed since the scan,
-        // so only grow the exact stage we found.
-        BlockState currentBlock =
-            _chunkManager.GetBlockAtWorld(
-                treeData.Position
-            );
-
-        int currentStage =
-            GetTreeStage(
-                currentBlock.BlockId
-            );
-
-        if (currentStage != treeData.Stage)
-            continue;
-
-        if (
-            TryGrowTree(
-                treeData.Position,
-                treeData.Stage
-            ))
-        {
-            treesGrown++;
-        }
-    }
-
-    GD.Print(
-        $"[TreeGrowth] Daily growth check complete. " +
-        $"Trees found: {treesFound}, " +
-        $"trees grown: {treesGrown}"
-    );
-}
-
-// ============================================================
-// LOADED CHUNK ACCESS
-// ============================================================
-
-private Dictionary<Vector3I, Chunk> GetLoadedChunks()
-{
-    try
-    {
-        FieldInfo field =
-            typeof(ChunkManager).GetField(
-                "_chunks",
-                BindingFlags.Instance |
-                BindingFlags.NonPublic
-            );
-
-        if (field == null)
-        {
-            GD.PrintErr(
-                "[TreeGrowth] Could not find ChunkManager._chunks."
-            );
-
-            return null;
-        }
-
-        object value = field.GetValue(_chunkManager);
-
-        return value as Dictionary<Vector3I, Chunk>;
-    }
-    catch (Exception ex)
-    {
-        GD.PrintErr(
-            $"[TreeGrowth] Failed to access loaded chunks: {ex.Message}"
-        );
-
-        return null;
-    }
-}
-
-// ============================================================
-// TREE STAGES
-// ============================================================
-
-private int GetTreeStage(string blockId)
-{
-    return blockId switch
-    {
-        "sapling" => 1,
-        "twig" => 2,
-        "tiny_log" => 3,
-        "small_log" => 4,
-
-        _ => 0
-    };
-}
-
-// ============================================================
-// GROW TREE
-// ============================================================
-
-private bool TryGrowTree(
-    Vector3I basePosition,
-    int currentStage)
-{
-    if (currentStage < 1 || currentStage > 4)
-        return false;
-
-    int nextStage = currentStage + 1;
-
-    if (!HasRoomForStage(basePosition, nextStage))
-        return false;
-
-    if (!HasGrowthLight(basePosition))
-        return false;
-
-    switch (nextStage)
-    {
-        case 2:
-            GrowToTwig(basePosition);
-            return true;
-
-        case 3:
-            GrowToTinyLog(basePosition);
-            return true;
-
-        case 4:
-            GrowToSmallLog(basePosition);
-            return true;
-
-        case 5:
-            GrowToMatureTree(basePosition);
-            return true;
-    }
-
-    return false;
-}
-
-// ============================================================
-// STAGE 2
-// ============================================================
-
-private void GrowToTwig(Vector3I basePosition)
-{
-    SetTreeBlock(
-        basePosition,
-        "twig"
-    );
-
-    SetTreeBlock(
-        basePosition + Vector3I.Up,
-        "leaves"
-    );
-}
-
-// ============================================================
-// STAGE 3
-// ============================================================
-
-private void GrowToTinyLog(Vector3I basePosition)
-{
-    SetTreeBlock(
-        basePosition,
-        "tiny_log"
-    );
-
-    SetTreeBlock(
-        basePosition + Vector3I.Up,
-        "tiny_log"
-    );
-
-    SetTreeBlock(
-        basePosition + Vector3I.Up * 2,
-        "leaves"
-    );
-
-    SetTreeBlock(
-        basePosition + new Vector3I(1, 2, 0),
-        "leaves"
-    );
-}
-
-// ============================================================
-// STAGE 4
-// ============================================================
-
-private void GrowToSmallLog(Vector3I basePosition)
-{
-    SetTreeBlock(
-        basePosition,
-        "small_log"
-    );
-
-    SetTreeBlock(
-        basePosition + Vector3I.Up,
-        "small_log"
-    );
-
-    SetTreeBlock(
-        basePosition + Vector3I.Up * 2,
-        "small_log"
-    );
-
-    SetTreeBlock(
-        basePosition + new Vector3I(1, 3, 0),
-        "leaves"
-    );
-
-    SetTreeBlock(
-        basePosition + new Vector3I(-1, 3, 0),
-        "leaves"
-    );
-
-    SetTreeBlock(
-        basePosition + new Vector3I(0, 3, 1),
-        "leaves"
-    );
-}
-
-// ============================================================
-// STAGE 5
-// ============================================================
-
-private void GrowToMatureTree(Vector3I basePosition)
-{
-    const int trunkHeight = 5;
+    // ------------------------------------------------------------
+    // TRUNK
+    // ------------------------------------------------------------
 
     for (int y = 0; y < trunkHeight; y++)
     {
@@ -488,200 +724,309 @@ private void GrowToMatureTree(Vector3I basePosition)
         );
     }
 
-    int canopyY =
-        basePosition.Y + trunkHeight - 1;
+    // The canopy begins one block below the top of the trunk.
+    int canopyBaseY = basePosition.Y + trunkHeight - 1;
 
-    for (int x = -1; x <= 1; x++)
+    // Same canopy pattern used by ChunkGen:
+    // bottom two layers are wider, upper two layers are smaller.
+    int[] canopyRadii = { 2, 2, 1, 1 };
+
+    for (int layer = 0; layer < canopyRadii.Length; layer++)
     {
-        for (int z = -1; z <= 1; z++)
-        {
-            if (x == 0 && z == 0)
-                continue;
+        int radius = canopyRadii[layer];
+        int y = canopyBaseY + layer;
 
-            SetTreeBlock(
-                new Vector3I(
-                    basePosition.X + x,
-                    canopyY,
-                    basePosition.Z + z
-                ),
-                "leaves"
-            );
-        }
-    }
-
-    for (int x = -1; x <= 1; x++)
-    {
-        for (int z = -1; z <= 1; z++)
+        for (int x = -radius; x <= radius; x++)
         {
-            if (Mathf.Abs(x) == 1 &&
-                Mathf.Abs(z) == 1)
+            for (int z = -radius; z <= radius; z++)
             {
-                continue;
-            }
+                // Remove the four corners from radius-2 layers.
+                if (
+                    radius > 1 &&
+                    Mathf.Abs(x) == radius &&
+                    Mathf.Abs(z) == radius
+                )
+                {
+                    continue;
+                }
 
-            SetTreeBlock(
-                new Vector3I(
-                    basePosition.X + x,
-                    canopyY + 1,
-                    basePosition.Z + z
-                ),
-                "leaves"
-            );
+                Vector3I position =
+                    new Vector3I(
+                        basePosition.X + x,
+                        y,
+                        basePosition.Z + z
+                    );
+
+                // The center remains part of the trunk.
+                if (x == 0 && z == 0)
+                {
+                    SetTreeBlock(position, "log");
+                }
+                else
+                {
+                    SetTreeBlock(position, "leaves");
+                }
+            }
         }
     }
 
+    // Extra leaf directly above the trunk.
     SetTreeBlock(
-        basePosition +
         new Vector3I(
-            0,
-            trunkHeight + 1,
-            0
+            basePosition.X,
+            basePosition.Y + trunkHeight + 2,
+            basePosition.Z
         ),
         "leaves"
     );
-}
 
-// ============================================================
-// SPACE CHECK
-// ============================================================
+    // Extra leaf above the canopy.
+    int canopyTopY = canopyBaseY + canopyRadii.Length;
 
-private bool HasRoomForStage(
-    Vector3I basePosition,
-    int targetStage)
-{
-    int requiredHeight =
-        GetRequiredHeight(targetStage);
+    SetTreeBlock(
+        new Vector3I(
+            basePosition.X,
+            canopyTopY,
+            basePosition.Z
+        ),
+        "leaves"
+    );
 
-    if (requiredHeight <= 0)
-        return false;
-
-    for (int y = 0; y < requiredHeight; y++)
-    {
-        for (int x = -1; x <= 1; x++)
-        {
-            for (int z = -1; z <= 1; z++)
-            {
-                Vector3I checkPosition =
-                    basePosition +
-                    new Vector3I(x, y, z);
-
-                if (checkPosition.Y < 0 ||
-                    checkPosition.Y >= WorldMaxY)
-                {
-                    return false;
-                }
-
-                BlockState block =
-                    _chunkManager.GetBlockAtWorld(
-                        checkPosition
-                    );
-
-                if (IsTreeGrowthSpace(block.BlockId))
-                    continue;
-
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-// ============================================================
-// REQUIRED HEIGHT
-// ============================================================
-
-private int GetRequiredHeight(int stage)
-{
-    return stage switch
-    {
-        2 => 2,
-        3 => 3,
-        4 => 4,
-        5 => 7,
-
-        _ => 0
-    };
-}
-
-// ============================================================
-// GROWTH SPACE
-// ============================================================
-
-private bool IsTreeGrowthSpace(string blockId)
-{
-    if (string.IsNullOrEmpty(blockId))
-        return true;
-
-    return blockId switch
-    {
-        "air" => true,
-        "leaves" => true,
-
-        // Existing tree stages can be replaced as the tree grows.
-        "sapling" => true,
-        "twig" => true,
-        "tiny_log" => true,
-        "small_log" => true,
-
-        _ => false
-    };
-}
-
-// ============================================================
-// LIGHT CHECK
-// ============================================================
-
-private bool HasGrowthLight(Vector3I basePosition)
-{
-    for (
-        int y = basePosition.Y + 1;
-        y < WorldMaxY;
-        y++
-    )
-    {
-        BlockState block =
-            _chunkManager.GetBlockAtWorld(
-                new Vector3I(
-                    basePosition.X,
-                    y,
-                    basePosition.Z
-                )
-            );
-
-        if (block.IsAir())
-            continue;
-
-        if (block.BlockId == "leaves")
-            continue;
-
-        return false;
-    }
-
-    return true;
-}
-
-// ============================================================
-// SET TREE BLOCK
-// ============================================================
-
-private void SetTreeBlock(
-    Vector3I worldPosition,
-    string blockId)
-{
-    if (worldPosition.Y < 0 ||
-        worldPosition.Y >= WorldMaxY)
-    {
-        return;
-    }
-
-    _chunkManager.SetBlockAtWorld(
-        worldPosition,
-        new BlockState
-        {
-            BlockId = blockId,
-            BitMask = 0xFF
-        }
+    // Mature tree gets the final full root block.
+    SetTreeBlock(
+        basePosition + Vector3I.Down,
+        "root"
     );
 }
+
+    // ============================================================
+    // ROOT OVERLAY
+    // ============================================================
+
+    private void SetRootOverlay(
+        Vector3I worldPosition,
+        string rootFeature)
+    {
+        if (
+            worldPosition.Y < 0 ||
+            worldPosition.Y >= WorldMaxY)
+        {
+            return;
+        }
+
+        BlockState soil =
+            _chunkManager.GetBlockAtWorld(
+                worldPosition
+            );
+
+        if (soil.IsAir())
+        {
+            GD.PrintErr(
+                $"[TreeGrowth] Cannot place {rootFeature}: " +
+                $"soil position {worldPosition} is air."
+            );
+
+            return;
+        }
+
+        // Remove any previous root stage.
+        if (soil.Features != null)
+        {
+            string[] existingFeatures =
+                (string[])soil.Features.Clone();
+
+            foreach (string feature in existingFeatures)
+            {
+                if (
+                    feature != null &&
+                    feature.StartsWith("root:")
+                )
+                {
+                    soil.RemoveFeature(feature);
+                }
+            }
+        }
+
+        // Add the new root stage.
+        soil.AddFeature(rootFeature);
+
+        // Natural growth keeps this as a world modification and
+        // forces the chunk to rebuild.
+        _chunkManager.SetBlockAtWorldNaturalGrowth(
+            worldPosition,
+            soil
+        );
+
+        GD.Print(
+            $"[TreeGrowth] Placed {rootFeature} at {worldPosition}."
+        );
+    }
+
+    // ============================================================
+    // SPACE CHECK
+    // ============================================================
+
+    private bool HasRoomForStage(
+        Vector3I basePosition,
+        int targetStage)
+    {
+        int requiredHeight =
+            GetRequiredHeight(targetStage);
+
+        if (requiredHeight <= 0)
+            return false;
+
+        for (int y = 0; y < requiredHeight; y++)
+        {
+            for (int x = -1; x <= 1; x++)
+            {
+                for (int z = -1; z <= 1; z++)
+                {
+                    Vector3I checkPosition =
+                        basePosition +
+                        new Vector3I(x, y, z);
+
+                    if (
+                        checkPosition.Y < 0 ||
+                        checkPosition.Y >= WorldMaxY)
+                    {
+                        return false;
+                    }
+
+                    BlockState block =
+                        _chunkManager.GetBlockAtWorld(
+                            checkPosition
+                        );
+
+                    if (
+                        IsTreeGrowthSpace(
+                            block.BlockId))
+                    {
+                        continue;
+                    }
+
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    // ============================================================
+    // REQUIRED HEIGHT
+    // ============================================================
+
+    private int GetRequiredHeight(int stage)
+    {
+        return stage switch
+        {
+            2 => 2,
+            3 => 3,
+            4 => 4,
+            5 => 7,
+
+            _ => 0
+        };
+    }
+
+    // ============================================================
+    // GROWTH SPACE
+    // ============================================================
+
+    private bool IsTreeGrowthSpace(
+        string blockId)
+    {
+        if (string.IsNullOrEmpty(blockId))
+            return true;
+
+        return blockId switch
+        {
+            "air" => true,
+            "leaves" => true,
+
+            "sapling" => true,
+            "twig" => true,
+            "tiny_log" => true,
+            "small_log" => true,
+
+            _ => false
+        };
+    }
+
+    // ============================================================
+    // LIGHT CHECK
+    // ============================================================
+
+    private bool HasGrowthLight(
+        Vector3I basePosition)
+    {
+        // We only care whether the tree has open sky above it.
+        //
+        // Tree blocks themselves obviously occupy this column,
+        // so we start ABOVE the current tree instead of immediately
+        // treating the trunk as an obstruction.
+        //
+        // Leaves are also allowed because they are part of the tree
+        // canopy and should not prevent future growth.
+
+        for (
+            int y = basePosition.Y + 1;
+            y < WorldMaxY;
+            y++)
+        {
+            BlockState block =
+                _chunkManager.GetBlockAtWorld(
+                    new Vector3I(
+                        basePosition.X,
+                        y,
+                        basePosition.Z
+                    )
+                );
+
+            if (block.IsAir())
+                return true;
+
+            if (block.BlockId == "leaves")
+                continue;
+
+            if (
+                block.BlockId == "twig" ||
+                block.BlockId == "tiny_log" ||
+                block.BlockId == "small_log" ||
+                block.BlockId == "log")
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    // ============================================================
+    // SET TREE BLOCK
+    // ============================================================
+
+    private void SetTreeBlock(
+        Vector3I worldPosition,
+        string blockId)
+    {
+        if (
+            worldPosition.Y < 0 ||
+            worldPosition.Y >= WorldMaxY)
+        {
+            return;
+        }
+
+        _chunkManager.SetBlockAtWorld(
+            worldPosition,
+            new BlockState
+            {
+                BlockId = blockId,
+                BitMask = 0xFF
+            }
+        );
+    }
 }

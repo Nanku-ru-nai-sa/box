@@ -29,6 +29,8 @@ public partial class BlockRegistry : Node
         var planksTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/planks.png");
         var crafterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crafter.png");
         var toolBenchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/tool_bench.png");
+        var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
+        var rootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/root.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
         var gravelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/gravel.png");
@@ -212,6 +214,31 @@ public partial class BlockRegistry : Node
         toolBench.IsSolid = true; toolBench.CanChisel = false; toolBench.Hardness = 1.0f;
         toolBench.TextureTop = toolBenchTex; toolBench.TextureSide = toolBenchTex; toolBench.TextureBottom = toolBenchTex;
         Register(toolBench);
+
+        var crate = new BlockResource();
+crate.BlockId = "crate";
+crate.DisplayName = "Crate";
+crate.IsSolid = true;
+crate.CanChisel = false;
+crate.Hardness = 1.5f;
+crate.CanHaveFeatures = false;
+crate.GrassCanGrow = false;
+crate.TextureTop = crateTex;
+crate.TextureSide = crateTex;
+crate.TextureBottom = crateTex;
+crate.Drops = new[] { "crate" };
+Register(crate);
+
+        var root = new BlockResource();
+root.BlockId = "root";
+root.DisplayName = "Roots";
+root.IsSolid = true;
+root.CanChisel = true;
+root.Hardness = 1.0f;
+root.TextureTop = rootTex;
+root.TextureSide = rootTex;
+root.TextureBottom = rootTex;
+Register(root);
 
         var leaves = new BlockResource();
         leaves.BlockId = "leaves"; leaves.DisplayName = "Leaves";

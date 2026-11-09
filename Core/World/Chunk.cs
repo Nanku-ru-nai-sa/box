@@ -760,23 +760,21 @@ public partial class Chunk : Node3D
                             z
                         );
 
-                        var ore =
-                            OreRegistry.Instance?
-                                .GetOreFromBlockState(
-                                    block
-                                );
+                        var overlay =
+    OverlayRegistry.Instance?
+        .GetOverlayFromBlockState(block);
 
-                        if (ore != null)
-                        {
-                            AddOreOverlayFaces(
-                                cutoutSurfaces,
-                                ore.OverlayTexture,
-                                resource,
-                                x,
-                                y,
-                                z
-                            );
-                        }
+if (overlay != null)
+{
+    AddOverlayFaces(
+        cutoutSurfaces,
+        overlay.OverlayTexture,
+        resource,
+        x,
+        y,
+        z
+    );
+}
                     }
                     else
                     {
@@ -2419,7 +2417,7 @@ private void AddQuadCropped(
         return nudged;
     }
 
-    private void AddOreOverlayFaces(
+    private void AddOverlayFaces(
         Dictionary<Texture2D, SurfaceTool> surfaces,
         Texture2D overlayTexture,
         BlockResource resource,

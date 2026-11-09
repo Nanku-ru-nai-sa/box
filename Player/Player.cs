@@ -1169,12 +1169,36 @@ public bool IsMounted =>
         return;
 
     if (_chatOpen)
-        return;
+    return;
 
-    // =========================================================
-    // MOUNTED
-    // =========================================================
+// =========================================================
+// CONTINUOUS BLOCK MINING
+// =========================================================
 
+if (_isBreaking)
+{
+    if (_inventoryOpen ||
+        _creativeMenuOpen ||
+        IsMounted)
+    {
+        _isBreaking = false;
+        ResetBreak();
+    }
+    else
+    {
+        _breakTimer += dt;
+
+        if (_breakTimer >= BreakInterval)
+        {
+            _breakTimer -= BreakInterval;
+            TryBreakBlock();
+        }
+    }
+}
+
+// =========================================================
+// MOUNTED
+// =========================================================
     if (IsMounted)
     {
         if (Input.IsActionJustPressed("crouch"))
@@ -1646,346 +1670,345 @@ private Mob GetMobUnderCrosshair()
     // INPUT
     // =========================================================================
 
-    public override void _UnhandledInput(
-        InputEvent @event)
+   
+public override void _UnhandledInput(InputEvent @event)
+{
+    // Stop continuous dropping when Q is released.
+    if (@event is InputEventKey qUp &&
+        !qUp.Pressed &&
+        qUp.Keycode == Key.Q)
     {
-        if (@event is InputEventKey qUp &&
-            !qUp.Pressed &&
-            qUp.Keycode == Key.Q)
+        _isDropping = false;
+    }
+
+    // =========================================================
+    // MOUSE INPUT
+    // =========================================================
+
+    if (@event is InputEventMouseButton mb)
+    {
+        // Middle mouse: pick block.
+        if (mb.ButtonIndex == MouseButton.Middle && mb.Pressed)
         {
-            _isDropping = false;
+            PickBlock();
+            return;
         }
 
-        if (@event is InputEventMouseButton mb)
+        // Mouse wheel: cycle hotbar.
+        if (!_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
         {
-            if (mb.ButtonIndex == MouseButton.Middle &&
-                mb.Pressed)
+            if (mb.ButtonIndex == MouseButton.WheelDown && mb.Pressed)
             {
-                PickBlock();
+                SelectHotbarSlot(
+                    (_selectedSlot + 1) % HotbarSize
+                );
                 return;
             }
 
-            if (!_inventoryOpen &&
-                !_chatOpen &&
-                !_creativeMenuOpen)
-            {
-                if (mb.ButtonIndex == MouseButton.Left)
-                {
-                    _isBreaking = mb.Pressed;
-
-                    if (mb.Pressed)
-                    {
-                        TryBreakBlock();
-                        _breakTimer = 0f;
-                    }
-                    else
-                    {
-                        ResetBreak();
-                    }
-                }
-
-                if (mb.ButtonIndex == MouseButton.Right)
-{
-    if (mb.Pressed)
-    {
-        // =========================================================
-        // MOUNT MOB
-        // =========================================================
-
-        // Only an empty hand can directly mount.
-        if (_heldSlot.IsEmpty)
-        {
-            Mob mob =
-                GetMobUnderCrosshair();
-
-            if (mob != null)
-            {
-                if (mob.StartRiding(this))
-{
-    _mountedMob = mob;
-
-    if (_playerCollision != null)
-        _playerCollision.Disabled = true;
-
-    _isPlacing = false;
-    return;
-}
-            }
-        }
-
-        // =========================================================
-        // EXISTING RIGHT-CLICK BEHAVIOR
-        // =========================================================
-
-        _isPlacing = true;
-
-        if (TryOpenCraftingTable())
-        {
-            _isPlacing = false;
-        }
-        else
-        {
-            TryPlaceBlock();
-            _placeTimer = 0f;
-        }
-    }
-    else
-    {
-        _isPlacing = false;
-    }
-}
-
-                if (mb.ButtonIndex == MouseButton.WheelDown &&
-                    mb.Pressed)
-                {
-                    SelectHotbarSlot(
-                        (_selectedSlot + 1) %
-                        HotbarSize
-                    );
-                }
-                else if (mb.ButtonIndex == MouseButton.WheelUp &&
-                         mb.Pressed)
-                {
-                    SelectHotbarSlot(
-                        (_selectedSlot - 1 +
-                         HotbarSize) %
-                        HotbarSize
-                    );
-                }
-            }
-        }
-
-        if (@event is InputEventKey key &&
-            key.Pressed)
-        {
-            // =========================================================
-            // CHAT CONTROLS
-            // =========================================================
-
-            if (key.Keycode == Key.Escape &&
-    _chatOpen)
-{
-    CloseChat();
-    return;
-}
-
-if (_chatOpen)
-    return;
-
-// PAUSE MENU
-
-if (key.Keycode == Key.Escape)
-{
-    if (_pauseMenu != null)
-    {
-        if (_pauseMenu.IsOpen)
-            _pauseMenu.Close();
-        else
-            _pauseMenu.Open();
-    }
-
-    return;
-}
-
-            // =========================================================
-            // HOTBAR
-            // =========================================================
-
-            if (key.Keycode >= Key.Key1 &&
-                key.Keycode <= Key.Key9)
+            if (mb.ButtonIndex == MouseButton.WheelUp && mb.Pressed)
             {
                 SelectHotbarSlot(
-                    (int)key.Keycode -
-                    (int)Key.Key1
+                    (_selectedSlot - 1 + HotbarSize) % HotbarSize
                 );
+                return;
             }
-            else if (key.Keycode == Key.Key0)
+        }
+
+        // Normal gameplay mouse controls.
+        if (!_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
+        {
+            // Left mouse: break blocks.
+            if (mb.ButtonIndex == MouseButton.Left)
             {
-                SelectHotbarSlot(9);
-            }
-            else if (key.Keycode == Key.Minus)
-            {
-                SelectHotbarSlot(10);
-            }
-            else if (key.Keycode == Key.Equal)
-            {
-                SelectHotbarSlot(11);
+                _isBreaking = mb.Pressed;
+
+                if (mb.Pressed)
+                {
+                    TryBreakBlock();
+                    _breakTimer = 0f;
+                }
+                else
+                {
+                    ResetBreak();
+                }
             }
 
-            // =========================================================
-            // INVENTORY
-            // =========================================================
+            // Right mouse: mount, interact, or place.
+            if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
+            {
+                // Mount mob with empty hand.
+                if (_heldSlot.IsEmpty)
+                {
+                    Mob mob = GetMobUnderCrosshair();
 
-            if (key.Keycode == Key.Tab &&
-                !_creativeMenuOpen)
+                    if (mob != null && mob.StartRiding(this))
+                    {
+                        _mountedMob = mob;
+
+                        if (_playerCollision != null)
+                            _playerCollision.Disabled = true;
+
+                        _isPlacing = false;
+                        return;
+                    }
+                }
+
+                // Interact with blocks.
+                _isPlacing = true;
+
+                if (TryOpenCrate())
+                {
+                    _isPlacing = false;
+                }
+                else if (TryOpenCraftingTable())
+                {
+                    _isPlacing = false;
+                }
+                else
+                {
+                    TryPlaceBlock();
+                    _placeTimer = 0f;
+                }
+            }
+        }
+    }
+
+    // =========================================================
+    // KEYBOARD INPUT
+    // =========================================================
+
+    if (@event is InputEventKey key && key.Pressed)
+    {
+        // Chat escape.
+        if (key.Keycode == Key.Escape && _chatOpen)
+        {
+            CloseChat();
+            return;
+        }
+
+        if (_chatOpen)
+            return;
+
+        // Prevent held keys from repeatedly toggling menus.
+        if (key.Echo)
+            return;
+
+        // =====================================================
+        // ESCAPE / PAUSE
+        // =====================================================
+
+        if (key.Keycode == Key.Escape)
+        {
+            if (_pauseMenu != null && _pauseMenu.IsOpen)
+            {
+                _pauseMenu.Close();
+                return;
+            }
+
+            if (_containerOpen)
+            {
+                CloseContainerWindow();
+            }
+            else if (_inventoryOpen)
             {
                 ToggleInventory();
             }
 
-            // =========================================================
-            // CREATIVE MENU
-            // =========================================================
-
-            if (key.Keycode == Key.V &&
-                !_inventoryOpen &&
-                (_creativeMenuOpen ||
-                 GameModeManager.Instance?.IsCreate == true))
+            if (_creativeMenuOpen)
             {
                 ToggleCreativeMenu();
+                return;
             }
 
-            // =========================================================
-            // DROP ITEM
-            // =========================================================
+            if (_pauseMenu != null)
+                _pauseMenu.Open();
 
-            if (key.Keycode == Key.Q &&
-                !_isDropping)
+            return;
+        }
+
+        // =====================================================
+        // HOTBAR
+        // =====================================================
+
+        if (key.Keycode >= Key.Key1 &&
+            key.Keycode <= Key.Key9)
+        {
+            SelectHotbarSlot(
+                (int)key.Keycode - (int)Key.Key1
+            );
+        }
+        else if (key.Keycode == Key.Key0)
+        {
+            SelectHotbarSlot(9);
+        }
+        else if (key.Keycode == Key.Minus)
+        {
+            SelectHotbarSlot(10);
+        }
+        else if (key.Keycode == Key.Equal)
+        {
+            SelectHotbarSlot(11);
+        }
+
+        // =====================================================
+        // INVENTORY: E OR TAB
+        // =====================================================
+
+        if ((key.Keycode == Key.E ||
+             key.Keycode == Key.Tab) &&
+            !_creativeMenuOpen)
+        {
+            if (_containerOpen)
+                CloseContainerWindow();
+            else
+                ToggleInventory();
+
+            return;
+        }
+
+        // =====================================================
+        // CREATIVE MENU
+        // =====================================================
+
+        if (key.Keycode == Key.V &&
+            !_inventoryOpen &&
+            (_creativeMenuOpen ||
+             GameModeManager.Instance?.IsCreate == true))
+        {
+            ToggleCreativeMenu();
+        }
+
+        // =====================================================
+        // DROP ITEM
+        // =====================================================
+
+        if (key.Keycode == Key.Q && !_isDropping)
+        {
+            _isDropping = true;
+            _dropTimer = 0f;
+            DropOneItem();
+        }
+
+        // =====================================================
+        // GAMEMODE
+        // =====================================================
+
+        if (key.Keycode == Key.F4)
+        {
+            if (GameModeManager.Instance == null)
             {
-                _isDropping = true;
-                _dropTimer = 0f;
-                DropOneItem();
+                ShowFeedback("GameModeManager not loaded.");
             }
-
-            // =========================================================
-            // GAMEMODE
-            // =========================================================
-
-            if (key.Keycode == Key.F4)
+            else
             {
-                if (GameModeManager.Instance == null)
-                {
-                    ShowFeedback(
-                        "GameModeManager not loaded."
-                    );
-                }
-                else
-                {
-                    GameModeManager.Instance.CycleNext();
+                GameModeManager.Instance.CycleNext();
 
-                    ShowFeedback(
-                        $"Gamemode: {GameModeManager.Instance.Current}"
-                    );
-                }
-            }
-
-            // =========================================================
-            // OPEN CHAT
-            // =========================================================
-
-            if (key.Keycode == Key.T &&
-                !_chatOpen &&
-                !_inventoryOpen &&
-                !_pauseMenu.IsOpen)
-            {
-                OpenChat();
-            }
-
-            // =========================================================
-            // JUMP / FLY
-            // =========================================================
-
-            if (key.Keycode == Key.Space &&
-                GameModeManager.Instance?.IsCreate == true &&
-                !key.Echo)
-            {
-                double now =
-                    Time.GetTicksMsec() / 1000.0;
-
-                if (now - _lastJumpTime <
-                    DoubleJumpWindow)
-                {
-                    ToggleFly();
-                }
-
-                _lastJumpTime = now;
-            }
-
-            // =========================================================
-            // HUD
-            // =========================================================
-
-            if (key.Keycode == Key.F1)
-            {
-                _hudVisible =
-                    !_hudVisible;
-
-                if (_hotbarLayer != null)
-                    _hotbarLayer.Visible =
-                        _hudVisible &&
-                        !_inventoryOpen;
-
-                if (_crosshairLayer != null)
-                    _crosshairLayer.Visible =
-                        _hudVisible;
-
-                if (_statsHudLayer != null)
-                    _statsHudLayer.Visible =
-                        _hudVisible &&
-                        !_inventoryOpen;
-            }
-
-            // =========================================================
-            // SCREENSHOT
-            // =========================================================
-
-            if (key.Keycode == Key.F2)
-            {
-                var img =
-                    GetViewport()
-                        .GetTexture()
-                        .GetImage();
-
-                string p =
-                    $"user://screenshot_{Time.GetDatetimeStringFromSystem().Replace(":", "-")}.png";
-
-                img.SavePng(p);
-
-                GD.Print(
-                    $"Screenshot saved: {p}"
+                ShowFeedback(
+                    $"Gamemode: {GameModeManager.Instance.Current}"
                 );
-            }
-
-            // =========================================================
-            // CHUNK BORDERS
-            // =========================================================
-
-            if (key.Keycode == Key.F3)
-            {
-                _showChunkBorders =
-                    !_showChunkBorders;
-
-                ToggleChunkBorders();
-            }
-
-            // =========================================================
-            // SAVE WORLD
-            // =========================================================
-
-            if (key.Keycode == Key.F5)
-            {
-                var cm =
-                    GetTree().Root.FindChild(
-                        "ChunkManager",
-                        true,
-                        false
-                    ) as ChunkManager;
-
-                cm.Call("SaveModifiedChunks");
-
-                cm.SaveInventory(
-                    _inventory
-                );
-
-                cm.SavePlayerPosition(
-                    GlobalPosition,
-                    Rotation.Y,
-                    _playerCamera?.GetPitch() ?? 0f
-                );
-
-                GD.Print("World saved!");
             }
         }
+
+        // =====================================================
+        // OPEN CHAT
+        // =====================================================
+
+        if (key.Keycode == Key.T &&
+            !_chatOpen &&
+            !_inventoryOpen &&
+            !_pauseMenu.IsOpen)
+        {
+            OpenChat();
+        }
+
+        // =====================================================
+        // JUMP / FLY
+        // =====================================================
+
+        if (key.Keycode == Key.Space &&
+            GameModeManager.Instance?.IsCreate == true)
+        {
+            double now = Time.GetTicksMsec() / 1000.0;
+
+            if (now - _lastJumpTime < DoubleJumpWindow)
+                ToggleFly();
+
+            _lastJumpTime = now;
+        }
+
+        // =====================================================
+        // HUD
+        // =====================================================
+
+        if (key.Keycode == Key.F1)
+        {
+            _hudVisible = !_hudVisible;
+
+            if (_hotbarLayer != null)
+                _hotbarLayer.Visible = _hudVisible && !_inventoryOpen;
+
+            if (_crosshairLayer != null)
+                _crosshairLayer.Visible = _hudVisible;
+
+            if (_statsHudLayer != null)
+                _statsHudLayer.Visible = _hudVisible && !_inventoryOpen;
+        }
+
+        // =====================================================
+        // SCREENSHOT
+        // =====================================================
+
+        if (key.Keycode == Key.F2)
+        {
+            var img = GetViewport().GetTexture().GetImage();
+
+            string p =
+                $"user://screenshot_{Time.GetDatetimeStringFromSystem().Replace(":", "-")}.png";
+
+            img.SavePng(p);
+            GD.Print($"Screenshot saved: {p}");
+        }
+
+        // =====================================================
+        // CHUNK BORDERS
+        // =====================================================
+
+        if (key.Keycode == Key.F3)
+        {
+            _showChunkBorders = !_showChunkBorders;
+            ToggleChunkBorders();
+        }
+
+        // =====================================================
+        // SAVE WORLD
+        // =====================================================
+
+        if (key.Keycode == Key.F5)
+        {
+            var cm = GetTree().Root.FindChild(
+                "ChunkManager",
+                true,
+                false
+            ) as ChunkManager;
+
+            cm.Call("SaveModifiedChunks");
+            cm.SaveInventory(_inventory);
+
+            cm.SavePlayerPosition(
+                GlobalPosition,
+                Rotation.Y,
+                _playerCamera?.GetPitch() ?? 0f
+            );
+
+            GD.Print("World saved!");
+        }
     }
+}
+
 
     private void SelectHotbarSlot(int slot)
     {
