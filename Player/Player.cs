@@ -1073,83 +1073,96 @@ public bool IsMounted =>
     // =========================================================================
 
     public override void _Process(double delta)
+{
+    if (_feedbackTimer > 0f)
     {
-        if (_feedbackTimer > 0f)
-        {
-            _feedbackTimer -= (float)delta;
+        _feedbackTimer -= (float)delta;
 
-            if (_feedbackTimer <= 0f &&
-                _chatFeedback != null)
-            {
-                _chatFeedback.Visible = false;
-            }
+        if (_feedbackTimer <= 0f &&
+            _chatFeedback != null)
+        {
+            _chatFeedback.Visible = false;
         }
+    }
 
-        if (_inventoryOpen)
-            UpdateCraftingProximity();
+    if (_inventoryOpen)
+        UpdateCraftingProximity();
 
-        if (!_inventoryOpen)
-            return;
+    // Automatically close the crate when the player gets too far away.
+    if (_containerOpen)
+    {
+        Vector3 crateCenter =
+            (Vector3)_openedCratePosition +
+            new Vector3(0.5f, 0.5f, 0.5f);
 
-        var mouse =
-            GetViewport().GetMousePosition();
-
-        if (!_heldSlot.IsEmpty &&
-            _cursorPanel != null)
+        if (GlobalPosition.DistanceTo(crateCenter) > CrateCloseRange)
         {
-            _cursorPanel.GlobalPosition =
-                mouse -
-                new Vector2(
-                    SlotSize / 2f,
-                    SlotSize / 2f
-                );
+            CloseCrateOnly();
         }
+    }
 
-        if (_dragMode != DragMode.None)
+    if (!_inventoryOpen)
+        return;
+
+    var mouse =
+        GetViewport().GetMousePosition();
+
+    if (!_heldSlot.IsEmpty &&
+        _cursorPanel != null)
+    {
+        _cursorPanel.GlobalPosition =
+            mouse -
+            new Vector2(
+                SlotSize / 2f,
+                SlotSize / 2f
+            );
+    }
+
+    if (_dragMode != DragMode.None)
+    {
+        int under =
+            GetSlotUnderMouse();
+
+        if (under >= 0 &&
+            under != _dragLastSlot)
         {
-            int under =
-                GetSlotUnderMouse();
+            _dragLastSlot = under;
+            OnDragEnterSlot(under);
+        }
+        else if (under < 0 &&
+                 _craftingPanel != null)
+        {
+            int count =
+                _craftingPanel.GetActiveSlotCount();
 
-            if (under >= 0 &&
-                under != _dragLastSlot)
+            for (int i = 0; i < count; i++)
             {
-                _dragLastSlot = under;
-                OnDragEnterSlot(under);
-            }
-            else if (under < 0 &&
-                     _craftingPanel != null)
-            {
-                int count =
-                    _craftingPanel.GetActiveSlotCount();
+                var panel =
+                    _craftingPanel.GetSlotPanel(i);
 
-                for (int i = 0; i < count; i++)
+                if (panel == null)
+                    continue;
+
+                if (new Rect2(
+                        panel.GlobalPosition,
+                        panel.Size
+                    ).HasPoint(mouse))
                 {
-                    var panel =
-                        _craftingPanel.GetSlotPanel(i);
+                    int craftId =
+                        -(i + 1);
 
-                    if (panel == null)
-                        continue;
-
-                    if (new Rect2(
-                            panel.GlobalPosition,
-                            panel.Size
-                        ).HasPoint(mouse))
+                    if (craftId != _dragLastSlot)
                     {
-                        int craftId =
-                            -(i + 1);
-
-                        if (craftId != _dragLastSlot)
-                        {
-                            _dragLastSlot = craftId;
-                            OnDragEnterCraftSlot(i);
-                        }
-
-                        break;
+                        _dragLastSlot = craftId;
+                        OnDragEnterCraftSlot(i);
                     }
+
+                    break;
                 }
             }
         }
     }
+}
 
     // =========================================================================
     // PHYSICS
@@ -1797,38 +1810,47 @@ public override void _UnhandledInput(InputEvent @event)
         if (key.Echo)
             return;
 
-        // =====================================================
-        // ESCAPE / PAUSE
-        // =====================================================
+        
+// =====================================================
+// ESCAPE / PAUSE
+// =====================================================
+if (key.Keycode == Key.Escape)
+{
+    // If pause menu is already open, close it.
+    if (_pauseMenu != null && _pauseMenu.IsOpen)
+    {
+        _pauseMenu.Close();
+        return;
+    }
 
-        if (key.Keycode == Key.Escape)
-        {
-            if (_pauseMenu != null && _pauseMenu.IsOpen)
-            {
-                _pauseMenu.Close();
-                return;
-            }
+    // Close crate inventory first.
+    if (_containerOpen)
+    {
+        CloseContainerWindow();
+        return;
+    }
 
-            if (_containerOpen)
-            {
-                CloseContainerWindow();
-            }
-            else if (_inventoryOpen)
-            {
-                ToggleInventory();
-            }
+    // Otherwise close normal inventory.
+    if (_inventoryOpen)
+    {
+        ToggleInventory();
+        return;
+    }
 
-            if (_creativeMenuOpen)
-            {
-                ToggleCreativeMenu();
-                return;
-            }
+    // Otherwise close creative menu.
+    if (_creativeMenuOpen)
+    {
+        ToggleCreativeMenu();
+        return;
+    }
 
-            if (_pauseMenu != null)
-                _pauseMenu.Open();
+    // Nothing else is open, so open pause menu.
+    if (_pauseMenu != null)
+        _pauseMenu.Open();
 
-            return;
-        }
+    return;
+}
+
 
         // =====================================================
         // HOTBAR

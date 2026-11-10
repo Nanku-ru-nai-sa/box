@@ -452,7 +452,17 @@ if (overlayC != null &&
         1
     );
 }
-
+if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(
+        new Vector3I(
+            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
+        ),
+        b.BlockId
+    );
+}
             chunk.SetBlock(
                 bx,
                 by,
@@ -554,7 +564,17 @@ if (overlay != null &&
         dropWorldPos
     );
 }
-
+if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(
+        new Vector3I(
+            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
+        ),
+        b.BlockId
+    );
+}
             chunk.SetBlock(
                 bx,
                 by,

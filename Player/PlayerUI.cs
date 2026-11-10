@@ -285,14 +285,26 @@ public partial class Player : CharacterBody3D
 // CONTAINER WINDOW
 // =========================================================================
 
+
+
+
 private void BuildContainerWindow()
 {
-    // Remove the previous window if this crate is being reopened.
+    // Remove the previous crate window and title if reopening.
     if (_containerPanel != null &&
         GodotObject.IsInstanceValid(_containerPanel))
     {
         _containerPanel.QueueFree();
     }
+
+    if (_containerTitle != null &&
+        GodotObject.IsInstanceValid(_containerTitle))
+    {
+        _containerTitle.QueueFree();
+    }
+
+    _containerPanel = null;
+    _containerTitle = null;
 
     _containerSlotPanels.Clear();
     _containerSlotLabels.Clear();
@@ -301,16 +313,26 @@ private void BuildContainerWindow()
         _activeContainerSlots.Count == 0)
         return;
 
-    int slotCount = _activeContainerSlots.Count;
+   int slotCount = _activeContainerSlots.Count;
 
-    // Every crate contributes four slots arranged as two columns.
+int columns;
+int rows;
+
+if (_openedContainerBlockId == ContainerManager.BarrelBlockId)
+{
+    // Barrels always display as a 4x4 grid.
+    columns = 4;
+    rows = 4;
+}
+else
+{
+    // Preserve the existing connected crate layout.
     int crateCount = Mathf.CeilToInt(slotCount / 4f);
-    int columns = Mathf.Min(12, Mathf.Max(2, crateCount * 2));
-    int rows = Mathf.CeilToInt(slotCount / (float)columns);
+    columns = Mathf.Min(12, Mathf.Max(2, crateCount * 2));
+    rows = Mathf.CeilToInt(slotCount / (float)columns);
+}
 
     float pad = 16f;
-    float titleHeight = 26f;
-    float titleGap = 8f;
 
     float gridWidth =
         columns * SlotSize +
@@ -324,8 +346,6 @@ private void BuildContainerWindow()
 
     float panelHeight =
         pad +
-        titleHeight +
-        titleGap +
         gridHeight +
         pad;
 
@@ -336,11 +356,12 @@ private void BuildContainerWindow()
     _containerPanel.AnchorTop = 0.5f;
     _containerPanel.AnchorBottom = 0.5f;
 
-    // Position directly above the existing inventory window.
     _containerPanel.OffsetLeft = -panelWidth / 2f;
     _containerPanel.OffsetRight = panelWidth / 2f;
 
-    _containerPanel.OffsetTop = -180f - 10f - panelHeight;
+    _containerPanel.OffsetTop =
+        -190f - panelHeight;
+
     _containerPanel.OffsetBottom = -190f;
 
     _containerPanel.AddThemeStyleboxOverride(
@@ -351,29 +372,51 @@ private void BuildContainerWindow()
         )
     );
 
-    // Title
+    // Crate heading OUTSIDE the panel.
     _containerTitle = new Label();
-    _containerTitle.Text = "Crate Storage";
-    _containerTitle.Position = new Vector2(pad, pad);
-    _containerTitle.Size = new Vector2(gridWidth, titleHeight);
+    _containerTitle.Text =
+    _openedContainerBlockId == ContainerManager.BarrelBlockId
+        ? "Barrel"
+        : "Crate";
+
+    _containerTitle.AnchorLeft = 0.5f;
+    _containerTitle.AnchorRight = 0.5f;
+    _containerTitle.AnchorTop = 0.5f;
+    _containerTitle.AnchorBottom = 0.5f;
+
+    _containerTitle.OffsetLeft = -panelWidth / 2f;
+    _containerTitle.OffsetRight = panelWidth / 2f;
+
+    // Match the Craft panel title position.
+    _containerTitle.OffsetTop =
+        -190f - panelHeight - 24f;
+
+    _containerTitle.OffsetBottom =
+        -190f - panelHeight;
 
     _containerTitle.HorizontalAlignment =
-        HorizontalAlignment.Center;
+        HorizontalAlignment.Left;
 
     _containerTitle.VerticalAlignment =
         VerticalAlignment.Center;
 
-    _containerTitle.AddThemeFontSizeOverride("font_size", 14);
+    _containerTitle.AddThemeFontSizeOverride("font_size", 13);
 
-    _containerPanel.AddChild(_containerTitle);
+    _containerTitle.AddThemeColorOverride(
+        "font_color",
+        new Color(0.75f, 0.75f, 0.75f)
+    );
 
-    // Storage grid
+    _containerTitle.MouseFilter =
+        Control.MouseFilterEnum.Ignore;
+
+    // Storage grid.
     _containerGrid = new GridContainer();
     _containerGrid.Columns = columns;
 
     _containerGrid.Position = new Vector2(
         pad,
-        pad + titleHeight + titleGap
+        pad
     );
 
     _containerGrid.AddThemeConstantOverride(
@@ -434,9 +477,11 @@ private void BuildContainerWindow()
     _containerPanel.AddChild(_containerGrid);
 
     _inventoryLayer.AddChild(_containerPanel);
+    _inventoryLayer.AddChild(_containerTitle);
 
     RefreshContainerSlotVisuals();
 }
+
 
 // =========================================================================
 // CONTAINER SLOT VISUALS

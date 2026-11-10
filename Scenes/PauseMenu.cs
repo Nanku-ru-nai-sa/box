@@ -60,6 +60,20 @@ public partial class PauseMenu : Node
         GetTree().Paused = false;
         Input.MouseMode  = Input.MouseModeEnum.Captured;
     }
+    public override void _UnhandledInput(InputEvent @event)
+{
+    if (!IsOpen)
+        return;
+
+    if (@event is InputEventKey key &&
+        key.Pressed &&
+        !key.Echo &&
+        key.Keycode == Key.Escape)
+    {
+        Close();
+        GetViewport().SetInputAsHandled();
+    }
+}
 
     // ── Build UI ─────────────────────────────────────────────────────────────
 

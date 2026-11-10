@@ -14,9 +14,11 @@ public partial class ContainerManager : Node
 {
     public static ContainerManager Instance { get; private set; }
 
-    public const string CrateBlockId = "crate";
-    public const int SlotsPerCrate = 4;
+public const string CrateBlockId = "crate";
+public const int SlotsPerCrate = 4;
 
+public const string BarrelBlockId = "barrel";
+public const int SlotsPerBarrel = 16;
     private readonly Dictionary<Vector3I, List<InventorySlot>> _containers = new();
 
     private static readonly Vector3I[] Directions =
@@ -136,19 +138,33 @@ public partial class ContainerManager : Node
         EnsureContainerRecord(worldPosition);
         return true;
     }
+    public bool RegisterBarrel(Vector3I worldPosition)
+{
+    if (!IsBarrelBlock(worldPosition))
+        return false;
 
-    private void EnsureContainerRecord(Vector3I position)
-    {
-        if (_containers.ContainsKey(position))
-            return;
+    EnsureContainerRecord(
+        worldPosition,
+        SlotsPerBarrel
+    );
 
-        var slots = new List<InventorySlot>();
+    return true;
+}
 
-        for (int i = 0; i < SlotsPerCrate; i++)
-            slots.Add(new InventorySlot());
+    private void EnsureContainerRecord(
+    Vector3I position,
+    int slotCount = SlotsPerCrate)
+{
+    if (_containers.ContainsKey(position))
+        return;
 
-        _containers[position] = slots;
-    }
+    var slots = new List<InventorySlot>();
+
+    for (int i = 0; i < slotCount; i++)
+        slots.Add(new InventorySlot());
+
+    _containers[position] = slots;
+}
 
     private bool IsCrateBlock(Vector3I position)
     {
@@ -165,6 +181,22 @@ public partial class ContainerManager : Node
         BlockState block = _chunkManager.GetBlockAtWorld(position);
         return block.BlockId == CrateBlockId && !block.IsAir();
     }
+    private bool IsBarrelBlock(Vector3I position)
+{
+    if (_chunkManager == null)
+    {
+        _chunkManager = GetTree().Root.FindChild(
+            "ChunkManager", true, false
+        ) as ChunkManager;
+    }
+
+    if (_chunkManager == null)
+        return false;
+
+    BlockState block = _chunkManager.GetBlockAtWorld(position);
+
+    return block.BlockId == BarrelBlockId && !block.IsAir();
+}
 
     // --------------------------------------------------------
     // CONNECTED CRATES
@@ -244,7 +276,7 @@ public partial class ContainerManager : Node
 
         return _containers[worldPosition];
     }
-
+    
     public bool IsContainerRegistered(Vector3I worldPosition)
     {
         return _containers.ContainsKey(worldPosition);
@@ -283,6 +315,39 @@ public partial class ContainerManager : Node
 
         return contents;
     }
+    public List<InventorySlot> RemoveBarrel(Vector3I worldPosition)
+{
+    var contents = new List<InventorySlot>();
+
+    if (_containers.TryGetValue(worldPosition, out List<InventorySlot> slots))
+    {
+        foreach (InventorySlot slot in slots)
+        {
+            if (slot == null || slot.IsEmpty)
+                continue;
+
+            contents.Add(new InventorySlot
+            {
+                ItemId = slot.ItemId,
+                Count = slot.Count,
+                CurrentDurability = slot.CurrentDurability,
+                CustomName = slot.CustomName
+            });
+        }
+    }
+
+    _containers.Remove(worldPosition);
+    SaveContainers();
+
+    return contents;
+}
+public List<InventorySlot> GetBarrelSlots(Vector3I worldPosition)
+{
+    if (!RegisterBarrel(worldPosition))
+        return new List<InventorySlot>();
+
+    return _containers[worldPosition];
+}
 
     // --------------------------------------------------------
     // SAVING

@@ -9,7 +9,8 @@ public partial class Player
 
     private bool _containerOpen = false;
 
-    private Vector3I _openedCratePosition;
+   private Vector3I _openedCratePosition;
+private string _openedContainerBlockId = "";
 
     // These are live references to the slots owned by ContainerManager.
     private List<InventorySlot> _activeContainerSlots = new();
@@ -21,12 +22,35 @@ public partial class Player
 
     private readonly List<Panel> _containerSlotPanels = new();
     private readonly List<Label> _containerSlotLabels = new();
+    private const float CrateCloseRange = 7f;
 
     // =========================================================
     // SHARED SLOT ACCESS
     // Player slots: 0-59
     // Container slots: 60+
     // =========================================================
+private void CloseCrateOnly()
+{
+    if (!_containerOpen)
+        return;
+
+    // Return any item currently being held by the cursor.
+    ReturnHeldItemSafely();
+
+    // Remove only the crate's separate UI panel.
+    RemoveContainerWindowFromInventory();
+
+    _containerOpen = false;
+    _activeContainerSlots.Clear();
+
+    // Leave the normal inventory and side panels open.
+    EndDrag();
+    RefreshAllSlotVisuals();
+
+    ContainerManager.Instance?.SaveContainers();
+
+    GD.Print("Closed crate: moved out of range.");
+}
 
     private int GetUiSlotCount()
     {
@@ -121,115 +145,133 @@ public partial class Player
     // =========================================================
 
     private bool TryOpenCrate()
+{
+    if (!TryGetTargetBlock(
+            out Vector3I position,
+            out string blockId))
     {
-        if (!TryGetTargetBlock(
-                out Vector3I position,
-                out string blockId))
-        {
-            return false;
-        }
+        return false;
+    }
 
-        if (blockId != "crate")
-            return false;
+    var manager = ContainerManager.Instance;
 
-        var manager = ContainerManager.Instance;
+    if (manager == null)
+        return false;
 
-        if (manager == null)
-        {
-            GD.PrintErr("ContainerManager is missing.");
-            return true;
-        }
+    List<InventorySlot> slots;
 
-        // Register in case this crate has not been registered yet.
+    if (blockId == ContainerManager.CrateBlockId)
+    {
         manager.RegisterCrate(position);
+        slots = manager.GetConnectedSlots(position);
+    }
+    else if (blockId == ContainerManager.BarrelBlockId)
+    {
+        manager.RegisterBarrel(position);
+        slots = manager.GetBarrelSlots(position);
+    }
+    else
+    {
+        return false;
+    }
 
-        var slots = manager.GetConnectedSlots(position);
-
-        if (slots == null)
-        {
-            GD.PrintErr("Could not retrieve crate inventory.");
-            return true;
-        }
-
-        _openedCratePosition = position;
-        _activeContainerSlots = slots;
-
-        OpenContainerWindow();
-
+    if (slots == null || slots.Count == 0)
+    {
+        GD.PrintErr("Could not retrieve container inventory.");
         return true;
     }
+
+    _openedCratePosition = position;
+    _openedContainerBlockId = blockId;
+    _activeContainerSlots = slots;
+
+    OpenContainerWindow();
+
+    return true;
+}
 
     // =========================================================
     // OPEN WINDOW
     // =========================================================
 
     private void OpenContainerWindow()
+{
+    _containerOpen = true;
+    _inventoryOpen = true;
+
+    _inventoryScreen.Visible = true;
+
+    if (_hotbarLayer != null)
+        _hotbarLayer.Visible = false;
+
+    if (_statsHudLayer != null)
+        _statsHudLayer.Visible = false;
+
+    // Show crafting panel.
+    if (_craftingPanel != null)
     {
-        _containerOpen = true;
-        _inventoryOpen = true;
-
-        _inventoryScreen.Visible = true;
-
-        if (_hotbarLayer != null)
-            _hotbarLayer.Visible = false;
-
-        if (_statsHudLayer != null)
-            _statsHudLayer.Visible = false;
-
-        if (_craftingPanel != null)
-            _craftingPanel.Visible = false;
-
-        if (_equipmentPanel != null)
-            _equipmentPanel.Visible = false;
-
-        if (_toolBenchPanel != null)
-            _toolBenchPanel.Visible = false;
-
-        if (_stationTabBar != null)
-            _stationTabBar.Visible = false;
-
-        EndDrag();
-
-        Input.MouseMode = Input.MouseModeEnum.Visible;
-
-        BuildContainerWindow();
-        RefreshAllSlotVisuals();
+        _craftingPanel.Visible = true;
+        UpdateCraftingProximity();
     }
+
+    // Show equipment / armor panel.
+    if (_equipmentPanel != null)
+        _equipmentPanel.Visible = true;
+
+    EndDrag();
+
+    Input.MouseMode = Input.MouseModeEnum.Visible;
+
+    BuildContainerWindow();
+    RefreshAllSlotVisuals();
+}
 
     // =========================================================
     // CLOSE WINDOW
     // =========================================================
 
     private void CloseContainerWindow()
-    {
-        if (!_containerOpen)
-            return;
+{
+    if (!_containerOpen)
+        return;
 
-        ReturnHeldItemSafely();
+    ReturnHeldItemSafely();
 
-        _containerOpen = false;
-        _inventoryOpen = false;
+    // Remove the crate section and restore the normal inventory layout.
+    RemoveContainerWindowFromInventory();
 
-        _activeContainerSlots.Clear();
+    _containerOpen = false;
+    _inventoryOpen = false;
 
-        if (_containerPanel != null)
-            _containerPanel.Visible = false;
+    _activeContainerSlots = new List<InventorySlot>();
 
-        if (_inventoryScreen != null)
-            _inventoryScreen.Visible = false;
+    if (_inventoryScreen != null)
+        _inventoryScreen.Visible = false;
 
-        EndDrag();
+    if (_craftingPanel != null)
+        _craftingPanel.Visible = false;
 
-        if (_hotbarLayer != null)
-            _hotbarLayer.Visible = _hudVisible;
+    if (_equipmentPanel != null)
+        _equipmentPanel.Visible = false;
 
-        if (_statsHudLayer != null)
-            _statsHudLayer.Visible = _hudVisible;
+    if (_toolBenchPanel != null)
+        _toolBenchPanel.Visible = false;
 
-        Input.MouseMode = Input.MouseModeEnum.Captured;
+    if (_stationTabBar != null)
+        _stationTabBar.Visible = false;
 
-        RefreshAllSlotVisuals();
-    }
+    EndDrag();
+
+    if (_hotbarLayer != null)
+        _hotbarLayer.Visible = _hudVisible;
+
+    if (_statsHudLayer != null)
+        _statsHudLayer.Visible = _hudVisible;
+
+    Input.MouseMode = Input.MouseModeEnum.Captured;
+
+    RefreshAllSlotVisuals();
+}
 
     // =========================================================
     // RETURN HELD ITEM WITHOUT LOSING ITEM DATA
@@ -294,4 +336,81 @@ public partial class Player
 
         ContainerManager.Instance?.SaveContainers();
     }
+    private void RemoveContainerWindowFromInventory()
+{
+    if (_containerPanel != null &&
+        GodotObject.IsInstanceValid(_containerPanel))
+    {
+        _containerPanel.QueueFree();
+    }
+
+    if (_containerTitle != null &&
+        GodotObject.IsInstanceValid(_containerTitle))
+    {
+        _containerTitle.QueueFree();
+    }
+
+    _containerPanel = null;
+    _containerGrid = null;
+    _containerTitle = null;
+
+    _containerSlotPanels.Clear();
+    _containerSlotLabels.Clear();
+}
+
+private void DropContainerContents(
+    Vector3I worldPosition,
+    string blockId)
+{
+    var manager = ContainerManager.Instance;
+
+    if (manager == null)
+        return;
+
+    // Close the container first if it is currently open.
+    if (_containerOpen &&
+        _openedCratePosition == worldPosition)
+    {
+        CloseContainerWindow();
+    }
+
+    List<InventorySlot> contents;
+
+    if (blockId == ContainerManager.CrateBlockId)
+    {
+        contents = manager.RemoveCrate(worldPosition);
+    }
+    else if (blockId == ContainerManager.BarrelBlockId)
+    {
+        contents = manager.RemoveBarrel(worldPosition);
+    }
+    else
+    {
+        return;
+    }
+
+    Vector3 dropPosition = new Vector3(
+        worldPosition.X + 0.5f,
+        worldPosition.Y + 0.5f,
+        worldPosition.Z + 0.5f
+    );
+
+    foreach (InventorySlot slot in contents)
+    {
+        if (slot == null || slot.IsEmpty)
+            continue;
+
+        SpawnItemDrop(
+            slot.ItemId,
+            slot.Count,
+            dropPosition
+        );
+    }
+
+    GD.Print(
+        $"{blockId} broken at {worldPosition}. " +
+        $"Dropped {contents.Count} stored stacks."
+    );
+}
+
 }

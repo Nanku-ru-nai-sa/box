@@ -30,6 +30,7 @@ public partial class BlockRegistry : Node
         var crafterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crafter.png");
         var toolBenchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/tool_bench.png");
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
+        var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
         var rootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/root.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
@@ -228,6 +229,20 @@ crate.TextureSide = crateTex;
 crate.TextureBottom = crateTex;
 crate.Drops = new[] { "crate" };
 Register(crate);
+
+var barrel = new BlockResource();
+barrel.BlockId = "barrel";
+barrel.DisplayName = "Barrel";
+barrel.IsSolid = true;
+barrel.CanChisel = false;
+barrel.Hardness = 1.5f;
+barrel.CanHaveFeatures = false;
+barrel.GrassCanGrow = false;
+barrel.TextureTop = barrelTex;
+barrel.TextureSide = barrelTex;
+barrel.TextureBottom = barrelTex;
+barrel.Drops = new[] { "barrel" };
+Register(barrel);
 
         var root = new BlockResource();
 root.BlockId = "root";
