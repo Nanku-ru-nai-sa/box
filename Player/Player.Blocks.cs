@@ -452,16 +452,18 @@ if (overlayC != null &&
         1
     );
 }
-if (b.BlockId is "crate" or "barrel")
+Vector3I brokenWorldPosition = new Vector3I(
+    Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+    Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+    Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (b.BlockId == "kiln")
 {
-    DropContainerContents(
-        new Vector3I(
-            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
-            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
-            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
-        ),
-        b.BlockId
-    );
+    DropKilnContents(brokenWorldPosition);
+}
+else if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(brokenWorldPosition, b.BlockId);
 }
             chunk.SetBlock(
                 bx,
@@ -564,16 +566,18 @@ if (overlay != null &&
         dropWorldPos
     );
 }
-if (b.BlockId is "crate" or "barrel")
+Vector3I brokenWorldPosition = new Vector3I(
+    Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+    Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+    Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (b.BlockId == "kiln")
 {
-    DropContainerContents(
-        new Vector3I(
-            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
-            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
-            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
-        ),
-        b.BlockId
-    );
+    DropKilnContents(brokenWorldPosition);
+}
+else if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(brokenWorldPosition, b.BlockId);
 }
             chunk.SetBlock(
                 bx,
