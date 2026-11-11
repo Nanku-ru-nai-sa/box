@@ -842,6 +842,19 @@ if (b.BlockId is "crate" or "barrel")
         Vector3 lp =
             worldTarget - tc.GlobalPosition;
 
+        BlockResource placedResource = BlockRegistry.Instance.GetBlock(_selectedBlockId);
+        byte placementRotation = 0;
+
+        if (placedResource != null && placedResource.TextureFront != null)
+        {
+            // The front face points back toward the player, like a Minecraft furnace.
+            Vector3 towardPlayer = GlobalTransform.Basis.Z;
+            if (Mathf.Abs(towardPlayer.X) > Mathf.Abs(towardPlayer.Z))
+                placementRotation = towardPlayer.X >= 0f ? (byte)1 : (byte)3;
+            else
+                placementRotation = towardPlayer.Z >= 0f ? (byte)2 : (byte)0;
+        }
+
         tc.SetBlock(
             Mathf.FloorToInt(lp.X),
             Mathf.FloorToInt(lp.Y),
@@ -849,7 +862,8 @@ if (b.BlockId is "crate" or "barrel")
             new BlockState
             {
                 BlockId = _selectedBlockId,
-                BitMask = 0xFF
+                BitMask = 0xFF,
+                Rotation = placementRotation
             }
         );
 
