@@ -35,14 +35,14 @@ public partial class KilnManager : Node
     }
 
     [Serializable]
-    private class SavedSlot
+    public class SavedSlot
     {
         public string ItemId { get; set; } = "";
         public int Count { get; set; }
     }
 
     [Serializable]
-    private class SavedKiln
+    public class SavedKiln
     {
         public int X { get; set; }
         public int Y { get; set; }
@@ -241,6 +241,7 @@ public partial class KilnManager : Node
 
     public void SaveKilns()
     {
+        EnsureWorldLoaded();
         if (string.IsNullOrEmpty(_loadedWorldId)) return;
 
         var saved = new List<SavedKiln>();
