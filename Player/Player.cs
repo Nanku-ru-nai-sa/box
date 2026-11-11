@@ -106,6 +106,7 @@ public partial class Player : CharacterBody3D
     private string _activeStation = "crafter";
     private Vector3I _nearbyKilnPosition = Vector3I.Zero;
     private bool _hasNearbyKiln = false;
+    private bool _kilnPanelHasPosition = false;
 
     private CreativeMenu _creativeMenu;
     private CanvasLayer _creativeMenuLayer;
@@ -493,11 +494,10 @@ public bool IsMounted =>
         // This also lets a player open a nearby kiln from its workstation tab
         // while a crate window is already open.
         if (_hasNearbyKiln && _kilnPanel != null &&
-            _kilnPanel.GetKilnPosition() != _nearbyKilnPosition)
+            (!_kilnPanelHasPosition || _kilnPanel.GetKilnPosition() != _nearbyKilnPosition))
         {
-            _kilnPanel.SetKiln(
-                _nearbyKilnPosition,
-                KilnManager.Instance?.GetSlots(_nearbyKilnPosition));
+            _kilnPanel.SetKiln(_nearbyKilnPosition, KilnManager.Instance?.GetSlots(_nearbyKilnPosition));
+            _kilnPanelHasPosition = true;
         }
 
         bool nearTable =
@@ -598,6 +598,7 @@ public bool IsMounted =>
                 Mathf.FloorToInt(tPos.Y),
                 Mathf.FloorToInt(tPos.Z));
             _kilnPanel?.SetKiln(kilnPosition, KilnManager.Instance?.GetSlots(kilnPosition));
+            _kilnPanelHasPosition = true;
         }
 
         SwitchStation(b.BlockId);
