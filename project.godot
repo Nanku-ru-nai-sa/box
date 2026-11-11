@@ -30,6 +30,7 @@ SeasonManager="*uid://cq7eljlq8rtvi"
 DebugMenu="*uid://bvc38hkm70b7n"
 WeatherManager="*uid://b4i6iusryejsp"
 ContainerManager="*uid://b1k1rmwsrbgmi"
+KilnManager="*res://Core/World/KilnManager.cs"
 
 [display]
 
