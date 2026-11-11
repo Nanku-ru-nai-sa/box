@@ -504,17 +504,15 @@ public bool IsMounted =>
             else if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
             else SwitchStation("crafter");
         }
-        else if (_activeStation == "tool_bench" &&
-            !nearby.Contains("tool_bench") &&
-            nearby.Contains("crafter"))
+        else if (_activeStation == "tool_bench" && !nearby.Contains("tool_bench"))
         {
-            SwitchStation("crafter");
+            if (nearby.Contains("crafter")) SwitchStation("crafter");
+            else if (nearby.Contains("kiln")) SwitchStation("kiln");
         }
-        else if (_activeStation == "crafter" &&
-                 !nearby.Contains("crafter") &&
-                 nearby.Contains("tool_bench"))
+        else if (_activeStation == "crafter" && !nearby.Contains("crafter"))
         {
-            SwitchStation("tool_bench");
+            if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
+            else if (nearby.Contains("kiln")) SwitchStation("kiln");
         }
     }
 
