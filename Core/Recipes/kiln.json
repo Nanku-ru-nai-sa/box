@@ -1,0 +1,8 @@
+{
+  "id": "kiln",
+  "result": "kiln",
+  "count": 1,
+  "shaped": true,
+  "pattern": ["CCC", "C C", "CCC"],
+  "key": { "C": "clay" }
+}
