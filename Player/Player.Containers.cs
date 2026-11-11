@@ -367,6 +367,7 @@ private void DropKilnContents(Vector3I worldPosition)
         _kilnPanel.GetKilnPosition() == worldPosition)
     {
         _kilnPanel.Visible = false;
+        _kilnPanelHasPosition = false;
     }
 
     List<InventorySlot> contents = KilnManager.Instance?.RemoveKiln(worldPosition);
