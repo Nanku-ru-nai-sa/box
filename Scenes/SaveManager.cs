@@ -523,8 +523,9 @@ public partial class SaveManager : Node
         GameModeManager.Instance.SaveToWorld();
     }
 
-    // Save current mobs
+    // Save current mobs and processing stations.
     SaveWorldMobs();
+    KilnManager.Instance?.SaveKilns();
 
     GD.Print(
         "[SaveManager] Current world save completed."
