@@ -754,6 +754,32 @@ private void OnSlotMouseEntered(int slotIndex)
     // STATION TAB BAR
     // =========================================================================
 
+    // =========================================================================
+    // KILN
+    // =========================================================================
+
+    private void BuildKilnPanel()
+    {
+        _kilnPanel = new KilnPanel();
+        _kilnPanel.OnSlotClicked += HandleKilnSlotClicked;
+        _kilnPanel.OnOutputClicked += HandleKilnOutputClicked;
+
+        float gridW = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float totalW = gridW + 32f;
+        float invHalfW = totalW / 2f;
+
+        _kilnPanel.AnchorLeft = 0.5f;
+        _kilnPanel.AnchorRight = 0.5f;
+        _kilnPanel.AnchorTop = 0.5f;
+        _kilnPanel.AnchorBottom = 0.5f;
+        _kilnPanel.OffsetLeft = -invHalfW - 10f - 300f;
+        _kilnPanel.OffsetRight = -invHalfW - 10f;
+        _kilnPanel.OffsetTop = -180f;
+        _kilnPanel.OffsetBottom = 159f;
+        _kilnPanel.Visible = false;
+        _craftingLayer.CallDeferred("add_child", _kilnPanel);
+    }
+
     private void BuildStationTabBar()
     {
         float gridW =
@@ -805,6 +831,8 @@ private void OnSlotMouseEntered(int slotIndex)
                 out _tabToolBenchStationLbl
             );
 
+        _tabKilnStation = MakeStationTab("Kiln", 192f, out _tabKilnStationLbl);
+
         _tabCrafterStation.GuiInput +=
             (InputEvent ev) =>
             {
@@ -819,6 +847,11 @@ private void OnSlotMouseEntered(int slotIndex)
                     SwitchStation("tool_bench");
             };
 
+        _tabKilnStation.GuiInput += (InputEvent ev) =>
+        {
+            if (IsStationTabClick(ev)) SwitchStation("kiln");
+        };
+
         _stationTabBar.AddChild(
             _tabCrafterStation
         );
@@ -826,6 +859,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _stationTabBar.AddChild(
             _tabToolBenchStation
         );
+        _stationTabBar.AddChild(_tabKilnStation);
 
         _craftingLayer.CallDeferred(
             "add_child",
@@ -851,7 +885,30 @@ private void OnSlotMouseEntered(int slotIndex)
 
         label = new Label();
 
-        label.Text = text;
+        label.Text = "";
+        tab.TooltipText = text;
+
+        string iconPath = text switch
+        {
+            "Crafter" => "res://Assets/Textures/Blocks/crafter.png",
+            "Tool Bench" => "res://Assets/Textures/Blocks/tool_bench.png",
+            "Kiln" => "res://Assets/Textures/Blocks/kiln.png",
+            _ => ""
+        };
+        if (!string.IsNullOrEmpty(iconPath) && ResourceLoader.Exists(iconPath))
+        {
+            var icon = new TextureRect();
+            icon.Texture = ResourceLoader.Load<Texture2D>(iconPath);
+            icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+            icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+            icon.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            icon.AnchorLeft = 0.5f; icon.AnchorRight = 0.5f;
+            icon.AnchorTop = 0.5f; icon.AnchorBottom = 0.5f;
+            icon.OffsetLeft = -10; icon.OffsetRight = 10;
+            icon.OffsetTop = -10; icon.OffsetBottom = 10;
+            icon.MouseFilter = Control.MouseFilterEnum.Ignore;
+            tab.AddChild(icon);
+        }
 
         label.HorizontalAlignment =
             HorizontalAlignment.Center;
@@ -892,6 +949,9 @@ private void OnSlotMouseEntered(int slotIndex)
             _toolBenchPanel.Visible =
                 stationId == "tool_bench";
 
+        if (_kilnPanel != null)
+            _kilnPanel.Visible = stationId == "kiln";
+
         SetStationTabStyle(
             _tabCrafterStation,
             _tabCrafterStationLbl,
@@ -903,6 +963,7 @@ private void OnSlotMouseEntered(int slotIndex)
             _tabToolBenchStationLbl,
             stationId == "tool_bench"
         );
+        SetStationTabStyle(_tabKilnStation, _tabKilnStationLbl, stationId == "kiln");
     }
 
     private void SetStationTabStyle(
