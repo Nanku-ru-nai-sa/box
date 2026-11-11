@@ -2226,6 +2226,23 @@ private void AddQuadCropped(
         return surfaces[texture];
     }
 
+    // Rotation: 0 = North (-Z), 1 = East (+X), 2 = South (+Z), 3 = West (-X).
+    private static Texture2D GetHorizontalFaceTexture(BlockResource resource, byte rotation, FaceDirection face)
+    {
+        if (resource.TextureFront == null)
+            return resource.TextureSide;
+
+        FaceDirection front = (rotation % 4) switch
+        {
+            0 => FaceDirection.North,
+            1 => FaceDirection.East,
+            2 => FaceDirection.South,
+            _ => FaceDirection.West
+        };
+
+        return face == front ? resource.TextureFront : resource.TextureSide;
+    }
+
     private void AddFullBlockFaces(
         Dictionary<Texture2D, SurfaceTool> surfaces,
         BlockState block,
@@ -2285,7 +2302,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    resource.TextureSide
+                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.North)
                 ),
                 GetFaceVertices(
                     x,
@@ -2306,7 +2323,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    resource.TextureSide
+                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.South)
                 ),
                 GetFaceVertices(
                     x,
@@ -2327,7 +2344,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    resource.TextureSide
+                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.West)
                 ),
                 GetFaceVertices(
                     x,
@@ -2348,7 +2365,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    resource.TextureSide
+                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.East)
                 ),
                 GetFaceVertices(
                     x,
