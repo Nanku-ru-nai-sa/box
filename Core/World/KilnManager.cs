@@ -13,6 +13,7 @@ public partial class KilnManager : Node
     private readonly Dictionary<string, KilnRecipe> _recipes = new(StringComparer.OrdinalIgnoreCase);
     private string _loadedWorldId = "";
     private float _saveTimer;
+    private ChunkManager _chunkManager;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -82,8 +83,9 @@ public partial class KilnManager : Node
     {
         EnsureWorldLoaded();
         if (string.IsNullOrEmpty(_loadedWorldId)) return;
-        if (GetTree().Root.FindChild("ChunkManager", true, false) is not ChunkManager)
-            return;
+        if (_chunkManager == null || !GodotObject.IsInstanceValid(_chunkManager))
+            _chunkManager = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
+        if (_chunkManager == null) return;
 
         foreach (KilnState kiln in _kilns.Values)
             ProcessKiln(kiln, (float)delta);
