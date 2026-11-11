@@ -104,6 +104,8 @@ public partial class Player : CharacterBody3D
     private Panel _tabKilnStation;
     private Label _tabKilnStationLbl;
     private string _activeStation = "crafter";
+    private Vector3I _nearbyKilnPosition = Vector3I.Zero;
+    private bool _hasNearbyKiln = false;
 
     private CreativeMenu _creativeMenu;
     private CanvasLayer _creativeMenuLayer;
@@ -423,6 +425,7 @@ public bool IsMounted =>
     private HashSet<string> GetNearbyStationTypes()
     {
         var found = new HashSet<string>();
+        _hasNearbyKiln = false;
 
         var cm =
             GetTree().Root.FindChild(
@@ -458,6 +461,14 @@ public bool IsMounted =>
                     block.BlockId) >= 0)
             {
                 found.Add(block.BlockId);
+                if (block.BlockId == "kiln" && !_hasNearbyKiln)
+                {
+                    _nearbyKilnPosition = new Vector3I(
+                        Mathf.FloorToInt(pos.X) + dx,
+                        Mathf.FloorToInt(pos.Y) + dy,
+                        Mathf.FloorToInt(pos.Z) + dz);
+                    _hasNearbyKiln = true;
+                }
             }
         }
 
@@ -472,6 +483,16 @@ public bool IsMounted =>
 
         var nearby =
             GetNearbyStationTypes();
+
+        // This also lets a player open a nearby kiln from its workstation tab
+        // while a crate window is already open.
+        if (_hasNearbyKiln && _kilnPanel != null &&
+            _kilnPanel.GetKilnPosition() != _nearbyKilnPosition)
+        {
+            _kilnPanel.SetKiln(
+                _nearbyKilnPosition,
+                KilnManager.Instance?.GetSlots(_nearbyKilnPosition));
+        }
 
         bool nearTable =
             nearby.Contains("crafter");
