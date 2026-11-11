@@ -312,34 +312,51 @@ public partial class KilnManager : Node
             kiln.FuelTotal = burnSeconds;
         }
 
-        float used = Mathf.Min(delta, kiln.FuelRemaining);
-        kiln.FuelRemaining -= used;
-        kiln.Progress += used;
+        // Consume fuel only while the kiln can actively make progress.
+        float available = Mathf.Min(delta, kiln.FuelRemaining);
+        float consumedTime = 0f;
 
-        while (kiln.Progress >= recipe.Seconds && !kiln.Input.IsEmpty && CanAcceptOutput(kiln.Output, recipe))
+        while (available > 0f && !kiln.Input.IsEmpty && CanAcceptOutput(kiln.Output, recipe))
         {
-            kiln.Input.Count--;
-            if (kiln.Input.Count <= 0) kiln.Input.Clear();
+            float needed = Mathf.Max(0f, recipe.Seconds - kiln.Progress);
+            float step = Mathf.Min(available, needed);
 
-            if (kiln.Output.IsEmpty)
+            kiln.Progress += step;
+            available -= step;
+            consumedTime += step;
+
+            if (kiln.Progress >= recipe.Seconds)
             {
-                kiln.Output.ItemId = recipe.OutputId;
-                kiln.Output.Count = recipe.OutputCount;
+                kiln.Input.Count--;
+                if (kiln.Input.Count <= 0) kiln.Input.Clear();
+
+                if (kiln.Output.IsEmpty)
+                {
+                    kiln.Output.ItemId = recipe.OutputId;
+                    kiln.Output.Count = recipe.OutputCount;
+                }
+                else
+                {
+                    kiln.Output.Count += recipe.OutputCount;
+                }
+
+                kiln.Progress = 0f;
             }
             else
             {
-                kiln.Output.Count += recipe.OutputCount;
+                break;
             }
-
-            kiln.Progress -= recipe.Seconds;
         }
+
+        kiln.FuelRemaining = Mathf.Max(0f, kiln.FuelRemaining - consumedTime);
 
         if (kiln.Input.IsEmpty)
         {
             kiln.Progress = 0f;
             kiln.ProcessingInputId = "";
         }
-        return used > 0f;
+
+        return consumedTime > 0f;
     }
 
     private static bool CanAcceptOutput(InventorySlot output, KilnRecipe recipe)
