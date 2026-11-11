@@ -144,7 +144,7 @@ public partial class BlockRegistry : Node
 
         var log = new BlockResource();
         log.BlockId = "log"; log.DisplayName = "Log";
-        log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f;
+        log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f; log.IsFlammable = true;
         log.TextureTop = logTopTex; log.TextureSide = logSideTex; log.TextureBottom = logTopTex;
         Register(log);
 
@@ -204,7 +204,7 @@ public partial class BlockRegistry : Node
 
         var planks = new BlockResource();
         planks.BlockId = "planks"; planks.DisplayName = "Planks";
-        planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f;
+        planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f; planks.IsFlammable = true;
         planks.TextureTop = planksTex; planks.TextureSide = planksTex; planks.TextureBottom = planksTex;
         Register(planks);
 
