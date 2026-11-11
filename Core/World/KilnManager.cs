@@ -24,6 +24,7 @@ public partial class KilnManager : Node
         public float FuelRemaining;
         public float FuelTotal;
         public float Progress;
+        public string ProcessingInputId = "";
     }
 
     private class KilnRecipe
@@ -53,6 +54,7 @@ public partial class KilnManager : Node
         public float FuelRemaining { get; set; }
         public float FuelTotal { get; set; }
         public float Progress { get; set; }
+        public string ProcessingInputId { get; set; } = "";
     }
 
     public override void _EnterTree()
@@ -167,7 +169,8 @@ public partial class KilnManager : Node
                 {
                     FuelRemaining = Mathf.Max(0f, data.FuelRemaining),
                     FuelTotal = Mathf.Max(0f, data.FuelTotal),
-                    Progress = Mathf.Max(0f, data.Progress)
+                    Progress = Mathf.Max(0f, data.Progress),
+                    ProcessingInputId = data.ProcessingInputId ?? ""
                 };
                 CopySavedSlot(data.Input, state.Input);
                 CopySavedSlot(data.Fuel, state.Fuel);
@@ -256,7 +259,8 @@ public partial class KilnManager : Node
                 Output = new SavedSlot { ItemId = state.Output.ItemId, Count = state.Output.Count },
                 FuelRemaining = state.FuelRemaining,
                 FuelTotal = state.FuelTotal,
-                Progress = state.Progress
+                Progress = state.Progress,
+                ProcessingInputId = state.ProcessingInputId
             });
         }
 
@@ -272,8 +276,25 @@ public partial class KilnManager : Node
 
     private bool ProcessKiln(KilnState kiln, float delta)
     {
-        if (kiln.Input.IsEmpty || !_recipes.TryGetValue(kiln.Input.ItemId, out KilnRecipe recipe))
+        if (kiln.Input.IsEmpty)
+        {
+            kiln.Progress = 0f;
+            kiln.ProcessingInputId = "";
             return false;
+        }
+
+        if (!_recipes.TryGetValue(kiln.Input.ItemId, out KilnRecipe recipe))
+        {
+            kiln.Progress = 0f;
+            kiln.ProcessingInputId = "";
+            return false;
+        }
+
+        if (kiln.ProcessingInputId != kiln.Input.ItemId)
+        {
+            kiln.Progress = 0f;
+            kiln.ProcessingInputId = kiln.Input.ItemId;
+        }
 
         if (!CanAcceptOutput(kiln.Output, recipe))
             return false;
@@ -313,7 +334,11 @@ public partial class KilnManager : Node
             kiln.Progress -= recipe.Seconds;
         }
 
-        if (kiln.Input.IsEmpty) kiln.Progress = 0f;
+        if (kiln.Input.IsEmpty)
+        {
+            kiln.Progress = 0f;
+            kiln.ProcessingInputId = "";
+        }
         return used > 0f;
     }
 
