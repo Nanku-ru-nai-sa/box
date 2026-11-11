@@ -31,6 +31,10 @@ public partial class BlockRegistry : Node
         var toolBenchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/tool_bench.png");
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
         var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
+        var kilnFrontTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln.png");
+        var kilnSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side.png");
+        var kilnTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_top.png");
+        var kilnBottomTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_bottom.png");
         var rootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/root.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
@@ -215,6 +219,18 @@ public partial class BlockRegistry : Node
         toolBench.IsSolid = true; toolBench.CanChisel = false; toolBench.Hardness = 1.0f;
         toolBench.TextureTop = toolBenchTex; toolBench.TextureSide = toolBenchTex; toolBench.TextureBottom = toolBenchTex;
         Register(toolBench);
+
+        var kiln = new BlockResource();
+        kiln.BlockId = "kiln"; kiln.DisplayName = "Kiln";
+        kiln.IsSolid = true; kiln.CanChisel = false; kiln.Hardness = 1.5f;
+        kiln.CanHaveFeatures = false; kiln.GrassCanGrow = false;
+        kiln.CanRotate = true;
+        kiln.TextureFront = kilnFrontTex;
+        kiln.TextureSide = kilnSideTex;
+        kiln.TextureTop = kilnTopTex;
+        kiln.TextureBottom = kilnBottomTex;
+        kiln.Drops = new[] { "kiln" };
+        Register(kiln);
 
         var crate = new BlockResource();
 crate.BlockId = "crate";
