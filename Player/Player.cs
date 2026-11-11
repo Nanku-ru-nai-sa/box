@@ -2319,6 +2319,7 @@ if (key.Keycode == Key.Escape)
                 _equipmentPanel.Visible = false;
 
             _toolBenchPanel?.ReturnSocketsToInventory();
+            KilnManager.Instance?.SaveKilns();
 
             if (_toolBenchPanel != null)
                 _toolBenchPanel.Visible = false;
