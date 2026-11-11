@@ -94,12 +94,15 @@ public partial class Player : CharacterBody3D
     private CanvasLayer _equipmentLayer;
 
     private ToolBenchPanel _toolBenchPanel;
+    private KilnPanel _kilnPanel;
 
     private Control _stationTabBar;
     private Panel _tabCrafterStation;
     private Panel _tabToolBenchStation;
     private Label _tabCrafterStationLbl;
     private Label _tabToolBenchStationLbl;
+    private Panel _tabKilnStation;
+    private Label _tabKilnStationLbl;
     private string _activeStation = "crafter";
 
     private CreativeMenu _creativeMenu;
@@ -227,6 +230,7 @@ public bool IsMounted =>
         BuildCursorPanel();
         BuildCraftingPanel();
         BuildToolBenchPanel();
+        BuildKilnPanel();
         BuildStationTabBar();
         BuildEquipmentPanel();
         BuildCreativeMenu();
@@ -412,7 +416,8 @@ public bool IsMounted =>
     private static readonly string[] StationBlockIds =
     {
         "crafter",
-        "tool_bench"
+        "tool_bench",
+        "kiln"
     };
 
     private HashSet<string> GetNearbyStationTypes()
@@ -490,7 +495,16 @@ public bool IsMounted =>
             _tabToolBenchStation.Visible =
                 nearby.Contains("tool_bench");
 
-        if (_activeStation == "tool_bench" &&
+        if (_tabKilnStation != null)
+            _tabKilnStation.Visible = nearby.Contains("kiln");
+
+        if (_activeStation == "kiln" && !nearby.Contains("kiln"))
+        {
+            if (nearby.Contains("crafter")) SwitchStation("crafter");
+            else if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
+            else SwitchStation("crafter");
+        }
+        else if (_activeStation == "tool_bench" &&
             !nearby.Contains("tool_bench") &&
             nearby.Contains("crafter"))
         {
@@ -534,7 +548,8 @@ public bool IsMounted =>
             );
 
         if (b.BlockId != "crafter" &&
-            b.BlockId != "tool_bench")
+            b.BlockId != "tool_bench" &&
+            b.BlockId != "kiln")
             return false;
 
         if (!_inventoryOpen)
@@ -550,6 +565,15 @@ public bool IsMounted =>
 
         if (_equipmentPanel != null)
             _equipmentPanel.Visible = true;
+
+        if (b.BlockId == "kiln")
+        {
+            Vector3I kilnPosition = new Vector3I(
+                Mathf.FloorToInt(tPos.X),
+                Mathf.FloorToInt(tPos.Y),
+                Mathf.FloorToInt(tPos.Z));
+            _kilnPanel?.SetKiln(kilnPosition, KilnManager.Instance?.GetSlots(kilnPosition));
+        }
 
         SwitchStation(b.BlockId);
 
@@ -1087,6 +1111,9 @@ public bool IsMounted =>
 
     if (_inventoryOpen)
         UpdateCraftingProximity();
+
+    if (_kilnPanel != null && _kilnPanel.Visible)
+        _kilnPanel.Refresh();
 
     // Automatically close the crate when the player gets too far away.
     if (_containerOpen)
@@ -2153,6 +2180,9 @@ if (key.Keycode == Key.Escape)
 
             if (_toolBenchPanel != null)
                 _toolBenchPanel.Visible = false;
+
+            if (_kilnPanel != null)
+                _kilnPanel.Visible = false;
 
             if (_stationTabBar != null)
                 _stationTabBar.Visible = false;
