@@ -65,7 +65,6 @@ public partial class KilnManager : Node
             return;
         }
         Instance = this;
-        ProcessMode = ProcessModeEnum.Always;
     }
 
     public override void _Ready()
@@ -83,6 +82,8 @@ public partial class KilnManager : Node
     {
         EnsureWorldLoaded();
         if (string.IsNullOrEmpty(_loadedWorldId)) return;
+        if (GetTree().Root.FindChild("ChunkManager", true, false) is not ChunkManager)
+            return;
 
         foreach (KilnState kiln in _kilns.Values)
             ProcessKiln(kiln, (float)delta);
