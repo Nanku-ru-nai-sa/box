@@ -32,6 +32,8 @@ public partial class KilnPanel : Control
         Refresh();
     }
 
+    public Vector3I GetKilnPosition() => _worldPosition;
+
     public InventorySlot GetSlot(int index)
     {
         return index >= 0 && index < 2 && _slots.Count > index ? _slots[index] : null;
