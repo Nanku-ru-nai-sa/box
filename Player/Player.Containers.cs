@@ -257,6 +257,9 @@ private void CloseCrateOnly()
     if (_toolBenchPanel != null)
         _toolBenchPanel.Visible = false;
 
+    if (_kilnPanel != null)
+        _kilnPanel.Visible = false;
+
     if (_stationTabBar != null)
         _stationTabBar.Visible = false;
 
@@ -356,6 +359,29 @@ private void CloseCrateOnly()
 
     _containerSlotPanels.Clear();
     _containerSlotLabels.Clear();
+}
+
+private void DropKilnContents(Vector3I worldPosition)
+{
+    if (_kilnPanel != null && _kilnPanel.Visible &&
+        _kilnPanel.GetKilnPosition() == worldPosition)
+    {
+        _kilnPanel.Visible = false;
+    }
+
+    List<InventorySlot> contents = KilnManager.Instance?.RemoveKiln(worldPosition);
+    if (contents == null) return;
+
+    Vector3 dropPosition = new Vector3(
+        worldPosition.X + 0.5f,
+        worldPosition.Y + 0.5f,
+        worldPosition.Z + 0.5f);
+
+    foreach (InventorySlot slot in contents)
+    {
+        if (slot == null || slot.IsEmpty) continue;
+        SpawnItemDrop(slot.ItemId, slot.Count, dropPosition);
+    }
 }
 
 private void DropContainerContents(
