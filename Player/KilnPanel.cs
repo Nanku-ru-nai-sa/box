@@ -42,6 +42,8 @@ public partial class KilnPanel : Control
     public void Refresh()
     {
         if (_slotPanels[0] == null) return;
+        var latestSlots = KilnManager.Instance?.GetSlots(_worldPosition);
+        if (latestSlots != null) _slots = latestSlots;
 
         for (int i = 0; i < 3; i++)
         {
