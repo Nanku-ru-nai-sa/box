@@ -735,6 +735,123 @@ public bool IsMounted =>
         UpdateCursorVisual();
     }
 
+    private void HandleKilnSlotClicked(int index, MouseButton button, bool shift)
+    {
+        if (_kilnPanel == null) return;
+        InventorySlot slot = _kilnPanel.GetSlot(index);
+        if (slot == null) return;
+
+        if (shift && button == MouseButton.Left)
+        {
+            if (slot.IsEmpty) return;
+            int remaining = AddItemToInventory(slot.ItemId, slot.Count);
+            slot.Count = remaining;
+            if (slot.Count <= 0) slot.Clear();
+        }
+        else if (button == MouseButton.Left)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count = slot.Count;
+                slot.Clear();
+            }
+            else
+            {
+                if (index == 1 &&
+                    (ItemRegistry.Instance?.GetItem(_heldSlot.ItemId)?.FuelBurnSeconds ?? 0f) <= 0f)
+                {
+                    ShowFeedback("That item cannot be used as fuel.");
+                    return;
+                }
+
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count = _heldSlot.Count;
+                    _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int maxStack = ItemRegistry.Instance?.GetItem(slot.ItemId)?.MaxStackSize ?? 64;
+                    int amount = Mathf.Min(maxStack - slot.Count, _heldSlot.Count);
+                    if (amount > 0)
+                    {
+                        slot.Count += amount;
+                        _heldSlot.Count -= amount;
+                        if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                    }
+                }
+                else
+                {
+                    (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
+                    (slot.Count, _heldSlot.Count) = (_heldSlot.Count, slot.Count);
+                }
+            }
+        }
+        else if (button == MouseButton.Right)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                int take = Mathf.CeilToInt(slot.Count / 2f);
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count = take;
+                slot.Count -= take;
+                if (slot.Count <= 0) slot.Clear();
+            }
+            else
+            {
+                if (index == 1 &&
+                    (ItemRegistry.Instance?.GetItem(_heldSlot.ItemId)?.FuelBurnSeconds ?? 0f) <= 0f)
+                {
+                    ShowFeedback("That item cannot be used as fuel.");
+                    return;
+                }
+
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count = 1;
+                    _heldSlot.Count--;
+                    if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int maxStack = ItemRegistry.Instance?.GetItem(slot.ItemId)?.MaxStackSize ?? 64;
+                    if (slot.Count < maxStack)
+                    {
+                        slot.Count++;
+                        _heldSlot.Count--;
+                        if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                    }
+                }
+            }
+        }
+
+        KilnManager.Instance?.NotifyChanged();
+        _kilnPanel.Refresh();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    private void HandleKilnOutputClicked()
+    {
+        if (_kilnPanel == null || !_heldSlot.IsEmpty) return;
+        var slots = KilnManager.Instance?.GetSlots(_kilnPanel.GetKilnPosition());
+        if (slots == null || slots.Count < 3 || slots[2].IsEmpty) return;
+
+        _heldSlot.ItemId = slots[2].ItemId;
+        _heldSlot.Count = slots[2].Count;
+        slots[2].Clear();
+
+        KilnManager.Instance?.NotifyChanged();
+        _kilnPanel.Refresh();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
     private void HandleToolBenchCenterClicked()
     {
         if (_toolBenchPanel == null)
