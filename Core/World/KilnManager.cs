@@ -82,15 +82,12 @@ public partial class KilnManager : Node
         EnsureWorldLoaded();
         if (string.IsNullOrEmpty(_loadedWorldId)) return;
 
-        bool changed = false;
         foreach (KilnState kiln in _kilns.Values)
-        {
-            if (ProcessKiln(kiln, (float)delta))
-                changed = true;
-        }
+            ProcessKiln(kiln, (float)delta);
 
+        // Avoid writing a save file every frame while a kiln is running.
         _saveTimer += (float)delta;
-        if (changed || _saveTimer >= 5f)
+        if (_saveTimer >= 2f)
         {
             _saveTimer = 0f;
             SaveKilns();
