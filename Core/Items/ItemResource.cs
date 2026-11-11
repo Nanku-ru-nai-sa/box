@@ -15,6 +15,8 @@ public partial class ItemResource : Resource
     [Export] public bool CanRotate { get; set; } = true;
     [Export] public bool IsStackable { get; set; } = true;
     [Export] public int MaxStackSize { get; set; } = 64;
+    // Zero means this item cannot be used as kiln fuel.
+    [Export] public float FuelBurnSeconds { get; set; } = 0f;
     [Export] public string[] Tags { get; set; } = new string[0];
     [Export] public Texture2D Icon { get; set; }
     [Export] public bool IsEquippable { get; set; } = false;
