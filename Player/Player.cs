@@ -426,6 +426,7 @@ public bool IsMounted =>
     {
         var found = new HashSet<string>();
         _hasNearbyKiln = false;
+        float nearestKilnDistance = float.MaxValue;
 
         var cm =
             GetTree().Root.FindChild(
@@ -461,13 +462,18 @@ public bool IsMounted =>
                     block.BlockId) >= 0)
             {
                 found.Add(block.BlockId);
-                if (block.BlockId == "kiln" && !_hasNearbyKiln)
+                if (block.BlockId == "kiln")
                 {
-                    _nearbyKilnPosition = new Vector3I(
-                        Mathf.FloorToInt(pos.X) + dx,
-                        Mathf.FloorToInt(pos.Y) + dy,
-                        Mathf.FloorToInt(pos.Z) + dz);
-                    _hasNearbyKiln = true;
+                    float distance = new Vector3(dx, dy, dz).Length();
+                    if (distance < nearestKilnDistance)
+                    {
+                        nearestKilnDistance = distance;
+                        _nearbyKilnPosition = new Vector3I(
+                            Mathf.FloorToInt(pos.X) + dx,
+                            Mathf.FloorToInt(pos.Y) + dy,
+                            Mathf.FloorToInt(pos.Z) + dz);
+                        _hasNearbyKiln = true;
+                    }
                 }
             }
         }
