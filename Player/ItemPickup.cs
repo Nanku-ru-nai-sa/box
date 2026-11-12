@@ -783,18 +783,39 @@ public partial class ItemPickup : Node3D
         }
 
 
+        var cm =
+            GetTree()
+                .Root
+                .FindChild(
+                    "ChunkManager",
+                    true,
+                    false
+                ) as ChunkManager;
+
+        // Flowing water can carry even items that had already settled.
+        if (cm != null)
+        {
+            Vector3I liquidPos = new Vector3I(
+                Mathf.FloorToInt(GlobalPosition.X),
+                Mathf.FloorToInt(GlobalPosition.Y - _restHeight),
+                Mathf.FloorToInt(GlobalPosition.Z));
+
+            Vector3 flow = cm.GetLiquidFlowVectorAtWorld(liquidPos);
+            if (flow.LengthSquared() < 0.001f)
+            {
+                liquidPos.Y -= 1;
+                flow = cm.GetLiquidFlowVectorAtWorld(liquidPos);
+            }
+
+            if (flow.LengthSquared() > 0.001f)
+            {
+                _velocity += flow * 4f * dt;
+                _settled = false;
+            }
+        }
+
         if (!_settled)
         {
-            var cm =
-                GetTree()
-                    .Root
-                    .FindChild(
-                        "ChunkManager",
-                        true,
-                        false
-                    ) as ChunkManager;
-
-
             _velocity.Y -=
                 Gravity *
                 dt;
