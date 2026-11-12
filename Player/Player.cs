@@ -1668,6 +1668,20 @@ if (_isBreaking)
         }
     }
 
+    // Flowing water carries the player in its travel direction.
+    ChunkManager liquidWorld = GetTree().Root.FindChild(
+        "ChunkManager", true, false) as ChunkManager;
+    if (liquidWorld != null)
+    {
+        Vector3I liquidPos = new Vector3I(
+            Mathf.FloorToInt(GlobalPosition.X),
+            Mathf.FloorToInt(GlobalPosition.Y + 0.5f),
+            Mathf.FloorToInt(GlobalPosition.Z));
+        Vector3 flow = liquidWorld.GetLiquidFlowVectorAtWorld(liquidPos);
+        if (flow.LengthSquared() > 0.001f)
+            velocity += flow * 5f * dt;
+    }
+
     Velocity = velocity;
 
     MoveAndSlide();
