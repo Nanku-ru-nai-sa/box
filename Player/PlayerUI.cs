@@ -846,7 +846,7 @@ private void OnSlotMouseEntered(int slotIndex)
         }
 
         _craftingLayer.CallDeferred("add_child", _stationTabBar);
-        UpdateStationSelector(new List<string>());
+        UpdateStationSelector(new List<(string Id, Vector3I Position, float Distance)>());
     }
 
     private void UpdateStationSelector(List<(string Id, Vector3I Position, float Distance)> nearbyStations)
