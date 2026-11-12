@@ -74,13 +74,13 @@ public partial class KilnPanel : Control
 
         AddLabel("Kiln", new Vector2(0, -24), 13, new Color(0.8f, 0.8f, 0.8f));
 
-        AddLabel("Input", new Vector2(19, -6), 11);
-        AddLabel("Fuel", new Vector2(19, 116), 11);
-        AddLabel("Output", new Vector2(187, 55), 11);
+        AddLabel("Input", new Vector2(16, -6), 11);
+        AddLabel("Fuel", new Vector2(16, 116), 11);
+        AddLabel("Output", new Vector2(199, 55), 11);
 
-        CreateSlot(0, new Vector2(19, 14), "Input");
-        CreateSlot(1, new Vector2(19, 136), "Fuel");
-        CreateSlot(2, new Vector2(187, 75), "Output");
+        CreateSlot(0, new Vector2(16, 14), "Input");
+        CreateSlot(1, new Vector2(16, 136), "Fuel");
+        CreateSlot(2, new Vector2(199, 75), "Output");
 
         var arrow = AddLabel("→", new Vector2(111, 72), 22);
         arrow.Size = new Vector2(45, 40);
