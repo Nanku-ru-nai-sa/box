@@ -17,6 +17,7 @@ public partial class BlockResource : Resource
 
     // Shared liquid-system metadata. Empty LiquidId means this is not a liquid.
     [Export] public string LiquidId { get; set; } = "";
+    [Export] public bool IsLiquidSource { get; set; } = false;
     public bool IsLiquid => !string.IsNullOrEmpty(LiquidId);
     [Export] public bool CanRotate { get; set; } = false;
     [Export] public bool CanHaveFeatures { get; set; } = true;
