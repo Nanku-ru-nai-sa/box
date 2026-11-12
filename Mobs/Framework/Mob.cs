@@ -1971,7 +1971,7 @@ private void RollAppearance()
 
         Vector3 flow = _liquidWorld.GetLiquidFlowVectorAtWorld(liquidPos);
         if (flow.LengthSquared() > 0.001f)
-            velocity += flow * 4f * dt;
+            velocity += flow * 3f;
     }
 
 
