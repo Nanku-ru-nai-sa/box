@@ -855,7 +855,7 @@ private void OnSlotMouseEntered(int slotIndex)
             return;
 
         _stationSlotIds[0] = "default";
-        SetStationSlot(0, "res://Assets/Textures/Blocks/crafter.png", "Hand Crafting (2x2)");
+        SetStationSlot(0, "crafter", "Hand Crafting (2x2)");
 
         for (int i = 1; i < 4; i++)
         {
@@ -869,9 +869,8 @@ private void OnSlotMouseEntered(int slotIndex)
                     "kiln" => "Kiln",
                     _ => id
                 };
-                string path = $"res://Assets/Textures/Blocks/{id}.png";
                 _stationSlotIds[i] = id;
-                SetStationSlot(i, path, name);
+                SetStationSlot(i, id, name);
             }
             else
             {
@@ -885,14 +884,11 @@ private void OnSlotMouseEntered(int slotIndex)
         RefreshStationSlotStyles();
     }
 
-    private void SetStationSlot(int index, string texturePath, string tooltip)
+    private void SetStationSlot(int index, string itemId, string tooltip)
     {
         _stationSlots[index].Visible = true;
         _stationSlots[index].TooltipText = tooltip;
-        _stationSlotIcons[index].Texture =
-            ResourceLoader.Exists(texturePath)
-                ? ResourceLoader.Load<Texture2D>(texturePath)
-                : null;
+        _stationSlotIcons[index].Texture = GetItemIcon(itemId);
     }
 
     private void HandleStationSlotClick(int index)
