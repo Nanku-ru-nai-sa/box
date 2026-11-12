@@ -1,0 +1,94 @@
+{
+  "id": "giraffe",
+  "displayName": "Giraffe",
+  "model": "res://Assets/Models/Mobs/giraffe/giraffe.gltf",
+
+  "stats": {
+    "maxHealth": 24.0,
+    "moveSpeed": 2.0,
+    "turnSpeed": 5.0
+  },
+
+  "behavior": {
+    "type": "passive",
+    "wanderRadius": 10.0,
+    "minIdleTime": 2.5,
+    "maxIdleTime": 7.0,
+    "detectionRange": 9.0,
+    "attackRange": 1.5,
+    "attackDamage": 0.0,
+    "attackInterval": 1.5
+  },
+
+  "flee": {
+    "enabled": true,
+    "distance": 9.0,
+    "speedMultiplier": 1.5
+  },
+
+  "food": {
+    "enabled": true,
+    "items": [
+      "leaves",
+      "apple"
+    ],
+    "healAmount": 5.0
+  },
+
+  "breeding": {
+    "enabled": true,
+    "foodItems": [
+      "leaves",
+      "apple"
+    ],
+    "litterMin": 1,
+    "litterMax": 1,
+    "breedCooldown": 1200.0,
+    "babyGrowthMin": 900.0,
+    "babyGrowthMax": 1500.0,
+    "seasons": [
+      "Spring",
+      "Summer",
+      "Autumn",
+      "Winter"
+    ]
+  },
+
+  "gender": {
+    "enabled": false,
+    "maleChance": 0.5,
+    "femaleChance": 0.5,
+    "maleModel": "",
+    "femaleModel": "",
+    "maleTexture": "",
+    "femaleTexture": ""
+  },
+
+  "appearance": {
+    "shinyEnabled": false,
+    "shinyChance": 0.0,
+    "bigEnabled": false,
+    "bigChance": 0.0,
+    "bigScale": 2.0
+  },
+
+  "spawning": {
+    "enabled": true,
+    "minGroupSize": 2,
+    "maxGroupSize": 3,
+    "minSpawnDistance": 16.0,
+    "maxSpawnDistance": 48.0,
+    "maxWorldCount": 8,
+    "seasons": [
+      "Spring",
+      "Summer",
+      "Autumn",
+      "Winter"
+    ]
+  },
+
+  "drops": {
+    "enabled": true,
+    "items": []
+  }
+}
