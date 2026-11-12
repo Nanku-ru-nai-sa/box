@@ -2159,9 +2159,22 @@ public Vector3 GetWorldSpawnPosition()
         }
     }
 
+    public bool IsWorldPositionLoaded(Vector3I worldPos)
+    {
+        return _chunks.ContainsKey(WorldToChunk(worldPos));
+    }
+
     public void NotifyLiquidChanged(Vector3I worldPos)
     {
-        _liquidManager?.Enqueue(worldPos);
+        if (_liquidManager == null) return;
+
+        _liquidManager.Enqueue(worldPos);
+        _liquidManager.Enqueue(worldPos + new Vector3I(1, 0, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(-1, 0, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 1, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, -1, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, 1));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, -1));
     }
 
     public BlockState GetBlockAtWorld(Vector3I worldPos)
