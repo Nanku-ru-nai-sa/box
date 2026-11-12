@@ -460,10 +460,6 @@ public bool IsMounted =>
         }
 
         stations.Sort((a, b) => a.Distance.CompareTo(b.Distance));
-
-        if (stations.Count > 3)
-            stations.RemoveRange(3, stations.Count - 3);
-
         return stations;
     }
 
