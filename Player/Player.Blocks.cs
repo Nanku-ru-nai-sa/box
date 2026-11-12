@@ -859,16 +859,27 @@ else if (b.BlockId is "crate" or "barrel")
                 placementRotation = towardPlayer.Z >= 0f ? (byte)2 : (byte)0;
         }
 
+        BlockState placedBlock = new BlockState
+        {
+            BlockId = _selectedBlockId,
+            BitMask = 0xFF,
+            Rotation = placementRotation
+        };
+
+        // A placed water block is a finite source. A spring block is marked
+        // as a permanent source by its BlockResource definition.
+        if (placedResource != null && placedResource.IsLiquid)
+        {
+            placedBlock.LiquidLevel = 16;
+            placedBlock.LiquidSource =
+                _selectedBlockId == "water" || placedResource.IsLiquidSource;
+        }
+
         tc.SetBlock(
             Mathf.FloorToInt(lp.X),
             Mathf.FloorToInt(lp.Y),
             Mathf.FloorToInt(lp.Z),
-            new BlockState
-            {
-                BlockId = _selectedBlockId,
-                BitMask = 0xFF,
-                Rotation = placementRotation
-            }
+            placedBlock
         );
 
         if (consume)
