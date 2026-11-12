@@ -8,6 +8,11 @@ public struct BlockState
     public byte Rotation;
     public string[] Features;
 
+    // Liquid simulation data. Level is measured in sixteenths (1-16).
+    public byte LiquidLevel;
+    public bool LiquidFalling;
+    public bool LiquidSource;
+
     public static readonly BlockState Air = new BlockState
     {
         BlockId = "air",
@@ -22,6 +27,9 @@ public struct BlockState
         BitMask = 0b11111111;
         Rotation = 0;
         Features = new string[0];
+        LiquidLevel = 0;
+        LiquidFalling = false;
+        LiquidSource = false;
     }
 
     public BlockState(string blockId, string[] features)
