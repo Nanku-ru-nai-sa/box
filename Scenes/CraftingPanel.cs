@@ -351,6 +351,22 @@ public partial class CraftingPanel : Control
     // TABS
     // =========================================================================
 
+    public void ShowCraftingGrid()
+    {
+        ShowTab(true);
+    }
+
+    public void ShowLearnedRecipes()
+    {
+        RefreshLearnedTab();
+        ShowTab(false);
+    }
+
+    public void ToggleRecipeMemory()
+    {
+        ShowTab(_learnedView.Visible);
+    }
+
     private void ShowTab(bool grid)
     {
         _gridView.Visible    = grid;
