@@ -280,8 +280,23 @@ Register(root);
         var water = new BlockResource();
         water.BlockId = "water"; water.DisplayName = "Water";
         water.IsSolid = false; water.CanChisel = false; water.IsTransparent = true;
+        water.LiquidId = "water";
         water.TextureTop = waterTex; water.TextureSide = waterTex; water.TextureBottom = waterTex;
         Register(water);
+
+        // Spring blocks are permanent water sources. The same liquid
+        // simulation handles their flow; only the source cell is special.
+        var waterSpring = new BlockResource();
+        waterSpring.BlockId = "water_spring";
+        waterSpring.DisplayName = "Water Spring";
+        waterSpring.IsSolid = false;
+        waterSpring.CanChisel = false;
+        waterSpring.IsTransparent = true;
+        waterSpring.LiquidId = "water";
+        waterSpring.TextureTop = waterTex;
+        waterSpring.TextureSide = waterTex;
+        waterSpring.TextureBottom = waterTex;
+        Register(waterSpring);
 
         var bedrock = new BlockResource();
         bedrock.BlockId = "bedrock"; bedrock.DisplayName = "Bedrock";
