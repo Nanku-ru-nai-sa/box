@@ -288,17 +288,29 @@ public partial class LiquidManager : Node
             return Vector3.Zero;
 
         BlockState state = _world.GetBlockAtWorld(pos);
-        if (state.IsAir() || state.LiquidSource)
+        if (state.IsAir())
             return Vector3.Zero;
 
         BlockResource resource = BlockRegistry.Instance.GetBlock(state.BlockId);
-        if (resource == null || !resource.IsLiquid || resource.IsLiquidSource)
+        if (resource == null || !resource.IsLiquid)
             return Vector3.Zero;
 
         if (state.LiquidFalling)
             return Vector3.Down;
 
-        int ownLevel = state.LiquidLevel <= 0 ? 16 : state.LiquidLevel;
+        Vector3I belowPos = pos + new Vector3I(0, -1, 0);
+        if (_world.IsWorldPositionLoaded(belowPos))
+        {
+            BlockState below = _world.GetBlockAtWorld(belowPos);
+            if (CanFlowInto(below, resource.LiquidId, 16))
+                return Vector3.Down;
+        }
+
+        int ownLevel = state.LiquidSource || resource.IsLiquidSource
+            ? HorizontalFlowStrength
+            : Mathf.Clamp(state.LiquidLevel <= 0 ? HorizontalFlowStrength : state.LiquidLevel,
+                1, HorizontalFlowStrength);
+
         Vector3 direction = Vector3.Zero;
 
         foreach (Vector3I offset in SideOffsets)
@@ -311,8 +323,21 @@ public partial class LiquidManager : Node
             if (!IsSameLiquid(neighbor, resource.LiquidId))
                 continue;
 
-            int neighborLevel = neighbor.LiquidLevel <= 0 ? 16 : neighbor.LiquidLevel;
-            if (neighborLevel > ownLevel)
+            BlockResource neighborResource =
+                BlockRegistry.Instance.GetBlock(neighbor.BlockId);
+
+            int neighborLevel = neighbor.LiquidSource ||
+                (neighborResource != null && neighborResource.IsLiquidSource)
+                    ? HorizontalFlowStrength
+                    : Mathf.Clamp(neighbor.LiquidLevel <= 0
+                        ? HorizontalFlowStrength
+                        : neighbor.LiquidLevel, 1, HorizontalFlowStrength);
+
+            // Combine incoming and outgoing flow. This lets currents turn
+            // naturally at bends and split toward multiple lower channels.
+            if (ownLevel > neighborLevel)
+                direction += new Vector3(offset.X, 0f, offset.Z);
+            else if (neighborLevel > ownLevel)
                 direction -= new Vector3(offset.X, 0f, offset.Z);
         }
 
