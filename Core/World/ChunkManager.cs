@@ -17,6 +17,7 @@ public partial class ChunkManager : Node3D
     public WorldGenType WorldType { get; set; } = WorldGenType.Normal;
     public WorldGenTheme WorldTheme { get; set; } = WorldGenTheme.Normal;
     private TreeGrowth _treeGrowth;
+    private LiquidManager _liquidManager;
 
     // ---- FLAT WORLD SETTINGS ----
     [ExportGroup("Flat World")]
@@ -401,6 +402,9 @@ public partial class ChunkManager : Node3D
             GD.Print("ChunkManager: Player found");
 
         GD.Print("Calling UpdateChunks...");
+        _liquidManager = new LiquidManager(this);
+        AddChild(_liquidManager);
+
         UpdateChunks();
 
         _treeGrowth = new TreeGrowth(this);
@@ -408,7 +412,9 @@ public partial class ChunkManager : Node3D
         VoxelPathfinder.IsSolidBlock = pos =>
 {
     var block = GetBlockAtWorld(pos);
-    return !block.IsAir() && block.BlockId != "water";
+    if (block.IsAir()) return false;
+    var resource = BlockRegistry.Instance.GetBlock(block.BlockId);
+    return resource == null || !resource.IsLiquid;
     
 };
         SetProcess(true);
@@ -546,7 +552,10 @@ public partial class ChunkManager : Node3D
                 {
                     ["id"] = mod.Value.BlockId,
                     ["mask"] = (int)mod.Value.BitMask,
-                    ["rotation"] = (int)mod.Value.Rotation
+                    ["rotation"] = (int)mod.Value.Rotation,
+                    ["liquid_level"] = (int)mod.Value.LiquidLevel,
+                    ["liquid_falling"] = mod.Value.LiquidFalling,
+                    ["liquid_source"] = mod.Value.LiquidSource
                 };
                 saveData[key] = blockData;
             }
@@ -719,7 +728,10 @@ public Vector2? LoadPlayerLook()
                 {
                     BlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air",
                     BitMask = blockData.ContainsKey("mask") ? (byte)(int)blockData["mask"] : (byte)0xFF,
-                    Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0
+                    Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0,
+                    LiquidLevel = blockData.ContainsKey("liquid_level") ? (byte)(int)blockData["liquid_level"] : (byte)0,
+                    LiquidFalling = blockData.ContainsKey("liquid_falling") && (bool)blockData["liquid_falling"],
+                    LiquidSource = blockData.ContainsKey("liquid_source") && (bool)blockData["liquid_source"]
                 };
             }
 
@@ -783,6 +795,8 @@ public Vector2? LoadPlayerLook()
 
         // Load chunks closest to the player first so you don't fall into
         // the void waiting for distant chunks to finish.
+        _liquidManager?.ProcessLiquidTick(delta);
+
         _chunksToLoad.Sort((a, b) =>
         {
             float distA = (a - playerChunk).LengthSquared();
@@ -816,6 +830,28 @@ public Vector2? LoadPlayerLook()
         chunk.Initialize(chunkPos);
         GenerateChunk(chunk, chunkPos);
         LoadChunkModifications(chunk, chunkPos);
+
+        // Queue existing liquids after terrain and saved modifications are applied.
+        for (int x = 0; x < Chunk.SIZE; x++)
+        for (int y = 0; y < Chunk.HEIGHT; y++)
+        for (int z = 0; z < Chunk.SIZE; z++)
+        {
+            BlockState state = chunk.GetBlock(x, y, z);
+            if (!state.IsAir())
+            {
+                BlockResource liquidResource = BlockRegistry.Instance.GetBlock(state.BlockId);
+                if (liquidResource != null && liquidResource.IsLiquid)
+                {
+                    Vector3I world = new Vector3I(
+                        chunkPos.X * Chunk.SIZE + x,
+                        chunkPos.Y * Chunk.HEIGHT + y,
+                        chunkPos.Z * Chunk.SIZE + z
+                    );
+                    _liquidManager?.Enqueue(world);
+                }
+            }
+        }
+
         chunk.BuildMesh();
         _chunks[chunkPos] = chunk;
 
@@ -1466,7 +1502,7 @@ public Vector3 GetWorldSpawnPosition()
                         // grass block" for One Block).
                         bool isSingleLayerWorld = WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock;
                         block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
-                            ? new BlockState { BlockId = "water", BitMask = 0xFF }
+                            ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16 }
                             : BlockState.Air;
                     }
                     else
@@ -2125,6 +2161,11 @@ public Vector3 GetWorldSpawnPosition()
                     chunk.SetBlockInternal(x, topY, z, new BlockState { BlockId = "leaves", BitMask = 0xFF });
             }
         }
+    }
+
+    public void NotifyLiquidChanged(Vector3I worldPos)
+    {
+        _liquidManager?.Enqueue(worldPos);
     }
 
     public BlockState GetBlockAtWorld(Vector3I worldPos)
