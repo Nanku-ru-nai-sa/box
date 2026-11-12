@@ -8,7 +8,7 @@ public struct BlockState
     public byte Rotation;
     public string[] Features;
 
-    // Liquid simulation data. Level is measured in sixteenths (1-16).
+    // Liquid simulation data. Sources use 16; horizontal flow uses strengths 1-7.
     public byte LiquidLevel;
     public bool LiquidFalling;
     public bool LiquidSource;
