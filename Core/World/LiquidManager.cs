@@ -108,9 +108,21 @@ public partial class LiquidManager : Node
                 if (!IsSameLiquid(neighbor, liquidId))
                     continue;
 
-                int neighborLevel = neighbor.LiquidLevel <= 0
-                    ? 16
-                    : Mathf.Clamp(neighbor.LiquidLevel, 1, 16);
+                BlockResource neighborResource =
+                    BlockRegistry.Instance.GetBlock(neighbor.BlockId);
+
+                // Sources and falling columns provide the normal seven-block
+                // horizontal range; their full vertical level must not turn
+                // into a fifteen-block sideways flow.
+                bool neighborIsSource =
+                    neighbor.LiquidSource ||
+                    (neighborResource != null && neighborResource.IsLiquidSource);
+
+                int neighborLevel = neighborIsSource || neighbor.LiquidFalling
+                    ? HorizontalFlowStrength
+                    : (neighbor.LiquidLevel <= 0
+                        ? HorizontalFlowStrength
+                        : Mathf.Clamp(neighbor.LiquidLevel, 1, HorizontalFlowStrength));
 
                 if (neighborLevel > 1)
                     supportedLevel = Mathf.Max(supportedLevel, neighborLevel - 1);
