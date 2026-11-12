@@ -2783,35 +2783,93 @@ private void AddQuadCropped(
         int y,
         int z)
     {
-        // Water uses full block height for now, matching Minecraft's simple
-        // flowing-water appearance instead of rendering 1/16 pixel steps.
-        const float height = 1.0f;
+        float northWest = GetLiquidCornerHeight(x, y, z, 0, 0, resource.LiquidId);
+        float northEast = GetLiquidCornerHeight(x, y, z, 1, 0, resource.LiquidId);
+        float southEast = GetLiquidCornerHeight(x, y, z, 1, 1, resource.LiquidId);
+        float southWest = GetLiquidCornerHeight(x, y, z, 0, 1, resource.LiquidId);
 
         BlockState above = GetBlockCrossChunk(x, y + 1, z);
         bool sameAbove = IsSameLiquid(above, resource.LiquidId);
 
         if (!sameAbove)
         {
+            // Corner heights are averaged from nearby liquid cells to create
+            // the sloped surface used by Minecraft-style flowing water.
             AddQuad(
                 GetOrCreateSurface(surfaces, resource.TextureTop),
-                GetCustomShapeFaceVertices(x, y, z, 1f, height, 1f, FaceDirection.Top)
+                new Vector3[]
+                {
+                    new Vector3(x,     y + northWest, z),
+                    new Vector3(x + 1, y + northEast, z),
+                    new Vector3(x + 1, y + southEast, z + 1),
+                    new Vector3(x,     y + southWest, z + 1)
+                }
             );
         }
 
-        // Draw the underside only when there is no liquid directly below.
         BlockState below = GetBlockCrossChunk(x, y - 1, z);
         if (below.IsAir())
         {
             AddQuad(
                 GetOrCreateSurface(surfaces, resource.TextureBottom),
-                GetCustomShapeFaceVertices(x, y, z, 1f, height, 1f, FaceDirection.Bottom)
+                GetCustomShapeFaceVertices(x, y, z, 1f, 1f, 1f, FaceDirection.Bottom)
             );
         }
 
-        AddLiquidSide(FaceDirection.North, x, y, z, height, resource, surfaces);
-        AddLiquidSide(FaceDirection.South, x, y, z, height, resource, surfaces);
-        AddLiquidSide(FaceDirection.West, x, y, z, height, resource, surfaces);
-        AddLiquidSide(FaceDirection.East, x, y, z, height, resource, surfaces);
+        AddLiquidSide(FaceDirection.North, x, y, z, resource, surfaces);
+        AddLiquidSide(FaceDirection.South, x, y, z, resource, surfaces);
+        AddLiquidSide(FaceDirection.West, x, y, z, resource, surfaces);
+        AddLiquidSide(FaceDirection.East, x, y, z, resource, surfaces);
+    }
+
+    private float GetLiquidCellHeight(int x, int y, int z, string liquidId)
+    {
+        BlockState cell = GetBlockCrossChunk(x, y, z);
+        if (!IsSameLiquid(cell, liquidId))
+            return 0f;
+
+        if (IsSameLiquid(GetBlockCrossChunk(x, y + 1, z), liquidId))
+            return 1f;
+
+        BlockResource cellResource = BlockRegistry.Instance.GetBlock(cell.BlockId);
+        if (cell.LiquidSource || (cellResource != null && cellResource.IsLiquidSource))
+            return 1f;
+
+        int level = cell.LiquidLevel <= 0 ? 8 : Mathf.Clamp(cell.LiquidLevel, 1, 8);
+        return level / 8f;
+    }
+
+    private float GetLiquidCornerHeight(
+        int x,
+        int y,
+        int z,
+        int cornerX,
+        int cornerZ,
+        string liquidId)
+    {
+        int minX = cornerX == 0 ? -1 : 0;
+        int minZ = cornerZ == 0 ? -1 : 0;
+
+        float total = 0f;
+        int samples = 0;
+
+        for (int dx = minX; dx <= minX + 1; dx++)
+        {
+            for (int dz = minZ; dz <= minZ + 1; dz++)
+            {
+                float height = GetLiquidCellHeight(x + dx, y, z + dz, liquidId);
+                if (height <= 0f)
+                    continue;
+
+                total += height;
+                samples++;
+            }
+        }
+
+        if (samples == 0)
+            return GetLiquidCellHeight(x, y, z, liquidId);
+
+        return total / samples;
     }
 
     private void AddLiquidSide(
@@ -2819,11 +2877,12 @@ private void AddQuadCropped(
         int x,
         int y,
         int z,
-        float height,
         BlockResource resource,
         Dictionary<Texture2D, SurfaceTool> surfaces)
     {
-        int nx = x, nz = z;
+        int nx = x;
+        int nz = z;
+
         switch (face)
         {
             case FaceDirection.North: nz--; break;
@@ -2833,44 +2892,118 @@ private void AddQuadCropped(
         }
 
         BlockState neighbor = GetBlockCrossChunk(nx, y, nz);
-        float neighborHeight = 0f;
+        BlockResource neighborResource = neighbor.IsAir()
+            ? null
+            : BlockRegistry.Instance.GetBlock(neighbor.BlockId);
 
-        if (!neighbor.IsAir())
+        bool sameLiquid = neighborResource != null &&
+            neighborResource.IsLiquid &&
+            neighborResource.LiquidId == resource.LiquidId;
+
+        if (!neighbor.IsAir() &&
+            !sameLiquid &&
+            neighborResource != null &&
+            !neighborResource.IsTransparent &&
+            !neighborResource.IsCustomShape)
+            return;
+
+        float currentA, currentB, neighborA = 0f, neighborB = 0f;
+
+        switch (face)
         {
-            BlockResource neighborResource =
-                BlockRegistry.Instance.GetBlock(neighbor.BlockId);
+            case FaceDirection.North:
+                currentA = GetLiquidCornerHeight(x, y, z, 0, 0, resource.LiquidId);
+                currentB = GetLiquidCornerHeight(x, y, z, 1, 0, resource.LiquidId);
+                if (sameLiquid)
+                {
+                    neighborA = GetLiquidCornerHeight(nx, y, nz, 0, 1, resource.LiquidId);
+                    neighborB = GetLiquidCornerHeight(nx, y, nz, 1, 1, resource.LiquidId);
+                }
+                break;
 
-            if (neighborResource != null &&
-                neighborResource.IsLiquid &&
-                neighborResource.LiquidId == resource.LiquidId)
-            {
-                neighborHeight = 1.0f;
+            case FaceDirection.South:
+                currentA = GetLiquidCornerHeight(x, y, z, 0, 1, resource.LiquidId);
+                currentB = GetLiquidCornerHeight(x, y, z, 1, 1, resource.LiquidId);
+                if (sameLiquid)
+                {
+                    neighborA = GetLiquidCornerHeight(nx, y, nz, 0, 0, resource.LiquidId);
+                    neighborB = GetLiquidCornerHeight(nx, y, nz, 1, 0, resource.LiquidId);
+                }
+                break;
 
-                if (neighborHeight >= height)
-                    return;
-            }
-            else if (neighborResource != null &&
-                     !neighborResource.IsTransparent &&
-                     !neighborResource.IsCustomShape)
-            {
-                return;
-            }
+            case FaceDirection.West:
+                currentA = GetLiquidCornerHeight(x, y, z, 0, 1, resource.LiquidId);
+                currentB = GetLiquidCornerHeight(x, y, z, 0, 0, resource.LiquidId);
+                if (sameLiquid)
+                {
+                    neighborA = GetLiquidCornerHeight(nx, y, nz, 1, 1, resource.LiquidId);
+                    neighborB = GetLiquidCornerHeight(nx, y, nz, 1, 0, resource.LiquidId);
+                }
+                break;
+
+            default: // East
+                currentA = GetLiquidCornerHeight(x, y, z, 1, 0, resource.LiquidId);
+                currentB = GetLiquidCornerHeight(x, y, z, 1, 1, resource.LiquidId);
+                if (sameLiquid)
+                {
+                    neighborA = GetLiquidCornerHeight(nx, y, nz, 0, 0, resource.LiquidId);
+                    neighborB = GetLiquidCornerHeight(nx, y, nz, 0, 1, resource.LiquidId);
+                }
+                break;
         }
 
-        float sideHeight = height - neighborHeight;
-        if (sideHeight <= 0f) return;
+        if (currentA <= neighborA + 0.001f &&
+            currentB <= neighborB + 0.001f)
+            return;
+
+        Vector3[] vertices;
+
+        switch (face)
+        {
+            case FaceDirection.North:
+                vertices = new Vector3[]
+                {
+                    new Vector3(x,     y + neighborA, z),
+                    new Vector3(x + 1, y + neighborB, z),
+                    new Vector3(x + 1, y + currentB, z),
+                    new Vector3(x,     y + currentA, z)
+                };
+                break;
+
+            case FaceDirection.South:
+                vertices = new Vector3[]
+                {
+                    new Vector3(x + 1, y + neighborB, z + 1),
+                    new Vector3(x,     y + neighborA, z + 1),
+                    new Vector3(x,     y + currentA, z + 1),
+                    new Vector3(x + 1, y + currentB, z + 1)
+                };
+                break;
+
+            case FaceDirection.West:
+                vertices = new Vector3[]
+                {
+                    new Vector3(x, y + neighborA, z + 1),
+                    new Vector3(x, y + neighborB, z),
+                    new Vector3(x, y + currentB, z),
+                    new Vector3(x, y + currentA, z + 1)
+                };
+                break;
+
+            default: // East
+                vertices = new Vector3[]
+                {
+                    new Vector3(x + 1, y + neighborA, z),
+                    new Vector3(x + 1, y + neighborB, z + 1),
+                    new Vector3(x + 1, y + currentB, z + 1),
+                    new Vector3(x + 1, y + currentA, z)
+                };
+                break;
+        }
 
         AddQuad(
-            GetOrCreateSurface(
-                surfaces,
-                face == FaceDirection.North || face == FaceDirection.South
-                    ? resource.TextureSide
-                    : resource.TextureSide
-            ),
-            GetCustomShapeFaceVertices(
-                x, y + neighborHeight, z,
-                1f, sideHeight, 1f, face
-            )
+            GetOrCreateSurface(surfaces, resource.TextureSide),
+            vertices
         );
     }
 
