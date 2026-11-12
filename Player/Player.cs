@@ -2306,7 +2306,7 @@ if (key.Keycode == Key.Escape)
             if (_stationTabBar != null)
                 _stationTabBar.Visible = false;
 
-            _activeStation = "crafter";
+            _activeStation = "default";
 
             EndDrag();
 
