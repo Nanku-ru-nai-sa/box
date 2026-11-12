@@ -849,7 +849,7 @@ private void OnSlotMouseEntered(int slotIndex)
         UpdateStationSelector(new List<string>());
     }
 
-    private void UpdateStationSelector(List<string> nearbyStations)
+    private void UpdateStationSelector(List<(string Id, Vector3I Position, float Distance)> nearbyStations)
     {
         if (_stationTabBar == null)
             return;
@@ -861,7 +861,8 @@ private void OnSlotMouseEntered(int slotIndex)
         {
             if (i - 1 < nearbyStations.Count)
             {
-                string id = nearbyStations[i - 1];
+                var station = nearbyStations[i - 1];
+                string id = station.Id;
                 string name = id switch
                 {
                     "crafter" => "Crafter (3x3)",
@@ -870,6 +871,7 @@ private void OnSlotMouseEntered(int slotIndex)
                     _ => id
                 };
                 _stationSlotIds[i] = id;
+                _stationSlotPositions[i] = station.Position;
                 SetStationSlot(i, id, name);
             }
             else
@@ -910,6 +912,17 @@ private void OnSlotMouseEntered(int slotIndex)
                 _craftingPanel?.ShowCraftingGrid();
             }
             return;
+        }
+
+        _activeStationPosition = _stationSlotPositions[index];
+
+        if (stationId == "kiln")
+        {
+            _kilnPanel?.SetKiln(
+                _activeStationPosition,
+                KilnManager.Instance?.GetSlots(_activeStationPosition)
+            );
+            _kilnPanelHasPosition = true;
         }
 
         SwitchStation(stationId);
