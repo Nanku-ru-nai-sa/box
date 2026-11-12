@@ -437,6 +437,8 @@ public partial class ChunkManager : Node3D
 
     public override void _Process(double delta)
     {
+        _liquidManager?.ProcessLiquidTick(delta);
+
         if (_player == null)
         {
             var found = GetTree().Root.FindChild("player", true, false);
@@ -795,8 +797,6 @@ public Vector2? LoadPlayerLook()
 
         // Load chunks closest to the player first so you don't fall into
         // the void waiting for distant chunks to finish.
-        _liquidManager?.ProcessLiquidTick(delta);
-
         _chunksToLoad.Sort((a, b) =>
         {
             float distA = (a - playerChunk).LengthSquared();
@@ -831,24 +831,19 @@ public Vector2? LoadPlayerLook()
         GenerateChunk(chunk, chunkPos);
         LoadChunkModifications(chunk, chunkPos);
 
-        // Queue existing liquids after terrain and saved modifications are applied.
-        for (int x = 0; x < Chunk.SIZE; x++)
-        for (int y = 0; y < Chunk.HEIGHT; y++)
-        for (int z = 0; z < Chunk.SIZE; z++)
+        // Re-queue liquid blocks from saved modifications. Generated liquids
+        // are queued directly by Chunk.SetBlockInternal during world generation.
+        foreach (var mod in chunk.GetModifications())
         {
-            BlockState state = chunk.GetBlock(x, y, z);
-            if (!state.IsAir())
+            BlockResource liquidResource = BlockRegistry.Instance.GetBlock(mod.Value.BlockId);
+            if (liquidResource != null && liquidResource.IsLiquid)
             {
-                BlockResource liquidResource = BlockRegistry.Instance.GetBlock(state.BlockId);
-                if (liquidResource != null && liquidResource.IsLiquid)
-                {
-                    Vector3I world = new Vector3I(
-                        chunkPos.X * Chunk.SIZE + x,
-                        chunkPos.Y * Chunk.HEIGHT + y,
-                        chunkPos.Z * Chunk.SIZE + z
-                    );
-                    _liquidManager?.Enqueue(world);
-                }
+                Vector3I world = new Vector3I(
+                    chunkPos.X * Chunk.SIZE + mod.Key.X,
+                    chunkPos.Y * Chunk.HEIGHT + mod.Key.Y,
+                    chunkPos.Z * Chunk.SIZE + mod.Key.Z
+                );
+                _liquidManager?.Enqueue(world);
             }
         }
 
