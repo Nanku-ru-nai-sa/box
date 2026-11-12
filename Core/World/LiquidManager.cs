@@ -166,7 +166,13 @@ public partial class LiquidManager : Node
         if (spreadLevel <= 0)
             return;
 
-        foreach (Vector3I offset in SideOffsets)
+        // Prefer directions that reach a drop, like Minecraft. Search up to
+        // four blocks away from each possible direction; if no nearby drop
+        // exists, water spreads evenly across every available side.
+        List<Vector3I> flowDirections =
+            GetBestFlowDirections(pos, liquidId, spreadLevel);
+
+        foreach (Vector3I offset in flowDirections)
         {
             Vector3I targetPos = pos + offset;
             if (!_world.IsWorldPositionLoaded(targetPos))
@@ -176,6 +182,104 @@ public partial class LiquidManager : Node
             if (CanFlowInto(target, liquidId, spreadLevel))
                 WriteLiquid(targetPos, liquidId, spreadLevel, false, false);
         }
+    }
+
+    private List<Vector3I> GetBestFlowDirections(
+        Vector3I origin,
+        string liquidId,
+        int spreadLevel)
+    {
+        var available = new List<Vector3I>();
+        int bestDistance = int.MaxValue;
+        var best = new List<Vector3I>();
+
+        foreach (Vector3I offset in SideOffsets)
+        {
+            Vector3I candidate = origin + offset;
+            if (!_world.IsWorldPositionLoaded(candidate))
+                continue;
+
+            BlockState target = _world.GetBlockAtWorld(candidate);
+            if (!CanFlowInto(target, liquidId, spreadLevel))
+                continue;
+
+            available.Add(offset);
+
+            int dropDistance = FindDropDistance(candidate, liquidId, spreadLevel);
+            if (dropDistance < 0)
+                continue;
+
+            if (dropDistance < bestDistance)
+            {
+                bestDistance = dropDistance;
+                best.Clear();
+                best.Add(offset);
+            }
+            else if (dropDistance == bestDistance)
+            {
+                best.Add(offset);
+            }
+        }
+
+        // No drop found nearby: spread in all valid directions.
+        return best.Count > 0 ? best : available;
+    }
+
+    private int FindDropDistance(
+        Vector3I start,
+        string liquidId,
+        int spreadLevel)
+    {
+        var positions = new Queue<(Vector3I position, int distance)>();
+        var visited = new HashSet<Vector3I>();
+
+        positions.Enqueue((start, 0));
+        visited.Add(start);
+
+        while (positions.Count > 0)
+        {
+            var current = positions.Dequeue();
+            Vector3I belowPos = current.position + new Vector3I(0, -1, 0);
+
+            if (_world.IsWorldPositionLoaded(belowPos))
+            {
+                BlockState below = _world.GetBlockAtWorld(belowPos);
+                if (CanFlowInto(below, liquidId, 16))
+                    return current.distance;
+            }
+
+            if (current.distance >= 4)
+                continue;
+
+            foreach (Vector3I offset in SideOffsets)
+            {
+                Vector3I next = current.position + offset;
+                if (!visited.Add(next) || !_world.IsWorldPositionLoaded(next))
+                    continue;
+
+                BlockState nextState = _world.GetBlockAtWorld(next);
+                if (nextState.IsAir())
+                {
+                    positions.Enqueue((next, current.distance + 1));
+                    continue;
+                }
+
+                if (!IsSameLiquid(nextState, liquidId))
+                    continue;
+
+                BlockResource nextResource =
+                    BlockRegistry.Instance.GetBlock(nextState.BlockId);
+
+                // Do not route through another source block or a blocked cell.
+                if (nextState.LiquidSource ||
+                    (nextResource != null && nextResource.IsLiquidSource))
+                    continue;
+
+                positions.Enqueue((next, current.distance + 1));
+            }
+        }
+
+        return -1;
     }
 
     public Vector3 GetFlowVector(Vector3I pos)
