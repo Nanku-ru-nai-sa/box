@@ -938,6 +938,27 @@ public Vector2? LoadPlayerLook()
         return caveValue < CaveThreshold * bottomFade * radiusMod;
     }
 
+    private bool IsNaturalSpringSpot(int worldX, int worldY, int worldZ)
+    {
+        // Require solid rock immediately above and below so springs form
+        // inside enclosed cave spaces rather than on the open landscape.
+        if (GetDensity(worldX, worldY + 1, worldZ) <= 0f ||
+            GetDensity(worldX, worldY - 1, worldZ) <= 0f)
+            return false;
+
+        // Stable coordinate hash: the same world seed always places springs
+        // in the same locations, without relying on runtime random numbers.
+        unchecked
+        {
+            uint hash = (uint)(worldX * 73856093) ^
+                        (uint)(worldY * 19349663) ^
+                        (uint)(worldZ * 83492791) ^
+                        (uint)Seed;
+
+            return hash % 65536u == 0u;
+        }
+    }
+
     private float GetDensity(int worldX, int worldY, int worldZ)
     {
         if (WorldType == WorldGenType.Flat)
@@ -1497,9 +1518,32 @@ public Vector3 GetWorldSpawnPosition()
                         // single layer of grass block" (or "a single dirt
                         // grass block" for One Block).
                         bool isSingleLayerWorld = WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock;
-                        block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
-                            ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16 }
-                            : BlockState.Air;
+
+                        // Rare natural springs appear in enclosed underground cave
+                        // pockets. They use the same source block as player-placed
+                        // springs, so both behave identically in the liquid system.
+                        bool naturalSpring =
+                            WorldType == WorldGenType.Normal &&
+                            worldY >= CaveMinY &&
+                            worldY < waterFloor &&
+                            IsNaturalSpringSpot(worldX, worldY, worldZ);
+
+                        if (naturalSpring)
+                        {
+                            block = new BlockState
+                            {
+                                BlockId = "water_spring",
+                                BitMask = 0xFF,
+                                LiquidLevel = 16,
+                                LiquidSource = true
+                            };
+                        }
+                        else
+                        {
+                            block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
+                                ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16 }
+                                : BlockState.Air;
+                        }
                     }
                     else
                     {
