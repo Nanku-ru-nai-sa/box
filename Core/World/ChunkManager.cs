@@ -2224,6 +2224,11 @@ public Vector3 GetWorldSpawnPosition()
         return _chunks.ContainsKey(WorldToChunk(worldPos));
     }
 
+    public Vector3 GetLiquidFlowVectorAtWorld(Vector3I worldPos)
+    {
+        return _liquidManager?.GetFlowVector(worldPos) ?? Vector3.Zero;
+    }
+
     public void NotifyLiquidChanged(Vector3I worldPos)
     {
         if (_liquidManager == null) return;
