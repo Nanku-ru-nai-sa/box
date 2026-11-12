@@ -1679,7 +1679,7 @@ if (_isBreaking)
             Mathf.FloorToInt(GlobalPosition.Z));
         Vector3 flow = liquidWorld.GetLiquidFlowVectorAtWorld(liquidPos);
         if (flow.LengthSquared() > 0.001f)
-            velocity += flow * 5f * dt;
+            velocity += flow * 3f;
     }
 
     Velocity = velocity;
