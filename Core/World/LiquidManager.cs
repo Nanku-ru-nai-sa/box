@@ -2,8 +2,11 @@ using Godot;
 using System.Collections.Generic;
 
 /// <summary>
-/// Shared finite-liquid simulation. Liquids are registered by BlockResource.LiquidId,
-/// so future liquids can use this same flow engine without adding per-liquid logic.
+/// Shared finite-liquid simulation.
+/// Ordinary source blocks create finite flowing liquid. A liquid resource marked
+/// IsLiquidSource (such as water_spring) is a permanent source.
+/// Flowing cells are recalculated from their neighbors so they drain away when
+/// their original source is removed.
 /// </summary>
 public partial class LiquidManager : Node
 {
@@ -11,8 +14,10 @@ public partial class LiquidManager : Node
     private readonly Queue<Vector3I> _queue = new();
     private readonly HashSet<Vector3I> _queued = new();
     private float _tickTimer;
+
     private const float TickInterval = 0.12f;
     private const int MaxUpdatesPerTick = 220;
+
     private static readonly Vector3I[] SideOffsets =
     {
         new Vector3I(1, 0, 0),
@@ -21,9 +26,7 @@ public partial class LiquidManager : Node
         new Vector3I(0, 0, -1)
     };
 
-    public LiquidManager()
-    {
-    }
+    public LiquidManager() { }
 
     public void SetWorld(ChunkManager world)
     {
@@ -53,35 +56,98 @@ public partial class LiquidManager : Node
 
     private void UpdateLiquid(Vector3I pos)
     {
-        if (_world == null) return;
+        if (_world == null || !_world.IsWorldPositionLoaded(pos))
+            return;
 
         BlockState state = _world.GetBlockAtWorld(pos);
-        if (state.IsAir()) return;
+        if (state.IsAir())
+            return;
 
         BlockResource resource = BlockRegistry.Instance.GetBlock(state.BlockId);
-        if (resource == null || !resource.IsLiquid) return;
+        if (resource == null || !resource.IsLiquid)
+            return;
 
         string liquidId = resource.LiquidId;
-        bool isSource = resource.IsLiquidSource || state.LiquidSource;
-        int level = isSource ? 16 : (state.LiquidLevel <= 0 ? 16 : Mathf.Clamp(state.LiquidLevel, 1, 16));
+        bool permanentSource = resource.IsLiquidSource;
+        bool ordinarySource = state.LiquidSource;
+        bool isSource = permanentSource || ordinarySource;
 
-        // Downward flow always wins. A falling cell fills the entire target cell.
+        int level = isSource
+            ? 16
+            : Mathf.Clamp(state.LiquidLevel <= 0 ? 16 : state.LiquidLevel, 1, 16);
+
+        bool falling = state.LiquidFalling;
+
+        // Flowing cells must be supported by a source or another stronger
+        // flowing cell. This is what makes a finite flow disappear after its
+        // original source is removed, instead of sustaining itself forever.
+        if (!isSource)
+        {
+            int supportedLevel = 0;
+            bool supportedByAbove = false;
+
+            Vector3I abovePos = pos + new Vector3I(0, 1, 0);
+            if (_world.IsWorldPositionLoaded(abovePos))
+            {
+                BlockState above = _world.GetBlockAtWorld(abovePos);
+                if (IsSameLiquid(above, liquidId))
+                {
+                    supportedLevel = 16;
+                    supportedByAbove = true;
+                }
+            }
+
+            foreach (Vector3I offset in SideOffsets)
+            {
+                Vector3I neighborPos = pos + offset;
+                if (!_world.IsWorldPositionLoaded(neighborPos))
+                    continue;
+
+                BlockState neighbor = _world.GetBlockAtWorld(neighborPos);
+                if (!IsSameLiquid(neighbor, liquidId))
+                    continue;
+
+                int neighborLevel = neighbor.LiquidLevel <= 0
+                    ? 16
+                    : Mathf.Clamp(neighbor.LiquidLevel, 1, 16);
+
+                if (neighborLevel > 1)
+                    supportedLevel = Mathf.Max(supportedLevel, neighborLevel - 1);
+            }
+
+            if (supportedLevel <= 0)
+            {
+                _world.SetBlockAtWorld(pos, BlockState.Air);
+                return;
+            }
+
+            level = supportedLevel;
+            falling = supportedByAbove;
+
+            if (state.LiquidLevel != level || state.LiquidFalling != falling)
+            {
+                state.LiquidLevel = (byte)level;
+                state.LiquidFalling = falling;
+                _world.SetBlockAtWorld(pos, state);
+            }
+        }
+
+        // Falling takes priority: fill the block below before spreading sideways.
         Vector3I belowPos = pos + new Vector3I(0, -1, 0);
-        if (!_world.IsWorldPositionLoaded(belowPos)) return;
+        if (!_world.IsWorldPositionLoaded(belowPos))
+            return;
 
         BlockState below = _world.GetBlockAtWorld(belowPos);
         if (CanFlowInto(below, liquidId, 16))
         {
             WriteLiquid(belowPos, liquidId, 16, true, false);
-            Enqueue(belowPos);
-            Enqueue(pos);
             return;
         }
 
-        // Once downward flow is blocked, spread horizontally in all four directions.
-        // Every horizontal step loses one sixteenth of its height.
+        // Once the block below is full or blocked, spread horizontally.
         int spreadLevel = level - 1;
-        if (spreadLevel <= 0) return;
+        if (spreadLevel <= 0)
+            return;
 
         foreach (Vector3I offset in SideOffsets)
         {
@@ -90,18 +156,23 @@ public partial class LiquidManager : Node
                 continue;
 
             BlockState target = _world.GetBlockAtWorld(targetPos);
-
-            if (!CanFlowInto(target, liquidId, spreadLevel))
-                continue;
-
-            WriteLiquid(targetPos, liquidId, spreadLevel, false, false);
-            Enqueue(targetPos);
+            if (CanFlowInto(target, liquidId, spreadLevel))
+                WriteLiquid(targetPos, liquidId, spreadLevel, false, false);
         }
+    }
+
+    private bool IsSameLiquid(BlockState state, string liquidId)
+    {
+        if (state.IsAir()) return false;
+
+        BlockResource other = BlockRegistry.Instance.GetBlock(state.BlockId);
+        return other != null && other.IsLiquid && other.LiquidId == liquidId;
     }
 
     private bool CanFlowInto(BlockState target, string liquidId, int incomingLevel)
     {
-        if (target.IsAir()) return true;
+        if (target.IsAir())
+            return true;
 
         BlockResource targetResource = BlockRegistry.Instance.GetBlock(target.BlockId);
         if (targetResource == null || !targetResource.IsLiquid)
@@ -110,13 +181,23 @@ public partial class LiquidManager : Node
         if (targetResource.LiquidId != liquidId)
             return false;
 
-        int currentLevel = target.LiquidLevel <= 0 ? 16 : target.LiquidLevel;
-        return currentLevel < incomingLevel && !targetResource.IsLiquidSource && !target.LiquidSource;
+        // Never overwrite either kind of source.
+        if (targetResource.IsLiquidSource || target.LiquidSource)
+            return false;
+
+        int currentLevel = target.LiquidLevel <= 0
+            ? 16
+            : Mathf.Clamp(target.LiquidLevel, 1, 16);
+
+        return currentLevel < incomingLevel;
     }
 
     private void WriteLiquid(Vector3I pos, string liquidId, int level, bool falling, bool source)
     {
-        string blockId = liquidId == "water" ? "water" : liquidId;
+        // The liquid ID is the shared family key. Water's flowing block is
+        // "water"; future liquid families can use their own registered IDs.
+        string blockId = liquidId;
+
         var next = new BlockState
         {
             BlockId = blockId,
@@ -127,6 +208,5 @@ public partial class LiquidManager : Node
         };
 
         _world.SetBlockAtWorld(pos, next);
-        Enqueue(pos);
     }
 }
