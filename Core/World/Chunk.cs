@@ -718,6 +718,19 @@ public partial class Chunk : Node3D
                             y,
                             z
                         );
+
+                        // Springs are selectable/breakable even though liquids
+                        // themselves do not create normal solid collision.
+                        if (resource.IsLiquidSource)
+                        {
+                            AddPlantTargetCube(
+                                plantTargetSurface,
+                                x,
+                                y,
+                                z
+                            );
+                            hasPlantTargets = true;
+                        }
                     }
                     else if (resource.IsCross)
                     {
