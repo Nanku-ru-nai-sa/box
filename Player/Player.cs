@@ -94,13 +94,19 @@ public partial class Player : CharacterBody3D
     private CanvasLayer _equipmentLayer;
 
     private ToolBenchPanel _toolBenchPanel;
+    private KilnPanel _kilnPanel;
 
     private Control _stationTabBar;
     private Panel _tabCrafterStation;
     private Panel _tabToolBenchStation;
     private Label _tabCrafterStationLbl;
     private Label _tabToolBenchStationLbl;
+    private Panel _tabKilnStation;
+    private Label _tabKilnStationLbl;
     private string _activeStation = "crafter";
+    private Vector3I _nearbyKilnPosition = Vector3I.Zero;
+    private bool _hasNearbyKiln = false;
+    private bool _kilnPanelHasPosition = false;
 
     private CreativeMenu _creativeMenu;
     private CanvasLayer _creativeMenuLayer;
@@ -227,6 +233,7 @@ public bool IsMounted =>
         BuildCursorPanel();
         BuildCraftingPanel();
         BuildToolBenchPanel();
+        BuildKilnPanel();
         BuildStationTabBar();
         BuildEquipmentPanel();
         BuildCreativeMenu();
@@ -412,12 +419,15 @@ public bool IsMounted =>
     private static readonly string[] StationBlockIds =
     {
         "crafter",
-        "tool_bench"
+        "tool_bench",
+        "kiln"
     };
 
     private HashSet<string> GetNearbyStationTypes()
     {
         var found = new HashSet<string>();
+        _hasNearbyKiln = false;
+        float nearestKilnDistance = float.MaxValue;
 
         var cm =
             GetTree().Root.FindChild(
@@ -453,6 +463,19 @@ public bool IsMounted =>
                     block.BlockId) >= 0)
             {
                 found.Add(block.BlockId);
+                if (block.BlockId == "kiln")
+                {
+                    float distance = new Vector3(dx, dy, dz).Length();
+                    if (distance < nearestKilnDistance)
+                    {
+                        nearestKilnDistance = distance;
+                        _nearbyKilnPosition = new Vector3I(
+                            Mathf.FloorToInt(pos.X) + dx,
+                            Mathf.FloorToInt(pos.Y) + dy,
+                            Mathf.FloorToInt(pos.Z) + dz);
+                        _hasNearbyKiln = true;
+                    }
+                }
             }
         }
 
@@ -467,6 +490,15 @@ public bool IsMounted =>
 
         var nearby =
             GetNearbyStationTypes();
+
+        // This also lets a player open a nearby kiln from its workstation tab
+        // while a crate window is already open.
+        if (_hasNearbyKiln && _kilnPanel != null &&
+            (!_kilnPanelHasPosition || _kilnPanel.GetKilnPosition() != _nearbyKilnPosition))
+        {
+            _kilnPanel.SetKiln(_nearbyKilnPosition, KilnManager.Instance?.GetSlots(_nearbyKilnPosition));
+            _kilnPanelHasPosition = true;
+        }
 
         bool nearTable =
             nearby.Contains("crafter");
@@ -490,17 +522,24 @@ public bool IsMounted =>
             _tabToolBenchStation.Visible =
                 nearby.Contains("tool_bench");
 
-        if (_activeStation == "tool_bench" &&
-            !nearby.Contains("tool_bench") &&
-            nearby.Contains("crafter"))
+        if (_tabKilnStation != null)
+            _tabKilnStation.Visible = nearby.Contains("kiln");
+
+        if (_activeStation == "kiln" && !nearby.Contains("kiln"))
         {
-            SwitchStation("crafter");
+            if (nearby.Contains("crafter")) SwitchStation("crafter");
+            else if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
+            else SwitchStation("crafter");
         }
-        else if (_activeStation == "crafter" &&
-                 !nearby.Contains("crafter") &&
-                 nearby.Contains("tool_bench"))
+        else if (_activeStation == "tool_bench" && !nearby.Contains("tool_bench"))
         {
-            SwitchStation("tool_bench");
+            if (nearby.Contains("crafter")) SwitchStation("crafter");
+            else if (nearby.Contains("kiln")) SwitchStation("kiln");
+        }
+        else if (_activeStation == "crafter" && !nearby.Contains("crafter"))
+        {
+            if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
+            else if (nearby.Contains("kiln")) SwitchStation("kiln");
         }
     }
 
@@ -534,7 +573,8 @@ public bool IsMounted =>
             );
 
         if (b.BlockId != "crafter" &&
-            b.BlockId != "tool_bench")
+            b.BlockId != "tool_bench" &&
+            b.BlockId != "kiln")
             return false;
 
         if (!_inventoryOpen)
@@ -550,6 +590,16 @@ public bool IsMounted =>
 
         if (_equipmentPanel != null)
             _equipmentPanel.Visible = true;
+
+        if (b.BlockId == "kiln")
+        {
+            Vector3I kilnPosition = new Vector3I(
+                Mathf.FloorToInt(tPos.X),
+                Mathf.FloorToInt(tPos.Y),
+                Mathf.FloorToInt(tPos.Z));
+            _kilnPanel?.SetKiln(kilnPosition, KilnManager.Instance?.GetSlots(kilnPosition));
+            _kilnPanelHasPosition = true;
+        }
 
         SwitchStation(b.BlockId);
 
@@ -707,6 +757,123 @@ public bool IsMounted =>
         }
 
         _craftingPanel.NotifyGridChanged();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    private void HandleKilnSlotClicked(int index, MouseButton button, bool shift)
+    {
+        if (_kilnPanel == null) return;
+        InventorySlot slot = _kilnPanel.GetSlot(index);
+        if (slot == null) return;
+
+        if (shift && button == MouseButton.Left)
+        {
+            if (slot.IsEmpty) return;
+            int remaining = AddItemToInventory(slot.ItemId, slot.Count);
+            slot.Count = remaining;
+            if (slot.Count <= 0) slot.Clear();
+        }
+        else if (button == MouseButton.Left)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count = slot.Count;
+                slot.Clear();
+            }
+            else
+            {
+                if (index == 1 &&
+                    (ItemRegistry.Instance?.GetItem(_heldSlot.ItemId)?.FuelBurnSeconds ?? 0f) <= 0f)
+                {
+                    ShowFeedback("That item cannot be used as fuel.");
+                    return;
+                }
+
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count = _heldSlot.Count;
+                    _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int maxStack = ItemRegistry.Instance?.GetItem(slot.ItemId)?.MaxStackSize ?? 64;
+                    int amount = Mathf.Min(maxStack - slot.Count, _heldSlot.Count);
+                    if (amount > 0)
+                    {
+                        slot.Count += amount;
+                        _heldSlot.Count -= amount;
+                        if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                    }
+                }
+                else
+                {
+                    (slot.ItemId, _heldSlot.ItemId) = (_heldSlot.ItemId, slot.ItemId);
+                    (slot.Count, _heldSlot.Count) = (_heldSlot.Count, slot.Count);
+                }
+            }
+        }
+        else if (button == MouseButton.Right)
+        {
+            if (_heldSlot.IsEmpty)
+            {
+                if (slot.IsEmpty) return;
+                int take = Mathf.CeilToInt(slot.Count / 2f);
+                _heldSlot.ItemId = slot.ItemId;
+                _heldSlot.Count = take;
+                slot.Count -= take;
+                if (slot.Count <= 0) slot.Clear();
+            }
+            else
+            {
+                if (index == 1 &&
+                    (ItemRegistry.Instance?.GetItem(_heldSlot.ItemId)?.FuelBurnSeconds ?? 0f) <= 0f)
+                {
+                    ShowFeedback("That item cannot be used as fuel.");
+                    return;
+                }
+
+                if (slot.IsEmpty)
+                {
+                    slot.ItemId = _heldSlot.ItemId;
+                    slot.Count = 1;
+                    _heldSlot.Count--;
+                    if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                }
+                else if (slot.ItemId == _heldSlot.ItemId)
+                {
+                    int maxStack = ItemRegistry.Instance?.GetItem(slot.ItemId)?.MaxStackSize ?? 64;
+                    if (slot.Count < maxStack)
+                    {
+                        slot.Count++;
+                        _heldSlot.Count--;
+                        if (_heldSlot.Count <= 0) _heldSlot.Clear();
+                    }
+                }
+            }
+        }
+
+        KilnManager.Instance?.NotifyChanged();
+        _kilnPanel.Refresh();
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    private void HandleKilnOutputClicked()
+    {
+        if (_kilnPanel == null || !_heldSlot.IsEmpty) return;
+        var slots = KilnManager.Instance?.GetSlots(_kilnPanel.GetKilnPosition());
+        if (slots == null || slots.Count < 3 || slots[2].IsEmpty) return;
+
+        _heldSlot.ItemId = slots[2].ItemId;
+        _heldSlot.Count = slots[2].Count;
+        slots[2].Clear();
+
+        KilnManager.Instance?.NotifyChanged();
+        _kilnPanel.Refresh();
         FireChanged();
         UpdateCursorVisual();
     }
@@ -1087,6 +1254,9 @@ public bool IsMounted =>
 
     if (_inventoryOpen)
         UpdateCraftingProximity();
+
+    if (_kilnPanel != null && _kilnPanel.Visible)
+        _kilnPanel.Refresh();
 
     // Automatically close the crate when the player gets too far away.
     if (_containerOpen)
@@ -2150,9 +2320,13 @@ if (key.Keycode == Key.Escape)
                 _equipmentPanel.Visible = false;
 
             _toolBenchPanel?.ReturnSocketsToInventory();
+            KilnManager.Instance?.SaveKilns();
 
             if (_toolBenchPanel != null)
                 _toolBenchPanel.Visible = false;
+
+            if (_kilnPanel != null)
+                _kilnPanel.Visible = false;
 
             if (_stationTabBar != null)
                 _stationTabBar.Visible = false;

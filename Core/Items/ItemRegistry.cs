@@ -53,6 +53,10 @@ public partial class ItemRegistry : Node
                 item.IsStackable  = true;
                 item.MaxStackSize = 64;
                 item.PlacesBlockId = block.BlockId;
+                item.FuelBurnSeconds = block.IsFlammable ? 10f : 0f;
+                if (block.BlockId == "log") item.FuelBurnSeconds = 20f;
+                if (block.BlockId == "planks") item.FuelBurnSeconds = 10f;
+                if (block.BlockId == "twig") item.FuelBurnSeconds = 3f;
                 _items[block.BlockId] = item;
             }
         }
@@ -70,6 +74,7 @@ public partial class ItemRegistry : Node
             item.IsStackable   = true;
             item.MaxStackSize  = 64;
             item.PlacesBlockId = ""; // no matching block - not placeable, just a held/crafting item
+            if (id == "stick") item.FuelBurnSeconds = 5f;
             _items[id] = item;
         }
 

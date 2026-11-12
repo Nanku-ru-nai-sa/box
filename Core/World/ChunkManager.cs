@@ -542,7 +542,13 @@ public partial class ChunkManager : Node3D
             foreach (var mod in mods)
             {
                 string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
-                saveData[key] = mod.Value.BlockId;
+                var blockData = new Godot.Collections.Dictionary
+                {
+                    ["id"] = mod.Value.BlockId,
+                    ["mask"] = (int)mod.Value.BitMask,
+                    ["rotation"] = (int)mod.Value.Rotation
+                };
+                saveData[key] = blockData;
             }
 
             var json = Json.Stringify(saveData);
@@ -698,8 +704,26 @@ public Vector2? LoadPlayerLook()
             int y = int.Parse(parts[1]);
             int z = int.Parse(parts[2]);
 
-            string blockId = (string)parsed[key];
-            mods[new Vector3I(x, y, z)] = new BlockState { BlockId = blockId, BitMask = 0xFF };
+            Variant savedValue = parsed[key];
+            BlockState state;
+
+            // Backward compatibility: older world saves stored only the block ID string.
+            if (savedValue.VariantType == Variant.Type.String)
+            {
+                state = new BlockState((string)savedValue);
+            }
+            else
+            {
+                var blockData = savedValue.AsGodotDictionary();
+                state = new BlockState
+                {
+                    BlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air",
+                    BitMask = blockData.ContainsKey("mask") ? (byte)(int)blockData["mask"] : (byte)0xFF,
+                    Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0
+                };
+            }
+
+            mods[new Vector3I(x, y, z)] = state;
         }
 
         chunk.ApplyModifications(mods);

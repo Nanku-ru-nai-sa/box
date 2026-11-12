@@ -8,6 +8,8 @@ public partial class BlockResource : Resource
     [Export] public Texture2D TextureTop { get; set; }
     [Export] public Texture2D TextureSide { get; set; }
     [Export] public Texture2D TextureBottom { get; set; }
+    // Optional directional front face. When set, block Rotation selects which horizontal face uses it.
+    [Export] public Texture2D TextureFront { get; set; }
 
     [Export] public bool CanChisel { get; set; } = true;
     [Export] public bool IsSolid { get; set; } = true;

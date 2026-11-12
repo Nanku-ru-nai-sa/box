@@ -31,6 +31,10 @@ public partial class BlockRegistry : Node
         var toolBenchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/tool_bench.png");
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
         var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
+        var kilnFrontTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln.png");
+        var kilnSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side.png");
+        var kilnTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_top.png");
+        var kilnBottomTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_bottom.png");
         var rootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/root.png");
         var leavesTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/leaves.png");
         var waterTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/water.png");
@@ -140,7 +144,7 @@ public partial class BlockRegistry : Node
 
         var log = new BlockResource();
         log.BlockId = "log"; log.DisplayName = "Log";
-        log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f;
+        log.IsSolid = true; log.CanChisel = true; log.Hardness = 1.0f; log.IsFlammable = true;
         log.TextureTop = logTopTex; log.TextureSide = logSideTex; log.TextureBottom = logTopTex;
         Register(log);
 
@@ -200,7 +204,7 @@ public partial class BlockRegistry : Node
 
         var planks = new BlockResource();
         planks.BlockId = "planks"; planks.DisplayName = "Planks";
-        planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f;
+        planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f; planks.IsFlammable = true;
         planks.TextureTop = planksTex; planks.TextureSide = planksTex; planks.TextureBottom = planksTex;
         Register(planks);
 
@@ -215,6 +219,18 @@ public partial class BlockRegistry : Node
         toolBench.IsSolid = true; toolBench.CanChisel = false; toolBench.Hardness = 1.0f;
         toolBench.TextureTop = toolBenchTex; toolBench.TextureSide = toolBenchTex; toolBench.TextureBottom = toolBenchTex;
         Register(toolBench);
+
+        var kiln = new BlockResource();
+        kiln.BlockId = "kiln"; kiln.DisplayName = "Kiln";
+        kiln.IsSolid = true; kiln.CanChisel = false; kiln.Hardness = 1.5f;
+        kiln.CanHaveFeatures = false; kiln.GrassCanGrow = false;
+        kiln.CanRotate = true;
+        kiln.TextureFront = kilnFrontTex;
+        kiln.TextureSide = kilnSideTex;
+        kiln.TextureTop = kilnTopTex;
+        kiln.TextureBottom = kilnBottomTex;
+        kiln.Drops = new[] { "kiln" };
+        Register(kiln);
 
         var crate = new BlockResource();
 crate.BlockId = "crate";

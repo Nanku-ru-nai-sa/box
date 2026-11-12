@@ -452,16 +452,18 @@ if (overlayC != null &&
         1
     );
 }
-if (b.BlockId is "crate" or "barrel")
+Vector3I brokenWorldPosition = new Vector3I(
+    Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+    Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+    Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (b.BlockId == "kiln")
 {
-    DropContainerContents(
-        new Vector3I(
-            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
-            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
-            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
-        ),
-        b.BlockId
-    );
+    DropKilnContents(brokenWorldPosition);
+}
+else if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(brokenWorldPosition, b.BlockId);
 }
             chunk.SetBlock(
                 bx,
@@ -564,16 +566,18 @@ if (overlay != null &&
         dropWorldPos
     );
 }
-if (b.BlockId is "crate" or "barrel")
+Vector3I brokenWorldPosition = new Vector3I(
+    Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
+    Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
+    Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (b.BlockId == "kiln")
 {
-    DropContainerContents(
-        new Vector3I(
-            Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
-            Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
-            Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz
-        ),
-        b.BlockId
-    );
+    DropKilnContents(brokenWorldPosition);
+}
+else if (b.BlockId is "crate" or "barrel")
+{
+    DropContainerContents(brokenWorldPosition, b.BlockId);
 }
             chunk.SetBlock(
                 bx,
@@ -842,6 +846,19 @@ if (b.BlockId is "crate" or "barrel")
         Vector3 lp =
             worldTarget - tc.GlobalPosition;
 
+        BlockResource placedResource = BlockRegistry.Instance.GetBlock(_selectedBlockId);
+        byte placementRotation = 0;
+
+        if (placedResource != null && placedResource.TextureFront != null)
+        {
+            // The front face points back toward the player, like a Minecraft furnace.
+            Vector3 towardPlayer = GlobalTransform.Basis.Z;
+            if (Mathf.Abs(towardPlayer.X) > Mathf.Abs(towardPlayer.Z))
+                placementRotation = towardPlayer.X >= 0f ? (byte)1 : (byte)3;
+            else
+                placementRotation = towardPlayer.Z >= 0f ? (byte)2 : (byte)0;
+        }
+
         tc.SetBlock(
             Mathf.FloorToInt(lp.X),
             Mathf.FloorToInt(lp.Y),
@@ -849,7 +866,8 @@ if (b.BlockId is "crate" or "barrel")
             new BlockState
             {
                 BlockId = _selectedBlockId,
-                BitMask = 0xFF
+                BitMask = 0xFF,
+                Rotation = placementRotation
             }
         );
 
