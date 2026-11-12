@@ -38,6 +38,9 @@ public struct BlockState
         BitMask = 0b11111111;
         Rotation = 0;
         Features = features;
+        LiquidLevel = 0;
+        LiquidFalling = false;
+        LiquidSource = false;
     }
 
     public bool IsAir()
