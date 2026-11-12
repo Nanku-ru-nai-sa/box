@@ -100,6 +100,7 @@ public partial class Player : CharacterBody3D
     private readonly Panel[] _stationSlots = new Panel[4];
     private readonly TextureRect[] _stationSlotIcons = new TextureRect[4];
     private readonly string[] _stationSlotIds = new string[4];
+    private readonly Vector3I[] _stationSlotPositions = new Vector3I[4];
     private string _activeStation = "default";
     private Vector3I _nearbyKilnPosition = Vector3I.Zero;
     private bool _hasNearbyKiln = false;
