@@ -39,12 +39,6 @@ public partial class CraftingPanel : Control
     // ── UI ────────────────────────────────────────────────────────────────────
     private Panel   _bg;
 
-    // Tab buttons
-    private Panel   _tabGrid;
-    private Panel   _tabLearned;
-    private Label   _tabGridIcon;
-    private Label   _tabLearnedIcon;
-
     // Grid view
     private Control       _gridView;
     private Panel[]       _gridSlotPanels  = new Panel[9];
@@ -65,7 +59,7 @@ public partial class CraftingPanel : Control
 
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
-    private const int PanelW  = 300;
+    private const int PanelW  = 271;
 
     // =========================================================================
     // INIT
@@ -84,7 +78,7 @@ public partial class CraftingPanel : Control
         MouseFilter       = MouseFilterEnum.Stop;
 
         BuildBackground();
-        BuildTabButtons();
+        BuildExternalTitle();
         BuildGridView();
         BuildLearnedView();
         BuildTooltip();
@@ -162,30 +156,11 @@ public partial class CraftingPanel : Control
         AddChild(_bg);
     }
 
-    private void BuildTabButtons()
+    private void BuildExternalTitle()
     {
-        float btnSz = 24f;
-        float y     = -24f; // sits above the panel, level with the external title
-
-        _tabGrid            = MakeTabPanel();
-        _tabGrid.Position   = new Vector2(PanelW - btnSz * 2 - 4f, y);
-        _tabGrid.CustomMinimumSize = new Vector2(btnSz, btnSz);
-        _tabGridIcon        = MakeTabIcon("⊞");
-        _tabGrid.AddChild(_tabGridIcon);
-        _tabGrid.GuiInput  += (InputEvent ev) => { if (IsLClick(ev)) ShowTab(true); };
-        AddChild(_tabGrid);
-
-        _tabLearned           = MakeTabPanel();
-        _tabLearned.Position  = new Vector2(PanelW - btnSz, y);
-        _tabLearned.CustomMinimumSize = new Vector2(btnSz, btnSz);
-        _tabLearnedIcon       = MakeTabIcon("☰");
-        _tabLearned.AddChild(_tabLearnedIcon);
-        _tabLearned.GuiInput += (InputEvent ev) => { if (IsLClick(ev)) ShowTab(false); };
-        AddChild(_tabLearned);
-
         var externalTitle = new Label();
         externalTitle.Text = "Craft";
-        externalTitle.Position = new Vector2(0f, y);
+        externalTitle.Position = new Vector2(0f, -24f);
         externalTitle.AddThemeFontSizeOverride("font_size", 13);
         externalTitle.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.75f));
         externalTitle.MouseFilter = MouseFilterEnum.Ignore;
@@ -348,7 +323,7 @@ public partial class CraftingPanel : Control
     }
 
     // =========================================================================
-    // TABS
+    // RECIPE MEMORY VIEW
     // =========================================================================
 
     public void ShowCraftingGrid()
@@ -369,22 +344,8 @@ public partial class CraftingPanel : Control
 
     private void ShowTab(bool grid)
     {
-        _gridView.Visible    = grid;
+        _gridView.Visible = grid;
         _learnedView.Visible = !grid;
-        SetTabActive(_tabGrid,    _tabGridIcon,    grid);
-        SetTabActive(_tabLearned, _tabLearnedIcon, !grid);
-    }
-
-    private void SetTabActive(Panel tab, Label icon, bool active)
-    {
-        var s = new StyleBoxFlat();
-        s.BgColor         = active ? new Color(0.2f, 0.2f, 0.25f) : new Color(0.12f, 0.12f, 0.15f);
-        s.BorderColor     = active ? new Color(0.6f, 0.6f, 0.7f)  : new Color(0.3f, 0.3f, 0.35f);
-        s.BorderWidthTop  = 2; s.BorderWidthBottom = 2;
-        s.BorderWidthLeft = 2; s.BorderWidthRight  = 2;
-        tab.AddThemeStyleboxOverride("panel", s);
-        icon.AddThemeColorOverride("font_color",
-            active ? new Color(1f, 1f, 1f) : new Color(0.5f, 0.5f, 0.5f));
     }
 
     // =========================================================================
@@ -665,23 +626,6 @@ public partial class CraftingPanel : Control
     // =========================================================================
     // HELPERS
     // =========================================================================
-
-    private Panel MakeTabPanel()
-    {
-        var p = new Panel(); p.MouseFilter = MouseFilterEnum.Stop; return p;
-    }
-
-    private Label MakeTabIcon(string icon)
-    {
-        var lbl = new Label();
-        lbl.Text                = icon;
-        lbl.HorizontalAlignment = HorizontalAlignment.Center;
-        lbl.VerticalAlignment   = VerticalAlignment.Center;
-        lbl.AnchorRight         = 1f; lbl.AnchorBottom = 1f;
-        lbl.AddThemeFontSizeOverride("font_size", 16);
-        lbl.MouseFilter         = MouseFilterEnum.Ignore;
-        return lbl;
-    }
 
     private Panel MakeCraftSlot(int size)
     {
