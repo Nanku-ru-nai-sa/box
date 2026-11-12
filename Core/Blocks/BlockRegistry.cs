@@ -293,6 +293,7 @@ Register(root);
         waterSpring.CanChisel = false;
         waterSpring.IsTransparent = true;
         waterSpring.LiquidId = "water";
+        waterSpring.IsLiquidSource = true;
         waterSpring.TextureTop = waterTex;
         waterSpring.TextureSide = waterTex;
         waterSpring.TextureBottom = waterTex;
