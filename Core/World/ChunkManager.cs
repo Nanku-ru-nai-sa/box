@@ -402,7 +402,8 @@ public partial class ChunkManager : Node3D
             GD.Print("ChunkManager: Player found");
 
         GD.Print("Calling UpdateChunks...");
-        _liquidManager = new LiquidManager(this);
+        _liquidManager = new LiquidManager();
+        _liquidManager.SetWorld(this);
         AddChild(_liquidManager);
 
         UpdateChunks();
