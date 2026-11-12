@@ -55,7 +55,7 @@ public partial class CraftingPanel : Control
     // Tooltip
     private Panel _tooltip;
     private Label _tooltipTitle;
-    private Label _tooltipBody;
+    private GridContainer _tooltipIngredients;
 
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
@@ -274,13 +274,15 @@ public partial class CraftingPanel : Control
 
         var scroll               = new ScrollContainer();
         scroll.AnchorRight       = 1f; scroll.AnchorBottom = 1f;
-        scroll.OffsetLeft        = 6f; scroll.OffsetRight  = -6f;
+        // Four 56px recipe slots with 5px gaps: exactly the same width
+        // and horizontal alignment as the four workstation selector slots.
+        scroll.OffsetLeft        = 16f; scroll.OffsetRight  = -16f;
         scroll.OffsetTop         = 0f; scroll.OffsetBottom = -4f;
         _learnedView.AddChild(scroll);
 
         _learnedGrid         = new GridContainer();
-        _learnedGrid.Columns = 5;
-        _learnedGrid.AddThemeConstantOverride("h_separation", 2);
+        _learnedGrid.Columns = 4;
+        _learnedGrid.AddThemeConstantOverride("h_separation", SlotGap);
         _learnedGrid.AddThemeConstantOverride("v_separation", SlotGap);
         scroll.AddChild(_learnedGrid);
 
@@ -313,11 +315,12 @@ public partial class CraftingPanel : Control
         _tooltipTitle.AddThemeColorOverride("font_color", new Color(1f, 0.9f, 0.5f));
         vb.AddChild(_tooltipTitle);
 
-        _tooltipBody = new Label();
-        _tooltipBody.AddThemeFontSizeOverride("font_size", 11);
-        _tooltipBody.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.7f));
-        _tooltipBody.AutowrapMode = TextServer.AutowrapMode.Word;
-        vb.AddChild(_tooltipBody);
+        // Ingredient icons are displayed as small slots instead of a text list.
+        _tooltipIngredients = new GridContainer();
+        _tooltipIngredients.Columns = 4;
+        _tooltipIngredients.AddThemeConstantOverride("h_separation", 3);
+        _tooltipIngredients.AddThemeConstantOverride("v_separation", 3);
+        vb.AddChild(_tooltipIngredients);
 
         AddChild(_tooltip);
     }
@@ -600,23 +603,81 @@ public partial class CraftingPanel : Control
 
     private void ShowRecipeTooltip(RecipeManager.Recipe recipe, Control anchor)
     {
-        _tooltipTitle.Text = recipe.ResultId;
-        var ingredients    = RecipeManager.Instance?.GetIngredientDisplay(recipe);
-        _tooltipBody.Text  = ingredients != null ? string.Join("\n", ingredients) : "";
-        _tooltip.Size      = new Vector2(150f, 0f);
-        _tooltip.Visible   = true;
-        Vector2 pos        = anchor.GlobalPosition - GlobalPosition;
+        _tooltipTitle.Text = ItemRegistry.Instance?.GetItem(recipe.ResultId)?.DisplayName ?? recipe.ResultId;
+
+        foreach (Node child in _tooltipIngredients.GetChildren())
+            child.QueueFree();
+
+        // Count repeated ingredients, whether the recipe is shaped or shapeless.
+        var needed = new Dictionary<string, int>();
+        if (recipe.Shaped)
+        {
+            for (int r = 0; r < recipe.Pattern.GetLength(0); r++)
+                for (int c = 0; c < recipe.Pattern.GetLength(1); c++)
+                {
+                    string itemId = recipe.Pattern[r, c];
+                    if (!string.IsNullOrEmpty(itemId) && itemId != " ")
+                        needed[itemId] = needed.TryGetValue(itemId, out int count) ? count + 1 : 1;
+                }
+        }
+        else
+        {
+            foreach (string itemId in recipe.Ingredients)
+                needed[itemId] = needed.TryGetValue(itemId, out int count) ? count + 1 : 1;
+        }
+
+        foreach (var ingredient in needed)
+        {
+            var tile = new Panel();
+            tile.CustomMinimumSize = new Vector2(32f, 32f);
+            tile.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.35f, 0.35f, 0.42f)));
+
+            var icon = new TextureRect();
+            icon.Texture = GetIcon(ingredient.Key);
+            icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+            icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+            icon.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            icon.Position = new Vector2(3f, 3f);
+            icon.Size = new Vector2(26f, 26f);
+            icon.MouseFilter = MouseFilterEnum.Ignore;
+            tile.AddChild(icon);
+
+            if (ingredient.Value > 1)
+            {
+                var countLabel = new Label();
+                countLabel.Text = ingredient.Value.ToString();
+                countLabel.HorizontalAlignment = HorizontalAlignment.Right;
+                countLabel.VerticalAlignment = VerticalAlignment.Bottom;
+                countLabel.AnchorRight = 1f;
+                countLabel.AnchorBottom = 1f;
+                countLabel.OffsetRight = -2f;
+                countLabel.OffsetBottom = -1f;
+                countLabel.AddThemeFontSizeOverride("font_size", 9);
+                countLabel.AddThemeColorOverride("font_color", Colors.White);
+                countLabel.MouseFilter = MouseFilterEnum.Ignore;
+                tile.AddChild(countLabel);
+            }
+
+            _tooltipIngredients.AddChild(tile);
+        }
+
+        int rows = Mathf.Max(1, Mathf.CeilToInt(needed.Count / 4f));
+        _tooltip.Size = new Vector2(150f, 38f + rows * 35f);
+        _tooltip.Visible = true;
+
+        Vector2 pos = anchor.GlobalPosition - GlobalPosition;
         pos.X -= 155f;
-        pos.Y  = Mathf.Max(0f, pos.Y);
-        _tooltip.Position  = pos;
+        pos.Y = Mathf.Max(0f, pos.Y);
+        _tooltip.Position = pos;
     }
 
     public void ShowItemTooltip(string itemId, Vector2 screenPos)
     {
         if (string.IsNullOrEmpty(itemId)) { HideTooltip(); return; }
-        _tooltipTitle.Text      = itemId;
-        _tooltipBody.Text       = "";
-        _tooltip.Size           = new Vector2(120f, 0f);
+        _tooltipTitle.Text      = ItemRegistry.Instance?.GetItem(itemId)?.DisplayName ?? itemId;
+        foreach (Node child in _tooltipIngredients.GetChildren())
+            child.QueueFree();
+        _tooltip.Size           = new Vector2(120f, 38f);
         _tooltip.Visible        = true;
         _tooltip.GlobalPosition = screenPos + new Vector2(10f, -30f);
     }
