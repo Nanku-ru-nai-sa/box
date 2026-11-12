@@ -15,7 +15,7 @@ public partial class KilnPanel : Control
     private ProgressBar _progress;
     private Label _status;
     private Vector3I _worldPosition;
-    private const int PanelWidth = 300;
+    private const int PanelWidth = 271;
     private const int SlotSize = 56;
 
     public override void _Ready()
@@ -74,27 +74,27 @@ public partial class KilnPanel : Control
 
         AddLabel("Kiln", new Vector2(0, -24), 13, new Color(0.8f, 0.8f, 0.8f));
 
-        AddLabel("Input", new Vector2(34, 42), 11);
-        AddLabel("Fuel", new Vector2(34, 130), 11);
-        AddLabel("Output", new Vector2(202, 84), 11);
+        AddLabel("Input", new Vector2(19, 42), 11);
+        AddLabel("Fuel", new Vector2(19, 130), 11);
+        AddLabel("Output", new Vector2(187, 84), 11);
 
-        CreateSlot(0, new Vector2(34, 62), "Input");
-        CreateSlot(1, new Vector2(34, 150), "Fuel");
-        CreateSlot(2, new Vector2(202, 106), "Output");
+        CreateSlot(0, new Vector2(19, 62), "Input");
+        CreateSlot(1, new Vector2(19, 150), "Fuel");
+        CreateSlot(2, new Vector2(187, 106), "Output");
 
-        var arrow = AddLabel("→", new Vector2(126, 105), 22);
+        var arrow = AddLabel("→", new Vector2(111, 105), 22);
         arrow.Size = new Vector2(45, 40);
         arrow.HorizontalAlignment = HorizontalAlignment.Center;
 
         _progress = new ProgressBar();
-        _progress.Position = new Vector2(34, 236);
+        _progress.Position = new Vector2(19, 236);
         _progress.Size = new Vector2(232, 16);
         _progress.MinValue = 0;
         _progress.MaxValue = 100;
         _progress.ShowPercentage = false;
         AddChild(_progress);
 
-        _status = AddLabel("Ready", new Vector2(34, 258), 11, new Color(0.7f, 0.7f, 0.7f));
+        _status = AddLabel("Ready", new Vector2(19, 258), 11, new Color(0.7f, 0.7f, 0.7f));
     }
 
     private void CreateSlot(int index, Vector2 position, string tooltip)
