@@ -4,6 +4,7 @@ using System.Collections.Generic;
 
 public partial class Player : CharacterBody3D
 {
+    private const float WorkbenchPanelWidth = 271f;
     // =========================================================================
     // HOTBAR HUD
     // =========================================================================
@@ -671,7 +672,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _craftingPanel.AnchorBottom = 0.5f;
 
         _craftingPanel.OffsetLeft =
-            -invHalfW - 10f - 300f;
+            -invHalfW - 10f - WorkbenchPanelWidth;
 
         _craftingPanel.OffsetRight =
             -invHalfW - 10f;
@@ -732,7 +733,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _toolBenchPanel.AnchorBottom = 0.5f;
 
         _toolBenchPanel.OffsetLeft =
-            -invHalfW - 10f - 300f;
+            -invHalfW - 10f - WorkbenchPanelWidth;
 
         _toolBenchPanel.OffsetRight =
             -invHalfW - 10f;
@@ -773,7 +774,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _kilnPanel.AnchorRight = 0.5f;
         _kilnPanel.AnchorTop = 0.5f;
         _kilnPanel.AnchorBottom = 0.5f;
-        _kilnPanel.OffsetLeft = -invHalfW - 10f - 300f;
+        _kilnPanel.OffsetLeft = -invHalfW - 10f - WorkbenchPanelWidth;
         _kilnPanel.OffsetRight = -invHalfW - 10f;
         _kilnPanel.OffsetTop = -180f;
         _kilnPanel.OffsetBottom = 159f;
@@ -794,8 +795,13 @@ private void OnSlotMouseEntered(int slotIndex)
         float totalW = gridW + 32f;
         float invHalfW = totalW / 2f;
 
-        _stationTabBar.OffsetLeft = -invHalfW - 10f - 300f;
-        _stationTabBar.OffsetRight = -invHalfW - 10f;
+        float selectorWidth = 4f * SlotSize + 3f * SlotGap;
+        float selectorLeft =
+            -invHalfW - 10f -
+            (WorkbenchPanelWidth + selectorWidth) / 2f;
+
+        _stationTabBar.OffsetLeft = selectorLeft;
+        _stationTabBar.OffsetRight = selectorLeft + selectorWidth;
         _stationTabBar.OffsetTop = -180f - 62f;
         _stationTabBar.OffsetBottom = -180f - 4f;
         _stationTabBar.Visible = false;
@@ -1037,7 +1043,7 @@ private void OnSlotMouseEntered(int slotIndex)
             invHalfW + 10f;
 
         _equipmentPanel.OffsetRight =
-            invHalfW + 10f + 300f;
+            invHalfW + 10f + WorkbenchPanelWidth;
 
         _equipmentPanel.OffsetTop =
             -180f;
