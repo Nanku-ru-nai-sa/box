@@ -97,13 +97,10 @@ public partial class Player : CharacterBody3D
     private KilnPanel _kilnPanel;
 
     private Control _stationTabBar;
-    private Panel _tabCrafterStation;
-    private Panel _tabToolBenchStation;
-    private Label _tabCrafterStationLbl;
-    private Label _tabToolBenchStationLbl;
-    private Panel _tabKilnStation;
-    private Label _tabKilnStationLbl;
-    private string _activeStation = "crafter";
+    private readonly Panel[] _stationSlots = new Panel[4];
+    private readonly TextureRect[] _stationSlotIcons = new TextureRect[4];
+    private readonly string[] _stationSlotIds = new string[4];
+    private string _activeStation = "default";
     private Vector3I _nearbyKilnPosition = Vector3I.Zero;
     private bool _hasNearbyKiln = false;
     private bool _kilnPanelHasPosition = false;
@@ -423,11 +420,11 @@ public bool IsMounted =>
         "kiln"
     };
 
-    private HashSet<string> GetNearbyStationTypes()
+    private List<string> GetNearbyStationTypes()
     {
-        var found = new HashSet<string>();
+        var candidates = new List<(string Id, float Distance, Vector3I Position)>();
+        var foundTypes = new HashSet<string>();
         _hasNearbyKiln = false;
-        float nearestKilnDistance = float.MaxValue;
 
         var cm =
             GetTree().Root.FindChild(
@@ -437,49 +434,49 @@ public bool IsMounted =>
             ) as ChunkManager;
 
         if (cm == null)
-            return found;
+            return new List<string>();
 
         Vector3 pos = GlobalPosition;
+        float nearestKilnDistance = float.MaxValue;
 
         for (int dx = -5; dx <= 5; dx++)
         for (int dy = -3; dy <= 3; dy++)
         for (int dz = -5; dz <= 5; dz++)
         {
-            if (new Vector3(dx, dy, dz).Length() >
-                CraftingTableRange)
+            float distance = new Vector3(dx, dy, dz).Length();
+            if (distance > CraftingTableRange)
                 continue;
 
-            var block =
-                cm.GetBlockAtWorld(
-                    new Vector3I(
-                        Mathf.FloorToInt(pos.X) + dx,
-                        Mathf.FloorToInt(pos.Y) + dy,
-                        Mathf.FloorToInt(pos.Z) + dz
-                    )
-                );
+            Vector3I blockPosition = new Vector3I(
+                Mathf.FloorToInt(pos.X) + dx,
+                Mathf.FloorToInt(pos.Y) + dy,
+                Mathf.FloorToInt(pos.Z) + dz
+            );
 
-            if (System.Array.IndexOf(
-                    StationBlockIds,
-                    block.BlockId) >= 0)
+            var block = cm.GetBlockAtWorld(blockPosition);
+            string id = block.BlockId;
+
+            if (System.Array.IndexOf(StationBlockIds, id) < 0 ||
+                !foundTypes.Add(id))
+                continue;
+
+            candidates.Add((id, distance, blockPosition));
+
+            if (id == "kiln" && distance < nearestKilnDistance)
             {
-                found.Add(block.BlockId);
-                if (block.BlockId == "kiln")
-                {
-                    float distance = new Vector3(dx, dy, dz).Length();
-                    if (distance < nearestKilnDistance)
-                    {
-                        nearestKilnDistance = distance;
-                        _nearbyKilnPosition = new Vector3I(
-                            Mathf.FloorToInt(pos.X) + dx,
-                            Mathf.FloorToInt(pos.Y) + dy,
-                            Mathf.FloorToInt(pos.Z) + dz);
-                        _hasNearbyKiln = true;
-                    }
-                }
+                nearestKilnDistance = distance;
+                _nearbyKilnPosition = blockPosition;
+                _hasNearbyKiln = true;
             }
         }
 
-        return found;
+        candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
+
+        var result = new List<string>();
+        for (int i = 0; i < candidates.Count && i < 3; i++)
+            result.Add(candidates[i].Id);
+
+        return result;
     }
 
     private void UpdateCraftingProximity()
@@ -488,59 +485,28 @@ public bool IsMounted =>
             RecipeManager.Instance == null)
             return;
 
-        var nearby =
-            GetNearbyStationTypes();
+        var nearby = GetNearbyStationTypes();
 
-        // This also lets a player open a nearby kiln from its workstation tab
-        // while a crate window is already open.
         if (_hasNearbyKiln && _kilnPanel != null &&
-            (!_kilnPanelHasPosition || _kilnPanel.GetKilnPosition() != _nearbyKilnPosition))
+            (!_kilnPanelHasPosition ||
+             _kilnPanel.GetKilnPosition() != _nearbyKilnPosition))
         {
-            _kilnPanel.SetKiln(_nearbyKilnPosition, KilnManager.Instance?.GetSlots(_nearbyKilnPosition));
+            _kilnPanel.SetKiln(
+                _nearbyKilnPosition,
+                KilnManager.Instance?.GetSlots(_nearbyKilnPosition)
+            );
             _kilnPanelHasPosition = true;
         }
 
-        bool nearTable =
-            nearby.Contains("crafter");
+        UpdateStationSelector(nearby);
 
-        _craftingPanel?.SetGridSize(
-            nearTable ? 3 : 2,
-            nearTable
-        );
+        if (_activeStation != "default" && !nearby.Contains(_activeStation))
+            SwitchStation("default");
 
-        bool showBar =
-            nearby.Count > 0;
-
-        if (_stationTabBar != null)
-            _stationTabBar.Visible = showBar;
-
-        if (_tabCrafterStation != null)
-            _tabCrafterStation.Visible =
-                nearby.Contains("crafter");
-
-        if (_tabToolBenchStation != null)
-            _tabToolBenchStation.Visible =
-                nearby.Contains("tool_bench");
-
-        if (_tabKilnStation != null)
-            _tabKilnStation.Visible = nearby.Contains("kiln");
-
-        if (_activeStation == "kiln" && !nearby.Contains("kiln"))
-        {
-            if (nearby.Contains("crafter")) SwitchStation("crafter");
-            else if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
-            else SwitchStation("crafter");
-        }
-        else if (_activeStation == "tool_bench" && !nearby.Contains("tool_bench"))
-        {
-            if (nearby.Contains("crafter")) SwitchStation("crafter");
-            else if (nearby.Contains("kiln")) SwitchStation("kiln");
-        }
-        else if (_activeStation == "crafter" && !nearby.Contains("crafter"))
-        {
-            if (nearby.Contains("tool_bench")) SwitchStation("tool_bench");
-            else if (nearby.Contains("kiln")) SwitchStation("kiln");
-        }
+        if (_activeStation == "crafter")
+            _craftingPanel?.SetGridSize(3, true);
+        else if (_activeStation == "default")
+            _craftingPanel?.SetGridSize(2, false);
     }
 
     private bool TryOpenCraftingTable()
