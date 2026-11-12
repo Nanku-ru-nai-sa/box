@@ -67,6 +67,8 @@ public partial class LiquidManager : Node
 
         // Downward flow always wins. A falling cell fills the entire target cell.
         Vector3I belowPos = pos + new Vector3I(0, -1, 0);
+        if (!_world.IsWorldPositionLoaded(belowPos)) return;
+
         BlockState below = _world.GetBlockAtWorld(belowPos);
         if (CanFlowInto(below, liquidId, 16))
         {
@@ -84,6 +86,9 @@ public partial class LiquidManager : Node
         foreach (Vector3I offset in SideOffsets)
         {
             Vector3I targetPos = pos + offset;
+            if (!_world.IsWorldPositionLoaded(targetPos))
+                continue;
+
             BlockState target = _world.GetBlockAtWorld(targetPos);
 
             if (!CanFlowInto(target, liquidId, spreadLevel))
