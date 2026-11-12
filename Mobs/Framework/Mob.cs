@@ -459,6 +459,7 @@ private float _stepTargetY = 0f;
         BuildHealthBar();
 
         CreateCollision();
+        UpdateHealthBarPosition();
 
         _health = MaxHealth;
 
@@ -1489,6 +1490,7 @@ private void RollAppearance()
         }
 
         CreateCollision();
+        UpdateHealthBarPosition();
 
         GD.Print(
             $"[Mob] {Name}: Switched model to {modelPath}"
@@ -1600,6 +1602,21 @@ private void RollAppearance()
         AddChild(_healthBarFill);
     }
 
+
+    private void UpdateHealthBarPosition()
+    {
+        float y = _collisionBuilt
+            ? _adultCollisionPosition.Y +
+              _adultCollisionSize.Y * 0.5f +
+              0.35f
+            : HealthBarYOffset;
+
+        if (_healthBarBackground != null)
+            _healthBarBackground.Position = new Vector3(0f, y, 0f);
+
+        if (_healthBarFill != null)
+            _healthBarFill.Position = new Vector3(0f, y, 0.01f);
+    }
 
     private void UpdateHealthBar()
     {
