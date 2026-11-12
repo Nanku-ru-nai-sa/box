@@ -800,7 +800,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _stationTabBar.OffsetBottom = -180f - 4f;
         _stationTabBar.Visible = false;
 
-        const float slotSize = 48f;
+        const float slotSize = 56f;
         const float gap = 5f;
 
         for (int i = 0; i < 4; i++)
@@ -820,10 +820,10 @@ private void OnSlotMouseEntered(int slotIndex)
             icon.AnchorRight = 0.5f;
             icon.AnchorTop = 0.5f;
             icon.AnchorBottom = 0.5f;
-            icon.OffsetLeft = -17f;
-            icon.OffsetRight = 17f;
-            icon.OffsetTop = -17f;
-            icon.OffsetBottom = 17f;
+            icon.OffsetLeft = -20f;
+            icon.OffsetRight = 20f;
+            icon.OffsetTop = -20f;
+            icon.OffsetBottom = 20f;
             icon.MouseFilter = Control.MouseFilterEnum.Ignore;
             slot.AddChild(icon);
 
