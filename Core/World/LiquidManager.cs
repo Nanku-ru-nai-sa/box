@@ -62,7 +62,8 @@ public partial class LiquidManager : Node
         if (resource == null || !resource.IsLiquid) return;
 
         string liquidId = resource.LiquidId;
-        int level = state.LiquidLevel <= 0 ? 16 : Mathf.Clamp(state.LiquidLevel, 1, 16);
+        bool isSource = resource.IsLiquidSource || state.LiquidSource;
+        int level = isSource ? 16 : (state.LiquidLevel <= 0 ? 16 : Mathf.Clamp(state.LiquidLevel, 1, 16));
 
         // Downward flow always wins. A falling cell fills the entire target cell.
         Vector3I belowPos = pos + new Vector3I(0, -1, 0);
@@ -105,7 +106,7 @@ public partial class LiquidManager : Node
             return false;
 
         int currentLevel = target.LiquidLevel <= 0 ? 16 : target.LiquidLevel;
-        return currentLevel < incomingLevel && !target.LiquidSource;
+        return currentLevel < incomingLevel && !targetResource.IsLiquidSource && !target.LiquidSource;
     }
 
     private void WriteLiquid(Vector3I pos, string liquidId, int level, bool falling, bool source)
