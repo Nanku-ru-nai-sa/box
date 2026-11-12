@@ -102,8 +102,6 @@ public partial class Player : CharacterBody3D
     private readonly string[] _stationSlotIds = new string[4];
     private readonly Vector3I[] _stationSlotPositions = new Vector3I[4];
     private string _activeStation = "default";
-    private Vector3I _nearbyKilnPosition = Vector3I.Zero;
-    private bool _hasNearbyKiln = false;
     private Vector3I _activeStationPosition = Vector3I.Zero;
     private bool _kilnPanelHasPosition = false;
 
@@ -425,8 +423,6 @@ public bool IsMounted =>
     private List<(string Id, Vector3I Position, float Distance)> GetNearbyStations()
     {
         var stations = new List<(string Id, Vector3I Position, float Distance)>();
-        _hasNearbyKiln = false;
-
         var cm =
             GetTree().Root.FindChild(
                 "ChunkManager",
@@ -438,7 +434,6 @@ public bool IsMounted =>
             return stations;
 
         Vector3 pos = GlobalPosition;
-        float nearestKilnDistance = float.MaxValue;
 
         for (int dx = -5; dx <= 5; dx++)
         for (int dy = -3; dy <= 3; dy++)
@@ -462,12 +457,6 @@ public bool IsMounted =>
 
             stations.Add((id, blockPosition, distance));
 
-            if (id == "kiln" && distance < nearestKilnDistance)
-            {
-                nearestKilnDistance = distance;
-                _nearbyKilnPosition = blockPosition;
-                _hasNearbyKiln = true;
-            }
         }
 
         stations.Sort((a, b) => a.Distance.CompareTo(b.Distance));
