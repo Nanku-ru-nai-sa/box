@@ -286,6 +286,9 @@ public partial class Chunk : Node3D
         BlockState block)
     {
         _blocks[x, y, z] = block;
+
+        if (block.BlockId == "water" || block.BlockId == "water_spring")
+            NotifyLiquidAt(x, y, z, block);
     }
 
     public Dictionary<Vector3I, BlockState> GetModifications()
