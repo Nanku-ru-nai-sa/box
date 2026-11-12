@@ -422,8 +422,7 @@ public bool IsMounted =>
 
     private List<string> GetNearbyStationTypes()
     {
-        var candidates = new List<(string Id, float Distance, Vector3I Position)>();
-        var foundTypes = new HashSet<string>();
+        var nearestByType = new Dictionary<string, (float Distance, Vector3I Position)>();
         _hasNearbyKiln = false;
 
         var cm =
@@ -456,11 +455,14 @@ public bool IsMounted =>
             var block = cm.GetBlockAtWorld(blockPosition);
             string id = block.BlockId;
 
-            if (System.Array.IndexOf(StationBlockIds, id) < 0 ||
-                !foundTypes.Add(id))
+            if (System.Array.IndexOf(StationBlockIds, id) < 0)
                 continue;
 
-            candidates.Add((id, distance, blockPosition));
+            if (!nearestByType.TryGetValue(id, out var existing) ||
+                distance < existing.Distance)
+            {
+                nearestByType[id] = (distance, blockPosition);
+            }
 
             if (id == "kiln" && distance < nearestKilnDistance)
             {
@@ -469,6 +471,10 @@ public bool IsMounted =>
                 _hasNearbyKiln = true;
             }
         }
+
+        var candidates = new List<(string Id, float Distance)>();
+        foreach (var pair in nearestByType)
+            candidates.Add((pair.Key, pair.Value.Distance));
 
         candidates.Sort((a, b) => a.Distance.CompareTo(b.Distance));
 
@@ -2194,6 +2200,9 @@ if (key.Keycode == Key.Escape)
     {
         _inventoryOpen =
             !_inventoryOpen;
+
+        if (_stationTabBar != null)
+            _stationTabBar.Visible = _inventoryOpen;
 
         _inventoryScreen.Visible =
             _inventoryOpen;
