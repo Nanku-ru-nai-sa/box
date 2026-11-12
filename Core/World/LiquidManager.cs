@@ -7,7 +7,7 @@ using System.Collections.Generic;
 /// </summary>
 public partial class LiquidManager : Node
 {
-    private readonly ChunkManager _world;
+    private ChunkManager _world;
     private readonly Queue<Vector3I> _queue = new();
     private readonly HashSet<Vector3I> _queued = new();
     private float _tickTimer;
@@ -21,7 +21,11 @@ public partial class LiquidManager : Node
         new Vector3I(0, 0, -1)
     };
 
-    public LiquidManager(ChunkManager world)
+    public LiquidManager()
+    {
+    }
+
+    public void SetWorld(ChunkManager world)
     {
         _world = world;
     }
@@ -49,6 +53,8 @@ public partial class LiquidManager : Node
 
     private void UpdateLiquid(Vector3I pos)
     {
+        if (_world == null) return;
+
         BlockState state = _world.GetBlockAtWorld(pos);
         if (state.IsAir()) return;
 
@@ -56,7 +62,6 @@ public partial class LiquidManager : Node
         if (resource == null || !resource.IsLiquid) return;
 
         string liquidId = resource.LiquidId;
-        bool spring = state.BlockId == "water_spring" || state.LiquidSource;
         int level = state.LiquidLevel <= 0 ? 16 : Mathf.Clamp(state.LiquidLevel, 1, 16);
 
         // Downward flow always wins. A falling cell fills the entire target cell.
