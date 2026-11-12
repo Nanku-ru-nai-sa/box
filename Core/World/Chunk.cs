@@ -2783,11 +2783,9 @@ private void AddQuadCropped(
         int y,
         int z)
     {
-        float height = Mathf.Clamp(
-            (block.LiquidLevel <= 0 ? 16 : block.LiquidLevel) / 16.0f,
-            1.0f / 16.0f,
-            1.0f
-        );
+        // Water uses full block height for now, matching Minecraft's simple
+        // flowing-water appearance instead of rendering 1/16 pixel steps.
+        const float height = 1.0f;
 
         BlockState above = GetBlockCrossChunk(x, y + 1, z);
         bool sameAbove = IsSameLiquid(above, resource.LiquidId);
@@ -2846,11 +2844,7 @@ private void AddQuadCropped(
                 neighborResource.IsLiquid &&
                 neighborResource.LiquidId == resource.LiquidId)
             {
-                neighborHeight = Mathf.Clamp(
-                    (neighbor.LiquidLevel <= 0 ? 16 : neighbor.LiquidLevel) / 16.0f,
-                    1.0f / 16.0f,
-                    1.0f
-                );
+                neighborHeight = 1.0f;
 
                 if (neighborHeight >= height)
                     return;
