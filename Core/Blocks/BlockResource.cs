@@ -14,6 +14,10 @@ public partial class BlockResource : Resource
     [Export] public bool CanChisel { get; set; } = true;
     [Export] public bool IsSolid { get; set; } = true;
     [Export] public bool IsTransparent { get; set; } = false;
+
+    // Shared liquid-system metadata. Empty LiquidId means this is not a liquid.
+    [Export] public string LiquidId { get; set; } = "";
+    [Export] public bool IsLiquid => !string.IsNullOrEmpty(LiquidId);
     [Export] public bool CanRotate { get; set; } = false;
     [Export] public bool CanHaveFeatures { get; set; } = true;
     [Export] public bool GrassCanGrow { get; set; } = true;
