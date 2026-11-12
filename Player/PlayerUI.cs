@@ -802,8 +802,8 @@ private void OnSlotMouseEntered(int slotIndex)
 
         _stationTabBar.OffsetLeft = selectorLeft;
         _stationTabBar.OffsetRight = selectorLeft + selectorWidth;
-        _stationTabBar.OffsetTop = -180f - 62f;
-        _stationTabBar.OffsetBottom = -180f - 4f;
+        _stationTabBar.OffsetTop = -180f - 86f;
+        _stationTabBar.OffsetBottom = -180f - 28f;
         _stationTabBar.Visible = false;
 
         const float slotSize = 56f;
