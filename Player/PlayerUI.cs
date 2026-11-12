@@ -976,10 +976,15 @@ private void OnSlotMouseEntered(int slotIndex)
             if (_stationSlots[i] == null || !_stationSlots[i].Visible)
                 continue;
 
+            bool selected =
+                !string.IsNullOrEmpty(_stationSlotIds[i]) &&
+                _stationSlotIds[i] == _activeStation &&
+                (_activeStation == "default" ||
+                 _stationSlotPositions[i] == _activeStationPosition);
+
             SetStationTabStyle(
                 _stationSlots[i],
-                !string.IsNullOrEmpty(_stationSlotIds[i]) &&
-                _stationSlotIds[i] == _activeStation
+                selected
             );
         }
     }
