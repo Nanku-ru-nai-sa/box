@@ -17,6 +17,7 @@ public partial class LiquidManager : Node
 
     private const float TickInterval = 0.12f;
     private const int MaxUpdatesPerTick = 220;
+    private const int HorizontalFlowStrength = 8; // Source plus seven horizontal blocks, like Minecraft.
 
     private static readonly Vector3I[] SideOffsets =
     {
@@ -145,7 +146,11 @@ public partial class LiquidManager : Node
         }
 
         // Once the block below is full or blocked, spread horizontally.
-        int spreadLevel = level - 1;
+        // A falling column spreads sideways with the same range as a source.
+        // Horizontal flow has seven steps instead of tiny 1/16-block height changes.
+        int spreadLevel = isSource || falling
+            ? HorizontalFlowStrength - 1
+            : level - 1;
         if (spreadLevel <= 0)
             return;
 
@@ -159,6 +164,45 @@ public partial class LiquidManager : Node
             if (CanFlowInto(target, liquidId, spreadLevel))
                 WriteLiquid(targetPos, liquidId, spreadLevel, false, false);
         }
+    }
+
+    public Vector3 GetFlowVector(Vector3I pos)
+    {
+        if (_world == null || !_world.IsWorldPositionLoaded(pos))
+            return Vector3.Zero;
+
+        BlockState state = _world.GetBlockAtWorld(pos);
+        if (state.IsAir() || state.LiquidSource)
+            return Vector3.Zero;
+
+        BlockResource resource = BlockRegistry.Instance.GetBlock(state.BlockId);
+        if (resource == null || !resource.IsLiquid || resource.IsLiquidSource)
+            return Vector3.Zero;
+
+        if (state.LiquidFalling)
+            return Vector3.Down;
+
+        int ownLevel = state.LiquidLevel <= 0 ? 16 : state.LiquidLevel;
+        Vector3 direction = Vector3.Zero;
+
+        foreach (Vector3I offset in SideOffsets)
+        {
+            Vector3I neighborPos = pos + offset;
+            if (!_world.IsWorldPositionLoaded(neighborPos))
+                continue;
+
+            BlockState neighbor = _world.GetBlockAtWorld(neighborPos);
+            if (!IsSameLiquid(neighbor, resource.LiquidId))
+                continue;
+
+            int neighborLevel = neighbor.LiquidLevel <= 0 ? 16 : neighbor.LiquidLevel;
+            if (neighborLevel > ownLevel)
+                direction -= new Vector3(offset.X, 0f, offset.Z);
+        }
+
+        return direction.LengthSquared() > 0.001f
+            ? direction.Normalized()
+            : Vector3.Zero;
     }
 
     private bool IsSameLiquid(BlockState state, string liquidId)
