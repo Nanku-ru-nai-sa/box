@@ -97,6 +97,8 @@ public partial class Chunk : Node3D
         _isDirty = true;
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
 
+        NotifyLiquidAt(x, y, z, block);
+
         TryDecayGrassBelow(x, y, z, block);
         TryApplyGravity(x, y, z, block);
     }
@@ -329,6 +331,20 @@ public partial class Chunk : Node3D
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
 
         _isDirty = true;
+        NotifyLiquidAt(x, y, z, block);
+    }
+
+    private void NotifyLiquidAt(int x, int y, int z, BlockState block)
+    {
+        if (_chunkManager == null) return;
+
+        Vector3I worldPos = new Vector3I(
+            ChunkPosition.X * SIZE + x,
+            ChunkPosition.Y * HEIGHT + y,
+            ChunkPosition.Z * SIZE + z
+        );
+
+        _chunkManager.NotifyLiquidChanged(worldPos);
     }
 
     private BlockState GetBlockCrossChunk(
@@ -689,7 +705,18 @@ public partial class Chunk : Node3D
                             ? transparentSurfaces
                             : solidSurfaces;
 
-                    if (resource.IsCross)
+                    if (resource.IsLiquid)
+                    {
+                        AddLiquidFaces(
+                            transparentSurfaces,
+                            block,
+                            resource,
+                            x,
+                            y,
+                            z
+                        );
+                    }
+                    else if (resource.IsCross)
                     {
                         // Existing visual stays exactly the same.
                         AddCrossFaces(
@@ -2730,6 +2757,118 @@ private void AddQuadCropped(
                 )
             );
         }
+    }
+
+    private void AddLiquidFaces(
+        Dictionary<Texture2D, SurfaceTool> surfaces,
+        BlockState block,
+        BlockResource resource,
+        int x,
+        int y,
+        int z)
+    {
+        float height = Mathf.Clamp(
+            (block.LiquidLevel <= 0 ? 16 : block.LiquidLevel) / 16.0f,
+            1.0f / 16.0f,
+            1.0f
+        );
+
+        BlockState above = GetBlockCrossChunk(x, y + 1, z);
+        bool sameAbove = IsSameLiquid(above, resource.LiquidId);
+
+        if (!sameAbove)
+        {
+            AddQuad(
+                GetOrCreateSurface(surfaces, resource.TextureTop),
+                GetCustomShapeFaceVertices(x, y, z, 1f, height, 1f, FaceDirection.Top)
+            );
+        }
+
+        // Draw the underside only when there is no liquid directly below.
+        BlockState below = GetBlockCrossChunk(x, y - 1, z);
+        if (below.IsAir())
+        {
+            AddQuad(
+                GetOrCreateSurface(surfaces, resource.TextureBottom),
+                GetCustomShapeFaceVertices(x, y, z, 1f, height, 1f, FaceDirection.Bottom)
+            );
+        }
+
+        AddLiquidSide(FaceDirection.North, x, y, z, height, resource, surfaces);
+        AddLiquidSide(FaceDirection.South, x, y, z, height, resource, surfaces);
+        AddLiquidSide(FaceDirection.West, x, y, z, height, resource, surfaces);
+        AddLiquidSide(FaceDirection.East, x, y, z, height, resource, surfaces);
+    }
+
+    private void AddLiquidSide(
+        FaceDirection face,
+        int x,
+        int y,
+        int z,
+        float height,
+        BlockResource resource,
+        Dictionary<Texture2D, SurfaceTool> surfaces)
+    {
+        int nx = x, nz = z;
+        switch (face)
+        {
+            case FaceDirection.North: nz--; break;
+            case FaceDirection.South: nz++; break;
+            case FaceDirection.West: nx--; break;
+            case FaceDirection.East: nx++; break;
+        }
+
+        BlockState neighbor = GetBlockCrossChunk(nx, y, nz);
+        float neighborHeight = 0f;
+
+        if (!neighbor.IsAir())
+        {
+            BlockResource neighborResource =
+                BlockRegistry.Instance.GetBlock(neighbor.BlockId);
+
+            if (neighborResource != null &&
+                neighborResource.IsLiquid &&
+                neighborResource.LiquidId == resource.LiquidId)
+            {
+                neighborHeight = Mathf.Clamp(
+                    (neighbor.LiquidLevel <= 0 ? 16 : neighbor.LiquidLevel) / 16.0f,
+                    1.0f / 16.0f,
+                    1.0f
+                );
+
+                if (neighborHeight >= height)
+                    return;
+            }
+            else if (neighborResource != null &&
+                     !neighborResource.IsTransparent &&
+                     !neighborResource.IsCustomShape)
+            {
+                return;
+            }
+        }
+
+        float sideHeight = height - neighborHeight;
+        if (sideHeight <= 0f) return;
+
+        AddQuad(
+            GetOrCreateSurface(
+                surfaces,
+                face == FaceDirection.North || face == FaceDirection.South
+                    ? resource.TextureSide
+                    : resource.TextureSide
+            ),
+            GetCustomShapeFaceVertices(
+                x, y + neighborHeight, z,
+                1f, sideHeight, 1f, face
+            )
+        );
+    }
+
+    private bool IsSameLiquid(BlockState state, string liquidId)
+    {
+        if (state.IsAir()) return false;
+        BlockResource other = BlockRegistry.Instance.GetBlock(state.BlockId);
+        return other != null && other.IsLiquid && other.LiquidId == liquidId;
     }
 
     private bool ShouldDrawFace(
