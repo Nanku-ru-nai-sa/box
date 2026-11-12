@@ -723,18 +723,34 @@ public Vector2? LoadPlayerLook()
             if (savedValue.VariantType == Variant.Type.String)
             {
                 state = new BlockState((string)savedValue);
+
+                // Old saves had no liquid metadata, so legacy water blocks
+                // become ordinary full source blocks.
+                if (state.BlockId == "water")
+                {
+                    state.LiquidLevel = 16;
+                    state.LiquidSource = true;
+                }
             }
             else
             {
                 var blockData = savedValue.AsGodotDictionary();
+                string savedBlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air";
+                bool hasLiquidLevel = blockData.ContainsKey("liquid_level");
+                bool hasLiquidSource = blockData.ContainsKey("liquid_source");
+
                 state = new BlockState
                 {
-                    BlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air",
+                    BlockId = savedBlockId,
                     BitMask = blockData.ContainsKey("mask") ? (byte)(int)blockData["mask"] : (byte)0xFF,
                     Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0,
-                    LiquidLevel = blockData.ContainsKey("liquid_level") ? (byte)(int)blockData["liquid_level"] : (byte)0,
+                    LiquidLevel = hasLiquidLevel
+                        ? (byte)(int)blockData["liquid_level"]
+                        : (savedBlockId == "water" ? (byte)16 : (byte)0),
                     LiquidFalling = blockData.ContainsKey("liquid_falling") && (bool)blockData["liquid_falling"],
-                    LiquidSource = blockData.ContainsKey("liquid_source") && (bool)blockData["liquid_source"]
+                    LiquidSource = hasLiquidSource
+                        ? (bool)blockData["liquid_source"]
+                        : savedBlockId == "water"
                 };
             }
 
@@ -1541,7 +1557,7 @@ public Vector3 GetWorldSpawnPosition()
                         else
                         {
                             block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
-                                ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16 }
+                                ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16, LiquidSource = true }
                                 : BlockState.Air;
                         }
                     }
