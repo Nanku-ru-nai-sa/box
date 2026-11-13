@@ -373,6 +373,27 @@ public partial class Player : CharacterBody3D
             return;
         }
 
+        // Crops are harvested directly instead of using normal block mining.
+        Vector3I cropWorldPosition = new Vector3I(
+            chunk.ChunkPosition.X * Chunk.SIZE + bx,
+            chunk.ChunkPosition.Y * Chunk.HEIGHT + by,
+            chunk.ChunkPosition.Z * Chunk.SIZE + bz
+        );
+
+        if (CropManager.Instance != null &&
+            CropManager.Instance.TryHarvest(
+                cropWorldPosition,
+                out string cropDrop,
+                out int cropCount))
+        {
+            Vector3 cropDropPosition = chunk.GlobalPosition +
+                new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
+
+            SpawnItemDrop(cropDrop, cropCount, cropDropPosition);
+            ResetBreak();
+            return;
+        }
+
         // ---------------------------------------------------------
         // BEDROCK
         // ---------------------------------------------------------
@@ -768,90 +789,89 @@ else if (b.BlockId is "crate" or "barrel")
 
     private void TryPlaceBlock()
     {
-        if (!_rayCast.IsColliding() ||
-            string.IsNullOrEmpty(_selectedBlockId))
-        {
+        if (!_rayCast.IsColliding() || string.IsNullOrEmpty(_selectedBlockId))
             return;
-        }
 
-        var gm =
-            GameModeManager.Instance;
-
+        var gm = GameModeManager.Instance;
         if (gm != null && gm.IsStory)
             return;
 
-        bool consume =
-            gm == null || !gm.IsCreate;
+        bool consume = gm == null || !gm.IsCreate;
 
-        if (consume &&
-            !_inventory.HasItem(
-                _selectedBlockId,
-                1))
+        var col = _rayCast.GetCollider() as Node;
+        if (col == null || !col.HasMeta("chunk"))
+            return;
+
+        Chunk hitChunk = (Chunk)col.GetMeta("chunk").AsGodotObject();
+        if (hitChunk == null) return;
+
+        Vector3 hitPosition = _rayCast.GetCollisionPoint()
+            - _rayCast.GetCollisionNormal() * 0.5f;
+
+        Vector3I hitBlockPosition = new Vector3I(
+            Mathf.FloorToInt(hitPosition.X),
+            Mathf.FloorToInt(hitPosition.Y),
+            Mathf.FloorToInt(hitPosition.Z)
+        );
+
+        var cm = hitChunk.GetParent() as ChunkManager;
+        if (cm == null) return;
+
+        // Hoe: convert supported dirt-family blocks into tilled soil.
+        if (_selectedBlockId == "hoe")
         {
+            if (CropManager.Instance != null &&
+                CropManager.Instance.TryUseHoe(hitBlockPosition))
+                ShowFeedback("Soil tilled");
             return;
         }
 
-        if (!BlockRegistry.Instance.BlockExists(
-            _selectedBlockId))
+        // Seeds: plant on the farmland block being targeted.
+        if (_selectedBlockId is "wheat_seed" or "corn_seed" or "tomato_seed")
         {
-            ShowFeedback(
-                $"{_selectedBlockId} can't be placed"
-            );
-
+            if (CropManager.Instance != null &&
+                CropManager.Instance.TryPlant(_selectedBlockId, hitBlockPosition))
+            {
+                if (consume)
+                    _inventory.RemoveItem(_selectedBlockId, 1);
+            }
+            else
+            {
+                ShowFeedback("Seeds need empty space above tilled soil");
+            }
             return;
         }
 
-        var col =
-            _rayCast.GetCollider() as Node;
+        if (consume && !_inventory.HasItem(_selectedBlockId, 1))
+            return;
 
-        if (col == null ||
-            !col.HasMeta("chunk"))
+        if (!BlockRegistry.Instance.BlockExists(_selectedBlockId))
         {
+            ShowFeedback($"{_selectedBlockId} can't be placed");
             return;
         }
 
-        Chunk hitChunk =
-            (Chunk)col.GetMeta(
-                "chunk"
-            ).AsGodotObject();
-
-        Vector3 worldTarget =
-            _rayCast.GetCollisionPoint()
+        Vector3 worldTarget = _rayCast.GetCollisionPoint()
             + _rayCast.GetCollisionNormal() * 0.5f;
 
-        Vector3 center =
-            new(
-                Mathf.Floor(worldTarget.X) + 0.5f,
-                Mathf.Floor(worldTarget.Y) + 0.5f,
-                Mathf.Floor(worldTarget.Z) + 0.5f
-            );
+        Vector3 center = new(
+            Mathf.Floor(worldTarget.X) + 0.5f,
+            Mathf.Floor(worldTarget.Y) + 0.5f,
+            Mathf.Floor(worldTarget.Z) + 0.5f
+        );
 
         if (center.DistanceTo(GlobalPosition) < 0.9f)
             return;
 
-        var cm =
-            hitChunk.GetParent() as ChunkManager;
+        Chunk targetChunk = cm.GetChunk(cm.WorldToChunk(worldTarget));
+        if (targetChunk == null) return;
 
-        if (cm == null)
-            return;
-
-        Chunk tc =
-            cm.GetChunk(
-                cm.WorldToChunk(worldTarget)
-            );
-
-        if (tc == null)
-            return;
-
-        Vector3 lp =
-            worldTarget - tc.GlobalPosition;
-
+        Vector3 localPosition = worldTarget - targetChunk.GlobalPosition;
         BlockResource placedResource = BlockRegistry.Instance.GetBlock(_selectedBlockId);
         byte placementRotation = 0;
 
         if (placedResource != null && placedResource.TextureFront != null)
         {
-            // The front face points back toward the player, like a Minecraft furnace.
             Vector3 towardPlayer = GlobalTransform.Basis.Z;
             if (Mathf.Abs(towardPlayer.X) > Mathf.Abs(towardPlayer.Z))
                 placementRotation = towardPlayer.X >= 0f ? (byte)1 : (byte)3;
@@ -866,8 +886,6 @@ else if (b.BlockId is "crate" or "barrel")
             Rotation = placementRotation
         };
 
-        // A placed water block is a finite source. A spring block is marked
-        // as a permanent source by its BlockResource definition.
         if (placedResource != null && placedResource.IsLiquid)
         {
             placedBlock.LiquidLevel = 16;
@@ -875,20 +893,15 @@ else if (b.BlockId is "crate" or "barrel")
                 _selectedBlockId == "water" || placedResource.IsLiquidSource;
         }
 
-        tc.SetBlock(
-            Mathf.FloorToInt(lp.X),
-            Mathf.FloorToInt(lp.Y),
-            Mathf.FloorToInt(lp.Z),
+        targetChunk.SetBlock(
+            Mathf.FloorToInt(localPosition.X),
+            Mathf.FloorToInt(localPosition.Y),
+            Mathf.FloorToInt(localPosition.Z),
             placedBlock
         );
 
         if (consume)
-        {
-            _inventory.RemoveItem(
-                _selectedBlockId,
-                1
-            );
-        }
+            _inventory.RemoveItem(_selectedBlockId, 1);
     }
 
     // =========================================================================
