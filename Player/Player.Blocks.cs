@@ -384,12 +384,16 @@ public partial class Player : CharacterBody3D
             CropManager.Instance.TryHarvest(
                 cropWorldPosition,
                 out string cropDrop,
-                out int cropCount))
+                out int cropCount,
+                out string cropBonusDrop,
+                out int cropBonusCount))
         {
             Vector3 cropDropPosition = chunk.GlobalPosition +
                 new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
 
             SpawnItemDrop(cropDrop, cropCount, cropDropPosition);
+            if (!string.IsNullOrEmpty(cropBonusDrop) && cropBonusCount > 0)
+                SpawnItemDrop(cropBonusDrop, cropBonusCount, cropDropPosition + Vector3.Up * 0.15f);
             ResetBreak();
             return;
         }
