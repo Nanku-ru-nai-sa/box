@@ -8,6 +8,7 @@ public enum WorldGenTheme { Normal, OnlyForest, OnlyDesert }
 
 public partial class ChunkManager : Node3D
 {
+    public static ChunkManager Instance { get; private set; }
     [Export] public int RenderDistance { get; set; } = 7;
     [Export] public int VerticalRenderDistance { get; set; } = 8; // covers +/-8 chunks (+/-128 blocks) around the player - enough to see from ground level up through the sky island band (~Y230) when standing near sea level, without loading the full 18-layer world height at all times
     [Export] public int Seed { get; set; } = 777;
@@ -218,6 +219,7 @@ public partial class ChunkManager : Node3D
 
     public override void _Ready()
     {
+        Instance = this;
         // Pull this world's settings from its save data before noise gets configured below.
         // Falls back to the [Export] defaults above if there's no active world (e.g. running
         // this scene directly instead of going through the main menu).
@@ -2218,6 +2220,8 @@ public Vector3 GetWorldSpawnPosition()
             }
         }
     }
+
+    public IEnumerable<Chunk> GetLoadedChunks() => _chunks.Values;
 
     public bool IsWorldPositionLoaded(Vector3I worldPos)
     {
