@@ -17,6 +17,7 @@ public partial class BlockRegistry : Node
     {
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
+        var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/farmland.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
@@ -522,8 +523,7 @@ Register(root);
 
         string[] farmableSoils =
         {
-            "dirt", "grass_block", "compact_dirt",
-            "coarse_soil", "sub_soil", "silt", "clay"
+            "dirt", "grass_block", "silt", "clay"
         };
 
         foreach (string soilId in farmableSoils)
@@ -534,7 +534,7 @@ Register(root);
             farmland.IsSolid = true;
             farmland.CanChisel = true;
             farmland.Hardness = 0.5f;
-            farmland.TextureTop = dirtTex;
+            farmland.TextureTop = farmlandTex;
             farmland.TextureSide = dirtTex;
             farmland.TextureBottom = dirtTex;
             farmland.Drops = new[] { soilId };
