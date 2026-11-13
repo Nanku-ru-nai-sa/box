@@ -1,0 +1,8 @@
+{
+  "id": "hoe_wood",
+  "result": "hoe",
+  "count": 1,
+  "shaped": true,
+  "pattern": ["PP ", " S ", " S "],
+  "key": { "P": "planks", "S": "stick" }
+}
