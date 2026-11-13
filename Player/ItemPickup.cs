@@ -809,7 +809,7 @@ public partial class ItemPickup : Node3D
 
             if (flow.LengthSquared() > 0.001f)
             {
-                _velocity += flow * 4f * dt;
+                _velocity += flow * 1.5f * dt;
                 _settled = false;
             }
         }
