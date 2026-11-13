@@ -78,12 +78,34 @@ public partial class ItemRegistry : Node
             _items[id] = item;
         }
 
+
+        RegisterFarmingItem("hoe", "Hoe", false, "Tool for tilling dirt-family soil.");
+        RegisterFarmingItem("wheat_seed", "Wheat Seeds", true, "Plant on tilled soil.");
+        RegisterFarmingItem("corn_seed", "Corn Seeds", true, "Plant on tilled soil.");
+        RegisterFarmingItem("tomato_seed", "Tomato Seeds", true, "Plant on tilled soil.");
+        RegisterFarmingItem("wheat", "Wheat", true, "Harvested wheat.");
+        RegisterFarmingItem("corn", "Corn", true, "Harvested corn.");
+        RegisterFarmingItem("tomato", "Tomato", true, "Harvested tomatoes.");
+
         GD.Print($"ItemRegistry loaded {_items.Count} items.");
 
         // Rebuild any Tool Bench crafted tools from their persisted recipes
         // BEFORE anything (e.g. loading a save) tries to look one up by id.
         // Fixes: crafted tools showing no icon/stats after restarting the game.
         ToolCrafting.LoadPersistedRecipes();
+    }
+
+
+    private void RegisterFarmingItem(string id, string name, bool stackable, string description)
+    {
+        var item = new ItemResource();
+        item.ItemId = id;
+        item.DisplayName = name;
+        item.Description = description;
+        item.IsStackable = stackable;
+        item.MaxStackSize = stackable ? 64 : 1;
+        if (id == "hoe") item.ToolType = "hoe";
+        _items[id] = item;
     }
 
     // "tool_bench" -> "Tool Bench", "diamond_ore" -> "Diamond Ore". Only
