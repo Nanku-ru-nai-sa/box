@@ -513,7 +513,62 @@ Register(root);
         bambooShoot.TextureBottom = bambooShootTex;
         Register(bambooShoot);
 
+
+        // ============================================================
+        // FARMING BLOCKS + CROP GROWTH STAGES
+        // Temporary visuals use existing 16x16 sapling/dirt textures
+        // until the final crop PNGs are added.
+        // ============================================================
+
+        string[] farmableSoils =
+        {
+            "dirt", "grass_block", "compact_dirt",
+            "coarse_soil", "sub_soil", "silt", "clay"
+        };
+
+        foreach (string soilId in farmableSoils)
+        {
+            var farmland = new BlockResource();
+            farmland.BlockId = "farmland_" + soilId;
+            farmland.DisplayName = "Tilled Soil";
+            farmland.IsSolid = true;
+            farmland.CanChisel = true;
+            farmland.Hardness = 0.5f;
+            farmland.TextureTop = dirtTex;
+            farmland.TextureSide = dirtTex;
+            farmland.TextureBottom = dirtTex;
+            farmland.Drops = new[] { soilId };
+            Register(farmland);
+        }
+
+        RegisterCropStages("wheat", "Wheat", 6, saplingTex);
+        RegisterCropStages("corn", "Corn", 6, saplingTex);
+        RegisterCropStages("tomato", "Tomato", 6, saplingTex);
+
         GD.Print("Blocks registered.");
+    }
+
+
+    private void RegisterCropStages(string cropId, string displayName, int stageCount, Texture2D fallback)
+    {
+        for (int stage = 0; stage < stageCount; stage++)
+        {
+            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}_{stage}.png";
+            Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath) ?? fallback;
+            var crop = new BlockResource();
+            crop.BlockId = $"crop_{cropId}_{stage}";
+            crop.DisplayName = displayName;
+            crop.IsSolid = false;
+            crop.CanChisel = false;
+            crop.IsTransparent = true;
+            crop.IsCross = true;
+            crop.Hardness = 0f;
+            crop.TextureTop = texture;
+            crop.TextureSide = texture;
+            crop.TextureBottom = texture;
+            crop.Drops = new[] { cropId + "_seed" };
+            Register(crop);
+        }
     }
 
     private void Register(BlockResource block)
