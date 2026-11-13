@@ -51,6 +51,9 @@ public partial class Player : CharacterBody3D
             return (customId, customCount);
         }
 
+        if (blockId.StartsWith("farmland_"))
+            return (blockId.Substring("farmland_".Length), 1);
+
         if (blockId == "grass_block")
             return ("dirt", 1);
 
