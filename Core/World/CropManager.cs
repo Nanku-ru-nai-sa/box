@@ -7,8 +7,7 @@ public partial class CropManager : Node
 
     private static readonly string[] FarmableSoils =
     {
-        "dirt", "grass_block", "compact_dirt",
-        "coarse_soil", "sub_soil", "silt", "clay"
+        "dirt", "grass_block", "silt", "clay"
     };
 
     public override void _Ready()
@@ -75,10 +74,12 @@ public partial class CropManager : Node
         return true;
     }
 
-    public bool TryHarvest(Vector3I position, out string itemId, out int count)
+    public bool TryHarvest(Vector3I position, out string itemId, out int count, out string bonusItem, out int bonusCount)
     {
         itemId = "";
         count = 0;
+        bonusItem = "";
+        bonusCount = 0;
 
         var cm = ChunkManager.Instance;
         if (cm == null) return false;
@@ -95,19 +96,24 @@ public partial class CropManager : Node
         {
             itemId = "tomato";
             count = rng.RandiRange(2, 4);
+            bonusItem = "tomato_seed";
+            bonusCount = 1;
             cm.SetBlockAtWorld(position, new BlockState("crop_tomato_2"));
         }
         else
         {
             itemId = mature ? cropId : cropId + "_seed";
             count = mature
-                ? (cropId == "wheat" ? rng.RandiRange(2, 3) : 1)
+                ? (cropId == "wheat" ? rng.RandiRange(2, 3) : rng.RandiRange(1, 2))
                 : 1;
 
-            cm.SetBlockAtWorld(position, BlockState.Air);
+            if (mature)
+            {
+                bonusItem = cropId + "_seed";
+                bonusCount = cropId == "wheat" ? rng.RandiRange(1, 2) : 1;
+            }
 
-            if (mature && cropId == "wheat")
-                count += 0; // Wheat seeds can be added as a separate bonus later.
+            cm.SetBlockAtWorld(position, BlockState.Air);
         }
 
         return true;
@@ -167,10 +173,7 @@ public partial class CropManager : Node
                     soilPosition + new Vector3I(dx, dy, dz)
                 );
 
-                BlockResource resource = BlockRegistry.Instance?.GetBlock(nearby.BlockId);
-                if (resource != null && resource.IsLiquid && nearby.BlockId != "water_spring")
-                    return true;
-                if (nearby.BlockId == "water_spring")
+                if (nearby.BlockId == "water" || nearby.BlockId == "water_spring")
                     return true;
             }
         }
