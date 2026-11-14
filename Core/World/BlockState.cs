@@ -8,6 +8,11 @@ public struct BlockState
     public byte Rotation;
     public string[] Features;
 
+    // Liquid simulation data. Sources use 16; horizontal flow uses strengths 1-7.
+    public byte LiquidLevel;
+    public bool LiquidFalling;
+    public bool LiquidSource;
+
     public static readonly BlockState Air = new BlockState
     {
         BlockId = "air",
@@ -22,6 +27,9 @@ public struct BlockState
         BitMask = 0b11111111;
         Rotation = 0;
         Features = new string[0];
+        LiquidLevel = 0;
+        LiquidFalling = false;
+        LiquidSource = false;
     }
 
     public BlockState(string blockId, string[] features)
@@ -30,6 +38,9 @@ public struct BlockState
         BitMask = 0b11111111;
         Rotation = 0;
         Features = features;
+        LiquidLevel = 0;
+        LiquidFalling = false;
+        LiquidSource = false;
     }
 
     public bool IsAir()

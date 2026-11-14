@@ -39,12 +39,6 @@ public partial class CraftingPanel : Control
     // ── UI ────────────────────────────────────────────────────────────────────
     private Panel   _bg;
 
-    // Tab buttons
-    private Panel   _tabGrid;
-    private Panel   _tabLearned;
-    private Label   _tabGridIcon;
-    private Label   _tabLearnedIcon;
-
     // Grid view
     private Control       _gridView;
     private Panel[]       _gridSlotPanels  = new Panel[9];
@@ -61,11 +55,11 @@ public partial class CraftingPanel : Control
     // Tooltip
     private Panel _tooltip;
     private Label _tooltipTitle;
-    private Label _tooltipBody;
+    private GridContainer _tooltipIngredients;
 
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
-    private const int PanelW  = 300;
+    private const int PanelW  = 271;
 
     // =========================================================================
     // INIT
@@ -84,7 +78,7 @@ public partial class CraftingPanel : Control
         MouseFilter       = MouseFilterEnum.Stop;
 
         BuildBackground();
-        BuildTabButtons();
+        BuildExternalTitle();
         BuildGridView();
         BuildLearnedView();
         BuildTooltip();
@@ -162,30 +156,11 @@ public partial class CraftingPanel : Control
         AddChild(_bg);
     }
 
-    private void BuildTabButtons()
+    private void BuildExternalTitle()
     {
-        float btnSz = 24f;
-        float y     = -24f; // sits above the panel, level with the external title
-
-        _tabGrid            = MakeTabPanel();
-        _tabGrid.Position   = new Vector2(PanelW - btnSz * 2 - 4f, y);
-        _tabGrid.CustomMinimumSize = new Vector2(btnSz, btnSz);
-        _tabGridIcon        = MakeTabIcon("⊞");
-        _tabGrid.AddChild(_tabGridIcon);
-        _tabGrid.GuiInput  += (InputEvent ev) => { if (IsLClick(ev)) ShowTab(true); };
-        AddChild(_tabGrid);
-
-        _tabLearned           = MakeTabPanel();
-        _tabLearned.Position  = new Vector2(PanelW - btnSz, y);
-        _tabLearned.CustomMinimumSize = new Vector2(btnSz, btnSz);
-        _tabLearnedIcon       = MakeTabIcon("☰");
-        _tabLearned.AddChild(_tabLearnedIcon);
-        _tabLearned.GuiInput += (InputEvent ev) => { if (IsLClick(ev)) ShowTab(false); };
-        AddChild(_tabLearned);
-
         var externalTitle = new Label();
         externalTitle.Text = "Craft";
-        externalTitle.Position = new Vector2(0f, y);
+        externalTitle.Position = new Vector2(0f, -24f);
         externalTitle.AddThemeFontSizeOverride("font_size", 13);
         externalTitle.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.75f));
         externalTitle.MouseFilter = MouseFilterEnum.Ignore;
@@ -299,13 +274,15 @@ public partial class CraftingPanel : Control
 
         var scroll               = new ScrollContainer();
         scroll.AnchorRight       = 1f; scroll.AnchorBottom = 1f;
-        scroll.OffsetLeft        = 6f; scroll.OffsetRight  = -6f;
+        // Four 56px recipe slots with 5px gaps: exactly the same width
+        // and horizontal alignment as the four workstation selector slots.
+        scroll.OffsetLeft        = 16f; scroll.OffsetRight  = -16f;
         scroll.OffsetTop         = 0f; scroll.OffsetBottom = -4f;
         _learnedView.AddChild(scroll);
 
         _learnedGrid         = new GridContainer();
-        _learnedGrid.Columns = 5;
-        _learnedGrid.AddThemeConstantOverride("h_separation", 2);
+        _learnedGrid.Columns = 4;
+        _learnedGrid.AddThemeConstantOverride("h_separation", SlotGap);
         _learnedGrid.AddThemeConstantOverride("v_separation", SlotGap);
         scroll.AddChild(_learnedGrid);
 
@@ -338,37 +315,40 @@ public partial class CraftingPanel : Control
         _tooltipTitle.AddThemeColorOverride("font_color", new Color(1f, 0.9f, 0.5f));
         vb.AddChild(_tooltipTitle);
 
-        _tooltipBody = new Label();
-        _tooltipBody.AddThemeFontSizeOverride("font_size", 11);
-        _tooltipBody.AddThemeColorOverride("font_color", new Color(0.7f, 0.7f, 0.7f));
-        _tooltipBody.AutowrapMode = TextServer.AutowrapMode.Word;
-        vb.AddChild(_tooltipBody);
+        // Ingredient icons are displayed as small slots instead of a text list.
+        _tooltipIngredients = new GridContainer();
+        _tooltipIngredients.Columns = 4;
+        _tooltipIngredients.AddThemeConstantOverride("h_separation", 3);
+        _tooltipIngredients.AddThemeConstantOverride("v_separation", 3);
+        vb.AddChild(_tooltipIngredients);
 
         AddChild(_tooltip);
     }
 
     // =========================================================================
-    // TABS
+    // RECIPE MEMORY VIEW
     // =========================================================================
+
+    public void ShowCraftingGrid()
+    {
+        ShowTab(true);
+    }
+
+    public void ShowLearnedRecipes()
+    {
+        RefreshLearnedTab();
+        ShowTab(false);
+    }
+
+    public void ToggleRecipeMemory()
+    {
+        ShowTab(_learnedView.Visible);
+    }
 
     private void ShowTab(bool grid)
     {
-        _gridView.Visible    = grid;
+        _gridView.Visible = grid;
         _learnedView.Visible = !grid;
-        SetTabActive(_tabGrid,    _tabGridIcon,    grid);
-        SetTabActive(_tabLearned, _tabLearnedIcon, !grid);
-    }
-
-    private void SetTabActive(Panel tab, Label icon, bool active)
-    {
-        var s = new StyleBoxFlat();
-        s.BgColor         = active ? new Color(0.2f, 0.2f, 0.25f) : new Color(0.12f, 0.12f, 0.15f);
-        s.BorderColor     = active ? new Color(0.6f, 0.6f, 0.7f)  : new Color(0.3f, 0.3f, 0.35f);
-        s.BorderWidthTop  = 2; s.BorderWidthBottom = 2;
-        s.BorderWidthLeft = 2; s.BorderWidthRight  = 2;
-        tab.AddThemeStyleboxOverride("panel", s);
-        icon.AddThemeColorOverride("font_color",
-            active ? new Color(1f, 1f, 1f) : new Color(0.5f, 0.5f, 0.5f));
     }
 
     // =========================================================================
@@ -623,23 +603,81 @@ public partial class CraftingPanel : Control
 
     private void ShowRecipeTooltip(RecipeManager.Recipe recipe, Control anchor)
     {
-        _tooltipTitle.Text = recipe.ResultId;
-        var ingredients    = RecipeManager.Instance?.GetIngredientDisplay(recipe);
-        _tooltipBody.Text  = ingredients != null ? string.Join("\n", ingredients) : "";
-        _tooltip.Size      = new Vector2(150f, 0f);
-        _tooltip.Visible   = true;
-        Vector2 pos        = anchor.GlobalPosition - GlobalPosition;
+        _tooltipTitle.Text = ItemRegistry.Instance?.GetItem(recipe.ResultId)?.DisplayName ?? recipe.ResultId;
+
+        foreach (Node child in _tooltipIngredients.GetChildren())
+            child.QueueFree();
+
+        // Count repeated ingredients, whether the recipe is shaped or shapeless.
+        var needed = new Dictionary<string, int>();
+        if (recipe.Shaped)
+        {
+            for (int r = 0; r < recipe.Pattern.GetLength(0); r++)
+                for (int c = 0; c < recipe.Pattern.GetLength(1); c++)
+                {
+                    string itemId = recipe.Pattern[r, c];
+                    if (!string.IsNullOrEmpty(itemId) && itemId != " ")
+                        needed[itemId] = needed.TryGetValue(itemId, out int count) ? count + 1 : 1;
+                }
+        }
+        else
+        {
+            foreach (string itemId in recipe.Ingredients)
+                needed[itemId] = needed.TryGetValue(itemId, out int count) ? count + 1 : 1;
+        }
+
+        foreach (var ingredient in needed)
+        {
+            var tile = new Panel();
+            tile.CustomMinimumSize = new Vector2(32f, 32f);
+            tile.AddThemeStyleboxOverride("panel", MakeSlotStyle(new Color(0.35f, 0.35f, 0.42f)));
+
+            var icon = new TextureRect();
+            icon.Texture = GetIcon(ingredient.Key);
+            icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
+            icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
+            icon.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+            icon.Position = new Vector2(3f, 3f);
+            icon.Size = new Vector2(26f, 26f);
+            icon.MouseFilter = MouseFilterEnum.Ignore;
+            tile.AddChild(icon);
+
+            if (ingredient.Value > 1)
+            {
+                var countLabel = new Label();
+                countLabel.Text = ingredient.Value.ToString();
+                countLabel.HorizontalAlignment = HorizontalAlignment.Right;
+                countLabel.VerticalAlignment = VerticalAlignment.Bottom;
+                countLabel.AnchorRight = 1f;
+                countLabel.AnchorBottom = 1f;
+                countLabel.OffsetRight = -2f;
+                countLabel.OffsetBottom = -1f;
+                countLabel.AddThemeFontSizeOverride("font_size", 9);
+                countLabel.AddThemeColorOverride("font_color", Colors.White);
+                countLabel.MouseFilter = MouseFilterEnum.Ignore;
+                tile.AddChild(countLabel);
+            }
+
+            _tooltipIngredients.AddChild(tile);
+        }
+
+        int rows = Mathf.Max(1, Mathf.CeilToInt(needed.Count / 4f));
+        _tooltip.Size = new Vector2(150f, 38f + rows * 35f);
+        _tooltip.Visible = true;
+
+        Vector2 pos = anchor.GlobalPosition - GlobalPosition;
         pos.X -= 155f;
-        pos.Y  = Mathf.Max(0f, pos.Y);
-        _tooltip.Position  = pos;
+        pos.Y = Mathf.Max(0f, pos.Y);
+        _tooltip.Position = pos;
     }
 
     public void ShowItemTooltip(string itemId, Vector2 screenPos)
     {
         if (string.IsNullOrEmpty(itemId)) { HideTooltip(); return; }
-        _tooltipTitle.Text      = itemId;
-        _tooltipBody.Text       = "";
-        _tooltip.Size           = new Vector2(120f, 0f);
+        _tooltipTitle.Text      = ItemRegistry.Instance?.GetItem(itemId)?.DisplayName ?? itemId;
+        foreach (Node child in _tooltipIngredients.GetChildren())
+            child.QueueFree();
+        _tooltip.Size           = new Vector2(120f, 38f);
         _tooltip.Visible        = true;
         _tooltip.GlobalPosition = screenPos + new Vector2(10f, -30f);
     }
@@ -649,23 +687,6 @@ public partial class CraftingPanel : Control
     // =========================================================================
     // HELPERS
     // =========================================================================
-
-    private Panel MakeTabPanel()
-    {
-        var p = new Panel(); p.MouseFilter = MouseFilterEnum.Stop; return p;
-    }
-
-    private Label MakeTabIcon(string icon)
-    {
-        var lbl = new Label();
-        lbl.Text                = icon;
-        lbl.HorizontalAlignment = HorizontalAlignment.Center;
-        lbl.VerticalAlignment   = VerticalAlignment.Center;
-        lbl.AnchorRight         = 1f; lbl.AnchorBottom = 1f;
-        lbl.AddThemeFontSizeOverride("font_size", 16);
-        lbl.MouseFilter         = MouseFilterEnum.Ignore;
-        return lbl;
-    }
 
     private Panel MakeCraftSlot(int size)
     {

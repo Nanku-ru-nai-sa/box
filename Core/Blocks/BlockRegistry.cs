@@ -17,6 +17,7 @@ public partial class BlockRegistry : Node
     {
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
+        var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/farmland.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
@@ -280,8 +281,24 @@ Register(root);
         var water = new BlockResource();
         water.BlockId = "water"; water.DisplayName = "Water";
         water.IsSolid = false; water.CanChisel = false; water.IsTransparent = true;
+        water.LiquidId = "water";
         water.TextureTop = waterTex; water.TextureSide = waterTex; water.TextureBottom = waterTex;
         Register(water);
+
+        // Spring blocks are permanent water sources. The same liquid
+        // simulation handles their flow; only the source cell is special.
+        var waterSpring = new BlockResource();
+        waterSpring.BlockId = "water_spring";
+        waterSpring.DisplayName = "Water Spring";
+        waterSpring.IsSolid = false;
+        waterSpring.CanChisel = false;
+        waterSpring.IsTransparent = true;
+        waterSpring.LiquidId = "water";
+        waterSpring.IsLiquidSource = true;
+        waterSpring.TextureTop = waterTex;
+        waterSpring.TextureSide = waterTex;
+        waterSpring.TextureBottom = waterTex;
+        Register(waterSpring);
 
         var bedrock = new BlockResource();
         bedrock.BlockId = "bedrock"; bedrock.DisplayName = "Bedrock";
@@ -497,7 +514,61 @@ Register(root);
         bambooShoot.TextureBottom = bambooShootTex;
         Register(bambooShoot);
 
+
+        // ============================================================
+        // FARMING BLOCKS + CROP GROWTH STAGES
+        // Temporary visuals use existing 16x16 sapling/dirt textures
+        // until the final crop PNGs are added.
+        // ============================================================
+
+        string[] farmableSoils =
+        {
+            "dirt", "grass_block", "silt", "clay"
+        };
+
+        foreach (string soilId in farmableSoils)
+        {
+            var farmland = new BlockResource();
+            farmland.BlockId = "farmland_" + soilId;
+            farmland.DisplayName = "Tilled Soil";
+            farmland.IsSolid = true;
+            farmland.CanChisel = true;
+            farmland.Hardness = 0.5f;
+            farmland.TextureTop = farmlandTex;
+            farmland.TextureSide = dirtTex;
+            farmland.TextureBottom = dirtTex;
+            farmland.Drops = new[] { soilId };
+            Register(farmland);
+        }
+
+        RegisterCropStages("wheat", "Wheat", 6, saplingTex);
+        RegisterCropStages("corn", "Corn", 6, saplingTex);
+        RegisterCropStages("tomato", "Tomato", 6, saplingTex);
+
         GD.Print("Blocks registered.");
+    }
+
+
+    private void RegisterCropStages(string cropId, string displayName, int stageCount, Texture2D fallback)
+    {
+        for (int stage = 0; stage < stageCount; stage++)
+        {
+            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}_{stage}.png";
+            Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath) ?? fallback;
+            var crop = new BlockResource();
+            crop.BlockId = $"crop_{cropId}_{stage}";
+            crop.DisplayName = displayName;
+            crop.IsSolid = false;
+            crop.CanChisel = false;
+            crop.IsTransparent = true;
+            crop.IsCross = true;
+            crop.Hardness = 0f;
+            crop.TextureTop = texture;
+            crop.TextureSide = texture;
+            crop.TextureBottom = texture;
+            crop.Drops = new[] { cropId + "_seed" };
+            Register(crop);
+        }
     }
 
     private void Register(BlockResource block)

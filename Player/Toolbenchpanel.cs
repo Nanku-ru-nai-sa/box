@@ -80,7 +80,7 @@ public partial class ToolBenchPanel : Control
     // Same constants as CraftingPanel so the two panels' grids line up exactly.
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
-    private const int PanelW  = 300;
+    private const int PanelW  = 271;
 
     // =========================================================================
     // INIT

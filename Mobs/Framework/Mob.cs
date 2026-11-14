@@ -48,6 +48,7 @@ public partial class Mob : CharacterBody3D
     private bool _mountedSprinting = false;
     private bool _mountedJumpRequested = false;
     private float _mountedJumpVelocity = 6f;
+    private ChunkManager _liquidWorld;
 
 
     // =========================================================
@@ -459,6 +460,7 @@ private float _stepTargetY = 0f;
         BuildHealthBar();
 
         CreateCollision();
+        UpdateHealthBarPosition();
 
         _health = MaxHealth;
 
@@ -1489,6 +1491,7 @@ private void RollAppearance()
         }
 
         CreateCollision();
+        UpdateHealthBarPosition();
 
         GD.Print(
             $"[Mob] {Name}: Switched model to {modelPath}"
@@ -1600,6 +1603,21 @@ private void RollAppearance()
         AddChild(_healthBarFill);
     }
 
+
+    private void UpdateHealthBarPosition()
+    {
+        float y = _collisionBuilt
+            ? _adultCollisionPosition.Y +
+              _adultCollisionSize.Y * 0.5f +
+              0.35f
+            : HealthBarYOffset;
+
+        if (_healthBarBackground != null)
+            _healthBarBackground.Position = new Vector3(0f, y, 0f);
+
+        if (_healthBarFill != null)
+            _healthBarFill.Position = new Vector3(0f, y, 0.01f);
+    }
 
     private void UpdateHealthBar()
     {
@@ -1793,8 +1811,8 @@ private void RollAppearance()
                     );
             }
 
-            Velocity =
-                velocity;
+            ApplyLiquidFlow(ref velocity, dt);
+            Velocity = velocity;
 
             MoveAndSlide();
 
@@ -1816,8 +1834,8 @@ private void RollAppearance()
             velocity.Z =
                 _knockbackVelocity.Z;
 
-            Velocity =
-                velocity;
+            ApplyLiquidFlow(ref velocity, dt);
+            Velocity = velocity;
 
             MoveAndSlide();
 
@@ -1843,8 +1861,8 @@ private void RollAppearance()
 
             UpdateHealthBar();
 
-            Velocity =
-                velocity;
+            ApplyLiquidFlow(ref velocity, dt);
+            Velocity = velocity;
 
             MoveAndSlide();
 
@@ -1928,10 +1946,32 @@ private void RollAppearance()
 
         UpdateHealthBar();
 
-        Velocity =
-            velocity;
+        ApplyLiquidFlow(ref velocity, dt);
+            Velocity = velocity;
 
         MoveAndSlide();
+    }
+
+
+    private void ApplyLiquidFlow(ref Vector3 velocity, float dt)
+    {
+        if (_liquidWorld == null)
+        {
+            _liquidWorld = GetTree().Root.FindChild(
+                "ChunkManager", true, false) as ChunkManager;
+        }
+
+        if (_liquidWorld == null)
+            return;
+
+        Vector3I liquidPos = new Vector3I(
+            Mathf.FloorToInt(GlobalPosition.X),
+            Mathf.FloorToInt(GlobalPosition.Y + 0.5f),
+            Mathf.FloorToInt(GlobalPosition.Z));
+
+        Vector3 flow = _liquidWorld.GetLiquidFlowVectorAtWorld(liquidPos);
+        if (flow.LengthSquared() > 0.001f)
+            velocity += flow * 1.25f;
     }
 
 

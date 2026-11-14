@@ -8,6 +8,7 @@ public enum WorldGenTheme { Normal, OnlyForest, OnlyDesert }
 
 public partial class ChunkManager : Node3D
 {
+    public static ChunkManager Instance { get; private set; }
     [Export] public int RenderDistance { get; set; } = 7;
     [Export] public int VerticalRenderDistance { get; set; } = 8; // covers +/-8 chunks (+/-128 blocks) around the player - enough to see from ground level up through the sky island band (~Y230) when standing near sea level, without loading the full 18-layer world height at all times
     [Export] public int Seed { get; set; } = 777;
@@ -17,6 +18,7 @@ public partial class ChunkManager : Node3D
     public WorldGenType WorldType { get; set; } = WorldGenType.Normal;
     public WorldGenTheme WorldTheme { get; set; } = WorldGenTheme.Normal;
     private TreeGrowth _treeGrowth;
+    private LiquidManager _liquidManager;
 
     // ---- FLAT WORLD SETTINGS ----
     [ExportGroup("Flat World")]
@@ -217,6 +219,7 @@ public partial class ChunkManager : Node3D
 
     public override void _Ready()
     {
+        Instance = this;
         // Pull this world's settings from its save data before noise gets configured below.
         // Falls back to the [Export] defaults above if there's no active world (e.g. running
         // this scene directly instead of going through the main menu).
@@ -401,6 +404,10 @@ public partial class ChunkManager : Node3D
             GD.Print("ChunkManager: Player found");
 
         GD.Print("Calling UpdateChunks...");
+        _liquidManager = new LiquidManager();
+        _liquidManager.SetWorld(this);
+        AddChild(_liquidManager);
+
         UpdateChunks();
 
         _treeGrowth = new TreeGrowth(this);
@@ -408,7 +415,9 @@ public partial class ChunkManager : Node3D
         VoxelPathfinder.IsSolidBlock = pos =>
 {
     var block = GetBlockAtWorld(pos);
-    return !block.IsAir() && block.BlockId != "water";
+    if (block.IsAir()) return false;
+    var resource = BlockRegistry.Instance.GetBlock(block.BlockId);
+    return resource == null || !resource.IsLiquid;
     
 };
         SetProcess(true);
@@ -431,6 +440,8 @@ public partial class ChunkManager : Node3D
 
     public override void _Process(double delta)
     {
+        _liquidManager?.ProcessLiquidTick(delta);
+
         if (_player == null)
         {
             var found = GetTree().Root.FindChild("player", true, false);
@@ -546,7 +557,10 @@ public partial class ChunkManager : Node3D
                 {
                     ["id"] = mod.Value.BlockId,
                     ["mask"] = (int)mod.Value.BitMask,
-                    ["rotation"] = (int)mod.Value.Rotation
+                    ["rotation"] = (int)mod.Value.Rotation,
+                    ["liquid_level"] = (int)mod.Value.LiquidLevel,
+                    ["liquid_falling"] = mod.Value.LiquidFalling,
+                    ["liquid_source"] = mod.Value.LiquidSource
                 };
                 saveData[key] = blockData;
             }
@@ -711,15 +725,34 @@ public Vector2? LoadPlayerLook()
             if (savedValue.VariantType == Variant.Type.String)
             {
                 state = new BlockState((string)savedValue);
+
+                // Old saves had no liquid metadata, so legacy water blocks
+                // become ordinary full source blocks.
+                if (state.BlockId == "water")
+                {
+                    state.LiquidLevel = 16;
+                    state.LiquidSource = true;
+                }
             }
             else
             {
                 var blockData = savedValue.AsGodotDictionary();
+                string savedBlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air";
+                bool hasLiquidLevel = blockData.ContainsKey("liquid_level");
+                bool hasLiquidSource = blockData.ContainsKey("liquid_source");
+
                 state = new BlockState
                 {
-                    BlockId = blockData.ContainsKey("id") ? (string)blockData["id"] : "air",
+                    BlockId = savedBlockId,
                     BitMask = blockData.ContainsKey("mask") ? (byte)(int)blockData["mask"] : (byte)0xFF,
-                    Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0
+                    Rotation = blockData.ContainsKey("rotation") ? (byte)(int)blockData["rotation"] : (byte)0,
+                    LiquidLevel = hasLiquidLevel
+                        ? (byte)(int)blockData["liquid_level"]
+                        : (savedBlockId == "water" ? (byte)16 : (byte)0),
+                    LiquidFalling = blockData.ContainsKey("liquid_falling") && (bool)blockData["liquid_falling"],
+                    LiquidSource = hasLiquidSource
+                        ? (bool)blockData["liquid_source"]
+                        : savedBlockId == "water"
                 };
             }
 
@@ -816,6 +849,23 @@ public Vector2? LoadPlayerLook()
         chunk.Initialize(chunkPos);
         GenerateChunk(chunk, chunkPos);
         LoadChunkModifications(chunk, chunkPos);
+
+        // Re-queue liquid blocks from saved modifications. Generated liquids
+        // are queued directly by Chunk.SetBlockInternal during world generation.
+        foreach (var mod in chunk.GetModifications())
+        {
+            BlockResource liquidResource = BlockRegistry.Instance.GetBlock(mod.Value.BlockId);
+            if (liquidResource != null && liquidResource.IsLiquid)
+            {
+                Vector3I world = new Vector3I(
+                    chunkPos.X * Chunk.SIZE + mod.Key.X,
+                    chunkPos.Y * Chunk.HEIGHT + mod.Key.Y,
+                    chunkPos.Z * Chunk.SIZE + mod.Key.Z
+                );
+                _liquidManager?.Enqueue(world);
+            }
+        }
+
         chunk.BuildMesh();
         _chunks[chunkPos] = chunk;
 
@@ -904,6 +954,27 @@ public Vector2? LoadPlayerLook()
         float caveValue = Mathf.Abs(caveA) + Mathf.Abs(caveB);
 
         return caveValue < CaveThreshold * bottomFade * radiusMod;
+    }
+
+    private bool IsNaturalSpringSpot(int worldX, int worldY, int worldZ)
+    {
+        // Require solid rock immediately above and below so springs form
+        // inside enclosed cave spaces rather than on the open landscape.
+        if (GetDensity(worldX, worldY + 1, worldZ) <= 0f ||
+            GetDensity(worldX, worldY - 1, worldZ) <= 0f)
+            return false;
+
+        // Stable coordinate hash: the same world seed always places springs
+        // in the same locations, without relying on runtime random numbers.
+        unchecked
+        {
+            uint hash = (uint)(worldX * 73856093) ^
+                        (uint)(worldY * 19349663) ^
+                        (uint)(worldZ * 83492791) ^
+                        (uint)Seed;
+
+            return hash % 65536u == 0u;
+        }
     }
 
     private float GetDensity(int worldX, int worldY, int worldZ)
@@ -1465,9 +1536,32 @@ public Vector3 GetWorldSpawnPosition()
                         // single layer of grass block" (or "a single dirt
                         // grass block" for One Block).
                         bool isSingleLayerWorld = WorldType == WorldGenType.Flat || WorldType == WorldGenType.OneBlock;
-                        block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
-                            ? new BlockState { BlockId = "water", BitMask = 0xFF }
-                            : BlockState.Air;
+
+                        // Rare natural springs appear in enclosed underground cave
+                        // pockets. They use the same source block as player-placed
+                        // springs, so both behave identically in the liquid system.
+                        bool naturalSpring =
+                            WorldType == WorldGenType.Normal &&
+                            worldY >= CaveMinY &&
+                            worldY < waterFloor &&
+                            IsNaturalSpringSpot(worldX, worldY, worldZ);
+
+                        if (naturalSpring)
+                        {
+                            block = new BlockState
+                            {
+                                BlockId = "water_spring",
+                                BitMask = 0xFF,
+                                LiquidLevel = 16,
+                                LiquidSource = true
+                            };
+                        }
+                        else
+                        {
+                            block = (!isSingleLayerWorld && worldY <= WaterLevel && worldY >= waterFloor)
+                                ? new BlockState { BlockId = "water", BitMask = 0xFF, LiquidLevel = 16, LiquidSource = true }
+                                : BlockState.Air;
+                        }
                     }
                     else
                     {
@@ -2125,6 +2219,31 @@ public Vector3 GetWorldSpawnPosition()
                     chunk.SetBlockInternal(x, topY, z, new BlockState { BlockId = "leaves", BitMask = 0xFF });
             }
         }
+    }
+
+    public IEnumerable<Chunk> GetLoadedChunks() => _chunks.Values;
+
+    public bool IsWorldPositionLoaded(Vector3I worldPos)
+    {
+        return _chunks.ContainsKey(WorldToChunk(worldPos));
+    }
+
+    public Vector3 GetLiquidFlowVectorAtWorld(Vector3I worldPos)
+    {
+        return _liquidManager?.GetFlowVector(worldPos) ?? Vector3.Zero;
+    }
+
+    public void NotifyLiquidChanged(Vector3I worldPos)
+    {
+        if (_liquidManager == null) return;
+
+        _liquidManager.Enqueue(worldPos);
+        _liquidManager.Enqueue(worldPos + new Vector3I(1, 0, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(-1, 0, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 1, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, -1, 0));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, 1));
+        _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, -1));
     }
 
     public BlockState GetBlockAtWorld(Vector3I worldPos)

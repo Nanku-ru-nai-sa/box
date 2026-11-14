@@ -14,7 +14,7 @@ public partial class EquipmentPanel : Control
 
     private const int SlotSz  = 56;
     private const int SlotGap = 5;
-    private const int PanelW  = 300;
+    private const int PanelW  = 271;
     private const int PanelH  = 339;
 
     private Panel _bg;
@@ -137,7 +137,11 @@ public partial class EquipmentPanel : Control
 
     private void BuildColumn(string[] labels, int columnIndex, Panel[] target)
     {
-        float startX = 8f + columnIndex * (SlotSz + SlotGap + 8f);
+        float columnGap = 13f;
+        float columnsWidth = SlotSz * 2f + columnGap;
+        float startX =
+            (PanelW - columnsWidth) / 2f +
+            columnIndex * (SlotSz + columnGap);
         float startY = 14f;
 
         for (int i = 0; i < labels.Length; i++)

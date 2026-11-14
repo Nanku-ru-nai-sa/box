@@ -1,8 +1,10 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
 public partial class Player : CharacterBody3D
 {
+    private const float WorkbenchPanelWidth = 271f;
     // =========================================================================
     // HOTBAR HUD
     // =========================================================================
@@ -670,7 +672,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _craftingPanel.AnchorBottom = 0.5f;
 
         _craftingPanel.OffsetLeft =
-            -invHalfW - 10f - 300f;
+            -invHalfW - 10f - WorkbenchPanelWidth;
 
         _craftingPanel.OffsetRight =
             -invHalfW - 10f;
@@ -731,7 +733,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _toolBenchPanel.AnchorBottom = 0.5f;
 
         _toolBenchPanel.OffsetLeft =
-            -invHalfW - 10f - 300f;
+            -invHalfW - 10f - WorkbenchPanelWidth;
 
         _toolBenchPanel.OffsetRight =
             -invHalfW - 10f;
@@ -772,7 +774,7 @@ private void OnSlotMouseEntered(int slotIndex)
         _kilnPanel.AnchorRight = 0.5f;
         _kilnPanel.AnchorTop = 0.5f;
         _kilnPanel.AnchorBottom = 0.5f;
-        _kilnPanel.OffsetLeft = -invHalfW - 10f - 300f;
+        _kilnPanel.OffsetLeft = -invHalfW - 10f - WorkbenchPanelWidth;
         _kilnPanel.OffsetRight = -invHalfW - 10f;
         _kilnPanel.OffsetTop = -180f;
         _kilnPanel.OffsetBottom = 159f;
@@ -782,154 +784,154 @@ private void OnSlotMouseEntered(int slotIndex)
 
     private void BuildStationTabBar()
     {
-        float gridW =
-            HotbarSize * SlotSize +
-            (HotbarSize - 1) * SlotGap;
+        _stationTabBar = new Control();
 
-        float pad = 16f;
-
-        float totalW =
-            gridW +
-            pad * 2f;
-
-        float invHalfW =
-            totalW / 2f;
-
-        _stationTabBar =
-            new Control();
-
-        _stationTabBar.AnchorLeft   = 0.5f;
-        _stationTabBar.AnchorRight  = 0.5f;
-        _stationTabBar.AnchorTop    = 0.5f;
+        _stationTabBar.AnchorLeft = 0.5f;
+        _stationTabBar.AnchorRight = 0.5f;
+        _stationTabBar.AnchorTop = 0.5f;
         _stationTabBar.AnchorBottom = 0.5f;
 
-        _stationTabBar.OffsetLeft =
-            -invHalfW - 10f - 300f;
+        float gridW = HotbarSize * SlotSize + (HotbarSize - 1) * SlotGap;
+        float totalW = gridW + 32f;
+        float invHalfW = totalW / 2f;
 
-        _stationTabBar.OffsetRight =
-            -invHalfW - 10f;
+        float selectorWidth = 4f * SlotSize + 3f * SlotGap;
+        float selectorLeft =
+            -invHalfW - 10f -
+            (WorkbenchPanelWidth + selectorWidth) / 2f;
 
-        _stationTabBar.OffsetTop =
-            -180f - 28f;
-
-        _stationTabBar.OffsetBottom =
-            -180f - 4f;
-
+        _stationTabBar.OffsetLeft = selectorLeft;
+        _stationTabBar.OffsetRight = selectorLeft + selectorWidth;
+        _stationTabBar.OffsetTop = -180f - 82f;
+        _stationTabBar.OffsetBottom = -180f - 26f;
         _stationTabBar.Visible = false;
 
-        _tabCrafterStation =
-            MakeStationTab(
-                "Crafter",
-                0f,
-                out _tabCrafterStationLbl
-            );
+        const float slotSize = 56f;
+        const float gap = 5f;
 
-        _tabToolBenchStation =
-            MakeStationTab(
-                "Tool Bench",
-                96f,
-                out _tabToolBenchStationLbl
-            );
-
-        _tabKilnStation = MakeStationTab("Kiln", 192f, out _tabKilnStationLbl);
-
-        _tabCrafterStation.GuiInput +=
-            (InputEvent ev) =>
-            {
-                if (IsStationTabClick(ev))
-                    SwitchStation("crafter");
-            };
-
-        _tabToolBenchStation.GuiInput +=
-            (InputEvent ev) =>
-            {
-                if (IsStationTabClick(ev))
-                    SwitchStation("tool_bench");
-            };
-
-        _tabKilnStation.GuiInput += (InputEvent ev) =>
+        for (int i = 0; i < 4; i++)
         {
-            if (IsStationTabClick(ev)) SwitchStation("kiln");
-        };
+            int index = i;
+            var slot = new Panel();
+            slot.Position = new Vector2(i * (slotSize + gap), 0f);
+            slot.CustomMinimumSize = new Vector2(slotSize, slotSize);
+            slot.MouseFilter = Control.MouseFilterEnum.Stop;
+            slot.TooltipText = "";
 
-        _stationTabBar.AddChild(
-            _tabCrafterStation
-        );
-
-        _stationTabBar.AddChild(
-            _tabToolBenchStation
-        );
-        _stationTabBar.AddChild(_tabKilnStation);
-
-        _craftingLayer.CallDeferred(
-            "add_child",
-            _stationTabBar
-        );
-    }
-
-    private Panel MakeStationTab(
-        string text,
-        float x,
-        out Label label)
-    {
-        var tab = new Panel();
-
-        tab.Position =
-            new Vector2(x, 0f);
-
-        tab.CustomMinimumSize =
-            new Vector2(90f, 24f);
-
-        tab.MouseFilter =
-            Control.MouseFilterEnum.Stop;
-
-        label = new Label();
-
-        label.Text = "";
-        tab.TooltipText = text;
-
-        string iconPath = text switch
-        {
-            "Crafter" => "res://Assets/Textures/Blocks/crafter.png",
-            "Tool Bench" => "res://Assets/Textures/Blocks/tool_bench.png",
-            "Kiln" => "res://Assets/Textures/Blocks/kiln.png",
-            _ => ""
-        };
-        if (!string.IsNullOrEmpty(iconPath) && ResourceLoader.Exists(iconPath))
-        {
             var icon = new TextureRect();
-            icon.Texture = ResourceLoader.Load<Texture2D>(iconPath);
             icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
             icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
             icon.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
-            icon.AnchorLeft = 0.5f; icon.AnchorRight = 0.5f;
-            icon.AnchorTop = 0.5f; icon.AnchorBottom = 0.5f;
-            icon.OffsetLeft = -10; icon.OffsetRight = 10;
-            icon.OffsetTop = -10; icon.OffsetBottom = 10;
+            icon.AnchorLeft = 0.5f;
+            icon.AnchorRight = 0.5f;
+            icon.AnchorTop = 0.5f;
+            icon.AnchorBottom = 0.5f;
+            icon.OffsetLeft = -20f;
+            icon.OffsetRight = 20f;
+            icon.OffsetTop = -20f;
+            icon.OffsetBottom = 20f;
             icon.MouseFilter = Control.MouseFilterEnum.Ignore;
-            tab.AddChild(icon);
+            slot.AddChild(icon);
+
+            slot.GuiInput += (InputEvent ev) =>
+            {
+                if (IsStationTabClick(ev))
+                    HandleStationSlotClick(index);
+            };
+
+            slot.MouseEntered += () =>
+            {
+                if (_stationSlotIds[index] != null)
+                    SetStationTabStyle(slot, true);
+            };
+            slot.MouseExited += () => RefreshStationSlotStyles();
+
+            _stationSlots[i] = slot;
+            _stationSlotIcons[i] = icon;
+            _stationTabBar.AddChild(slot);
         }
 
-        label.HorizontalAlignment =
-            HorizontalAlignment.Center;
+        _craftingLayer.CallDeferred("add_child", _stationTabBar);
+        UpdateStationSelector(new List<(string Id, Vector3I Position, float Distance)>());
+    }
 
-        label.VerticalAlignment =
-            VerticalAlignment.Center;
+    private void UpdateStationSelector(List<(string Id, Vector3I Position, float Distance)> nearbyStations)
+    {
+        if (_stationTabBar == null)
+            return;
 
-        label.AnchorRight  = 1f;
-        label.AnchorBottom = 1f;
+        _stationSlotIds[0] = "default";
+        SetStationSlot(0, "crafter", "Hand Crafting (2x2) — click to switch to learned recipes");
 
-        label.AddThemeFontSizeOverride(
-            "font_size",
-            11
-        );
+        for (int i = 1; i < 4; i++)
+        {
+            if (i - 1 < nearbyStations.Count)
+            {
+                var station = nearbyStations[i - 1];
+                string id = station.Id;
+                string name = id switch
+                {
+                    "crafter" => "Crafter (3x3)",
+                    "tool_bench" => "Tool Bench",
+                    "kiln" => "Kiln",
+                    _ => id
+                };
+                _stationSlotIds[i] = id;
+                _stationSlotPositions[i] = station.Position;
+                SetStationSlot(i, id, name);
+            }
+            else
+            {
+                _stationSlotIds[i] = null;
+                _stationSlots[i].Visible = false;
+            }
+        }
 
-        label.MouseFilter =
-            Control.MouseFilterEnum.Ignore;
+        _stationSlots[0].Visible = true;
+        _stationTabBar.Visible = _inventoryOpen;
+        RefreshStationSlotStyles();
+    }
 
-        tab.AddChild(label);
+    private void SetStationSlot(int index, string itemId, string tooltip)
+    {
+        _stationSlots[index].Visible = true;
+        _stationSlots[index].TooltipText = tooltip;
+        _stationSlotIcons[index].Texture = GetItemIcon(itemId);
+    }
 
-        return tab;
+    private void HandleStationSlotClick(int index)
+    {
+        if (index < 0 || index >= _stationSlotIds.Length)
+            return;
+
+        string stationId = _stationSlotIds[index];
+        if (string.IsNullOrEmpty(stationId))
+            return;
+
+        if (stationId == "default")
+        {
+            if (_activeStation == "default")
+                _craftingPanel?.ToggleRecipeMemory();
+            else
+            {
+                SwitchStation("default");
+                _craftingPanel?.ShowCraftingGrid();
+            }
+            return;
+        }
+
+        _activeStationPosition = _stationSlotPositions[index];
+
+        if (stationId == "kiln")
+        {
+            _kilnPanel?.SetKiln(
+                _activeStationPosition,
+                KilnManager.Instance?.GetSlots(_activeStationPosition)
+            );
+            _kilnPanelHasPosition = true;
+        }
+
+        SwitchStation(stationId);
     }
 
     private bool IsStationTabClick(InputEvent ev) =>
@@ -942,63 +944,69 @@ private void OnSlotMouseEntered(int slotIndex)
         _activeStation = stationId;
 
         if (_craftingPanel != null)
+        {
             _craftingPanel.Visible =
-                stationId == "crafter";
+                stationId == "default" || stationId == "crafter";
+
+            if (stationId == "default")
+            {
+                _craftingPanel.SetGridSize(2, false);
+                _craftingPanel.ShowCraftingGrid();
+            }
+            else if (stationId == "crafter")
+            {
+                _craftingPanel.SetGridSize(3, true);
+                _craftingPanel.ShowCraftingGrid();
+            }
+        }
 
         if (_toolBenchPanel != null)
-            _toolBenchPanel.Visible =
-                stationId == "tool_bench";
+            _toolBenchPanel.Visible = stationId == "tool_bench";
 
         if (_kilnPanel != null)
             _kilnPanel.Visible = stationId == "kiln";
 
-        SetStationTabStyle(
-            _tabCrafterStation,
-            _tabCrafterStationLbl,
-            stationId == "crafter"
-        );
-
-        SetStationTabStyle(
-            _tabToolBenchStation,
-            _tabToolBenchStationLbl,
-            stationId == "tool_bench"
-        );
-        SetStationTabStyle(_tabKilnStation, _tabKilnStationLbl, stationId == "kiln");
+        RefreshStationSlotStyles();
     }
 
-    private void SetStationTabStyle(
-        Panel tab,
-        Label label,
-        bool active)
+    private void RefreshStationSlotStyles()
     {
-        var s = new StyleBoxFlat();
+        for (int i = 0; i < _stationSlots.Length; i++)
+        {
+            if (_stationSlots[i] == null || !_stationSlots[i].Visible)
+                continue;
 
-        s.BgColor =
-            active
-                ? new Color(0.2f, 0.2f, 0.25f)
-                : new Color(0.12f, 0.12f, 0.15f);
+            bool selected =
+                !string.IsNullOrEmpty(_stationSlotIds[i]) &&
+                _stationSlotIds[i] == _activeStation &&
+                (_activeStation == "default" ||
+                 _stationSlotPositions[i] == _activeStationPosition);
 
-        s.BorderColor =
-            active
-                ? new Color(0.6f, 0.6f, 0.7f)
-                : new Color(0.3f, 0.3f, 0.35f);
+            SetStationTabStyle(
+                _stationSlots[i],
+                selected
+            );
+        }
+    }
 
-        s.BorderWidthTop    = 2;
-        s.BorderWidthBottom = 2;
-        s.BorderWidthLeft   = 2;
-        s.BorderWidthRight  = 2;
-
-        tab.AddThemeStyleboxOverride(
-            "panel",
-            s
-        );
-
-        label.AddThemeColorOverride(
-            "font_color",
-            active
-                ? new Color(1f, 1f, 1f)
-                : new Color(0.55f, 0.55f, 0.55f)
-        );
+    private void SetStationTabStyle(Panel slot, bool active)
+    {
+        var style = new StyleBoxFlat();
+        style.BgColor = active
+            ? new Color(0.2f, 0.2f, 0.25f)
+            : new Color(0.12f, 0.12f, 0.15f);
+        style.BorderColor = active
+            ? new Color(0.75f, 0.75f, 0.85f)
+            : new Color(0.3f, 0.3f, 0.35f);
+        style.BorderWidthTop = 2;
+        style.BorderWidthBottom = 2;
+        style.BorderWidthLeft = 2;
+        style.BorderWidthRight = 2;
+        style.CornerRadiusTopLeft = 3;
+        style.CornerRadiusTopRight = 3;
+        style.CornerRadiusBottomLeft = 3;
+        style.CornerRadiusBottomRight = 3;
+        slot.AddThemeStyleboxOverride("panel", style);
     }
 
     // =========================================================================
@@ -1040,7 +1048,7 @@ private void OnSlotMouseEntered(int slotIndex)
             invHalfW + 10f;
 
         _equipmentPanel.OffsetRight =
-            invHalfW + 10f + 300f;
+            invHalfW + 10f + WorkbenchPanelWidth;
 
         _equipmentPanel.OffsetTop =
             -180f;
