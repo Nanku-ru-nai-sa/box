@@ -39,7 +39,8 @@ public partial class BlockResource : Resource
     [Export] public bool IsFlatGround { get; set; } = false;
     [Export] public bool IsThinItem { get; set; } = false;
 
-    // Height of cross-shaped plants in world blocks. A 16x32 texture uses 2 blocks.\n    [Export] public float CrossHeight { get; set; } = 1.0f;
+    // Height of cross-shaped plants in world blocks. A 16x32 texture uses 2 blocks.
+    [Export] public float CrossHeight { get; set; } = 1.0f;
 
     // ============================================================
     // CUSTOM SHAPE
