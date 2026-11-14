@@ -566,7 +566,7 @@ Register(root);
     {
         for (int stage = 0; stage < stageCount; stage++)
         {
-            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}_{stage}.png";
+            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}{stage + 1}.png";
             Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath) ?? fallback;
             var crop = new BlockResource();
             crop.BlockId = $"crop_{cropId}_{stage}";
