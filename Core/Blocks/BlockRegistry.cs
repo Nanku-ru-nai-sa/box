@@ -17,7 +17,7 @@ public partial class BlockRegistry : Node
     {
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
-        var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/farmland.png") ?? dirtTex;
+        var soilTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soil.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
@@ -521,25 +521,18 @@ Register(root);
         // until the final crop PNGs are added.
         // ============================================================
 
-        string[] farmableSoils =
-        {
-            "dirt", "grass_block", "silt", "clay"
-        };
-
-        foreach (string soilId in farmableSoils)
-        {
-            var farmland = new BlockResource();
-            farmland.BlockId = "farmland_" + soilId;
-            farmland.DisplayName = "Tilled Soil";
-            farmland.IsSolid = true;
-            farmland.CanChisel = true;
-            farmland.Hardness = 0.5f;
-            farmland.TextureTop = farmlandTex;
-            farmland.TextureSide = dirtTex;
-            farmland.TextureBottom = dirtTex;
-            farmland.Drops = new[] { soilId };
-            Register(farmland);
-        }
+        // One shared tilled-soil block is used by the hoe and all crops.
+        var soil = new BlockResource();
+        soil.BlockId = "soil";
+        soil.DisplayName = "Soil";
+        soil.IsSolid = true;
+        soil.CanChisel = true;
+        soil.Hardness = 0.5f;
+        soil.TextureTop = soilTex;
+        soil.TextureSide = dirtTex;
+        soil.TextureBottom = dirtTex;
+        soil.Drops = new[] { "dirt" };
+        Register(soil);
 
         RegisterCropStages("wheat", "Wheat");
         RegisterCropStages("corn", "Corn");
@@ -565,10 +558,19 @@ Register(root);
         for (int stage = 1; ; stage++)
         {
             string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}{stage}.png";
-            if (!ResourceLoader.Exists(texturePath))
+            // FileAccess also detects newly-added PNGs before Godot has
+            // generated their .import sidecar files.
+            if (!FileAccess.FileExists(texturePath))
                 break;
 
             Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath);
+            if (texture == null)
+            {
+                Image image = Image.LoadFromFile(texturePath);
+                if (image != null && !image.IsEmpty())
+                    texture = ImageTexture.CreateFromImage(image);
+            }
+
             if (texture == null)
             {
                 GD.PrintErr($"BlockRegistry: Could not load crop texture {texturePath}");
