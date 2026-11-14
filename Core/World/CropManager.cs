@@ -141,7 +141,8 @@ public partial class CropManager : Node
         if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
             return false;
 
-        bool mature = stage >= 5;
+        int maxStage = GetMaxStage(cropId);
+        bool mature = stage >= maxStage;
         var rng = new RandomNumberGenerator();
         rng.Randomize();
 
@@ -186,7 +187,7 @@ public partial class CropManager : Node
             for (int z = 0; z < Chunk.SIZE; z++)
             {
                 BlockState crop = chunk.GetBlock(x, y, z);
-                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) || stage >= 5)
+                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) || stage >= GetMaxStage(cropId))
                     continue;
 
                 if (!IsSeasonAllowed(cropId, season))
@@ -207,10 +208,16 @@ public partial class CropManager : Node
                 if (HasNearbyWater(cm, worldPos + Vector3I.Down))
                     growth++; // Hydration bonus.
 
-                int nextStage = Math.Min(5, stage + growth);
+                int nextStage = Math.Min(GetMaxStage(cropId), stage + growth);
                 chunk.SetBlock(x, y, z, new BlockState($"crop_{cropId}_{nextStage}"));
             }
         }
+    }
+
+    private int GetMaxStage(string cropId)
+    {
+        int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0;
+        return Math.Max(0, stageCount - 1);
     }
 
     private bool HasNearbyWater(ChunkManager cm, Vector3I soilPosition)
