@@ -541,20 +541,40 @@ Register(root);
             Register(farmland);
         }
 
-        RegisterCropStages("wheat", "Wheat", 6, saplingTex);
-        RegisterCropStages("corn", "Corn", 6, saplingTex);
-        RegisterCropStages("tomato", "Tomato", 6, saplingTex);
+        RegisterCropStages("wheat", "Wheat");
+        RegisterCropStages("corn", "Corn");
+        RegisterCropStages("tomato", "Tomato");
 
         GD.Print("Blocks registered.");
     }
 
 
-    private void RegisterCropStages(string cropId, string displayName, int stageCount, Texture2D fallback)
+    private readonly Dictionary<string, int> _cropStageCounts = new();
+
+    public int GetCropStageCount(string cropId)
     {
-        for (int stage = 0; stage < stageCount; stage++)
+        return _cropStageCounts.TryGetValue(cropId, out int count) ? count : 0;
+    }
+
+    private void RegisterCropStages(string cropId, string displayName)
+    {
+        int stageCount = 0;
+
+        // Crop files are numbered from 1. The number of matching PNGs defines
+        // the crop's complete growth cycle; no fixed stage count is required.
+        for (int stage = 1; ; stage++)
         {
-            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}_{stage}.png";
-            Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath) ?? fallback;
+            string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}{stage}.png";
+            if (!ResourceLoader.Exists(texturePath))
+                break;
+
+            Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath);
+            if (texture == null)
+            {
+                GD.PrintErr($"BlockRegistry: Could not load crop texture {texturePath}");
+                break;
+            }
+
             var crop = new BlockResource();
             crop.BlockId = $"crop_{cropId}_{stage}";
             crop.DisplayName = displayName;
@@ -562,13 +582,18 @@ Register(root);
             crop.CanChisel = false;
             crop.IsTransparent = true;
             crop.IsCross = true;
+            crop.CrossHeight = Mathf.Max(1.0f, texture.GetHeight() / 16.0f);
             crop.Hardness = 0f;
             crop.TextureTop = texture;
             crop.TextureSide = texture;
             crop.TextureBottom = texture;
             crop.Drops = new[] { cropId + "_seed" };
             Register(crop);
+            stageCount++;
         }
+
+        _cropStageCounts[cropId] = stageCount;
+        GD.Print($"Registered {stageCount} growth stages for {displayName}.");
     }
 
     private void Register(BlockResource block)
