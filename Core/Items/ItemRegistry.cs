@@ -47,7 +47,7 @@ public partial class ItemRegistry : Node
             foreach (var block in BlockRegistry.Instance.GetAllBlocks())
             {
                 // Farming stage/soil variants are internal world states, not inventory items.
-                if (block.BlockId.StartsWith("farmland_") || block.BlockId.StartsWith("crop_")) continue;
+                if (block.BlockId == "soil" || block.BlockId.StartsWith("farmland_") || block.BlockId.StartsWith("crop_")) continue;
                 if (_items.ContainsKey(block.BlockId)) continue;
                 var item = new ItemResource();
                 item.ItemId       = block.BlockId;
