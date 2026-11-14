@@ -299,67 +299,6 @@ public partial class Player : CharacterBody3D
         int bz = Mathf.FloorToInt(lPos.Z);
 
         // ---------------------------------------------------------
-        // FLOWERS / ROCKS ABOVE THE BLOCK
-        // ---------------------------------------------------------
-
-        BlockState above =
-            chunk.GetBlock(
-                bx,
-                by + 1,
-                bz
-            );
-
-        if (above.BlockId is
-            "rose" or
-            "clover" or
-            "dandelion" or
-            "rock_flint" or
-            "rock_coal" or
-            "rock_iron" or
-            "rock_tin" or
-            "rock_copper")
-        {
-            Vector3 aboveWorldPos =
-                chunk.GlobalPosition +
-                new Vector3(
-                    bx + 0.5f,
-                    by + 1.5f,
-                    bz + 0.5f
-                );
-
-            if (above.BlockId == "rose")
-                SpawnItemDrop(
-                    "rose",
-                    1,
-                    aboveWorldPos
-                );
-
-            if (above.BlockId == "dandelion")
-                SpawnItemDrop(
-                    "dandelion",
-                    1,
-                    aboveWorldPos
-                );
-
-            if (above.BlockId.StartsWith("rock_"))
-                SpawnItemDrop(
-                    above.BlockId,
-                    1,
-                    aboveWorldPos
-                );
-
-            chunk.SetBlock(
-                bx,
-                by + 1,
-                bz,
-                BlockState.Air
-            );
-
-            ResetBreak();
-            return;
-        }
-
-        // ---------------------------------------------------------
         // GET TARGET BLOCK
         // ---------------------------------------------------------
 
@@ -397,6 +336,39 @@ public partial class Player : CharacterBody3D
             SpawnItemDrop(cropDrop, cropCount, cropDropPosition);
             if (!string.IsNullOrEmpty(cropBonusDrop) && cropBonusCount > 0)
                 SpawnItemDrop(cropBonusDrop, cropBonusCount, cropDropPosition + Vector3.Up * 0.15f);
+            ResetBreak();
+            return;
+        }
+
+        // =========================================================
+        // INSTANT-BREAK NON-CROP PLANTS AND GROUND ITEMS
+        // =========================================================
+
+        BlockResource plantResource =
+            BlockRegistry.Instance?.GetBlock(b.BlockId);
+
+        if (plantResource != null &&
+            (plantResource.IsCross || plantResource.IsFlatGround))
+        {
+            var (plantDrop, plantCount) = GetDrop(b.BlockId);
+
+            if (!string.IsNullOrEmpty(plantDrop) && plantCount > 0)
+            {
+                if (gm != null && gm.IsCreate)
+                {
+                    AddItemToInventory(plantDrop, plantCount);
+                }
+                else
+                {
+                    Vector3 plantDropPosition =
+                        chunk.GlobalPosition +
+                        new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
+
+                    SpawnItemDrop(plantDrop, plantCount, plantDropPosition);
+                }
+            }
+
+            chunk.SetBlock(bx, by, bz, BlockState.Air);
             ResetBreak();
             return;
         }
