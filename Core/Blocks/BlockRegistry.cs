@@ -555,15 +555,15 @@ Register(root);
         soil.Drops = new[] { "dirt" };
         Register(soil);
 
-        RegisterCropStages("wheat", "Wheat", saplingTex);
-        RegisterCropStages("corn", "Corn", saplingTex);
-        RegisterCropStages("tomato", "Tomato", saplingTex);
+        RegisterCropStages("wheat", "Wheat");
+        RegisterCropStages("corn", "Corn");
+        RegisterCropStages("tomato", "Tomato");
 
         GD.Print("Blocks registered.");
     }
 
 
-    private void RegisterCropStages(string cropId, string displayName, Texture2D fallback)
+    private void RegisterCropStages(string cropId, string displayName)
     {
         int registeredStages = 0;
 
@@ -572,9 +572,15 @@ Register(root);
         for (int textureNumber = 1; ; textureNumber++)
         {
             string texturePath = $"res://Assets/Textures/Plants/Crops/{cropId}{textureNumber}.png";
+            if (!FileAccess.FileExists(texturePath))
+                break;
+
             Texture2D texture = ResourceLoader.Load<Texture2D>(texturePath);
             if (texture == null)
+            {
+                GD.PrintErr($"[BlockRegistry] Could not load crop texture: {texturePath}");
                 break;
+            }
 
             int stage = textureNumber - 1;
             var crop = new BlockResource();
