@@ -743,13 +743,24 @@ public partial class Chunk : Node3D
                             z
                         );
 
-                        // Invisible full-block target.
+                        // Invisible target cube; tall sprites get a second target cube
+                        // so the upper half can also be selected and harvested.
                         AddPlantTargetCube(
                             plantTargetSurface,
                             x,
                             y,
                             z
                         );
+
+                        if (resource.CrossHeight > 1.0f)
+                        {
+                            AddPlantTargetCube(
+                                plantTargetSurface,
+                                x,
+                                y + 1,
+                                z
+                            );
+                        }
 
                         hasPlantTargets = true;
                     }
@@ -1352,6 +1363,8 @@ private void AddQuadCropped(
         if (tex == null)
             return;
 
+        float topY = y + Mathf.Max(1.0f, resource.CrossHeight);
+
         if (!surfaces.TryGetValue(
                 tex,
                 out SurfaceTool st))
@@ -1368,14 +1381,14 @@ private void AddQuadCropped(
         // Diagonal 1
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z)
+            new Vector3(x, topY, z)
         );
 
         st.SetUV(new Vector2(1, 0));
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z + 1
             )
         );
@@ -1391,7 +1404,7 @@ private void AddQuadCropped(
 
         st.SetUV(new Vector2(0, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z)
+            new Vector3(x, topY, z)
         );
 
         st.SetUV(new Vector2(1, 1));
@@ -1413,14 +1426,14 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z + 1
             )
         );
 
         st.SetUV(new Vector2(1, 0));
         st.AddVertex(
-            new Vector3(x, y + 1, z)
+            new Vector3(x, topY, z)
         );
 
         st.SetUV(new Vector2(1, 1));
@@ -1432,7 +1445,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z + 1
             )
         );
@@ -1456,7 +1469,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z
             )
         );
@@ -1465,7 +1478,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x,
-                y + 1,
+                topY,
                 z + 1
             )
         );
@@ -1483,7 +1496,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z
             )
         );
@@ -1511,7 +1524,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x,
-                y + 1,
+                topY,
                 z + 1
             )
         );
@@ -1520,7 +1533,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x + 1,
-                y + 1,
+                topY,
                 z
             )
         );
@@ -1538,7 +1551,7 @@ private void AddQuadCropped(
         st.AddVertex(
             new Vector3(
                 x,
-                y + 1,
+                topY,
                 z + 1
             )
         );
