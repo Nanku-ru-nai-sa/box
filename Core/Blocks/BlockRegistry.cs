@@ -534,6 +534,24 @@ Register(root);
         soil.Drops = new[] { "dirt" };
         Register(soil);
 
+        // Keep old farmland IDs registered so existing saved worlds still load.
+        // New hoe use and crop planting only create the shared "soil" block.
+        string[] legacyFarmableSoils = { "dirt", "grass_block", "silt", "clay" };
+        foreach (string oldSoilId in legacyFarmableSoils)
+        {
+            var legacyFarmland = new BlockResource();
+            legacyFarmland.BlockId = "farmland_" + oldSoilId;
+            legacyFarmland.DisplayName = "Tilled Soil";
+            legacyFarmland.IsSolid = true;
+            legacyFarmland.CanChisel = true;
+            legacyFarmland.Hardness = 0.5f;
+            legacyFarmland.TextureTop = soilTex;
+            legacyFarmland.TextureSide = dirtTex;
+            legacyFarmland.TextureBottom = dirtTex;
+            legacyFarmland.Drops = new[] { oldSoilId };
+            Register(legacyFarmland);
+        }
+
         RegisterCropStages("wheat", "Wheat");
         RegisterCropStages("corn", "Corn");
         RegisterCropStages("tomato", "Tomato");
