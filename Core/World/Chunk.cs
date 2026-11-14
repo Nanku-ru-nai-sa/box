@@ -775,6 +775,16 @@ public partial class Chunk : Node3D
                                 z
                             );
                         }
+
+                        // Invisible target so flat-ground plants/items can be clicked.
+                        AddPlantTargetCube(
+                            plantTargetSurface,
+                            x,
+                            y,
+                            z
+                        );
+
+                        hasPlantTargets = true;
                     }
                     else if (resource.IsCustomShape)
                     {
