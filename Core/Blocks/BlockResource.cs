@@ -36,6 +36,9 @@ public partial class BlockResource : Resource
     [Export] public bool IsFlammable { get; set; } = false;
 
     [Export] public bool IsCross { get; set; } = false;
+
+    // Height in world blocks for crossed plant sprites. A 16x32 texture uses 2 blocks.
+    [Export] public float CrossHeight { get; set; } = 1.0f;
     [Export] public bool IsFlatGround { get; set; } = false;
     [Export] public bool IsThinItem { get; set; } = false;
 
