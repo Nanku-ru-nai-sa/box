@@ -541,6 +541,19 @@ Register(root);
             Register(farmland);
         }
 
+        // Generic tilled soil used by the farming system.
+        var soil = new BlockResource();
+        soil.BlockId = "soil";
+        soil.DisplayName = "Soil";
+        soil.IsSolid = true;
+        soil.CanChisel = true;
+        soil.Hardness = 0.5f;
+        soil.TextureTop = farmlandTex;
+        soil.TextureSide = dirtTex;
+        soil.TextureBottom = dirtTex;
+        soil.Drops = new[] { "dirt" };
+        Register(soil);
+
         RegisterCropStages("wheat", "Wheat", 6, saplingTex);
         RegisterCropStages("corn", "Corn", 6, saplingTex);
         RegisterCropStages("tomato", "Tomato", 6, saplingTex);
