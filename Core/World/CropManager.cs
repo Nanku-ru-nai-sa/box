@@ -15,8 +15,21 @@ public partial class CropManager : Node
         Instance = this;
         var seasons = GetNodeOrNull<SeasonManager>("/root/SeasonManager");
         if (seasons != null)
+        {
             seasons.DayChanged += OnDayChanged;
-        GD.Print("[CropManager] Farming system ready.");
+            GD.Print("[CropManager] Connected to SeasonManager day changes.");
+        }
+        else
+        {
+            GD.PrintErr("[CropManager] SeasonManager not found; crops will not grow.");
+        }
+
+        GD.Print(
+            $"[CropManager] Farming system ready. " +
+            $"Stages: Wheat {BlockRegistry.Instance?.GetCropStageCount("wheat") ?? 0}, " +
+            $"Corn {BlockRegistry.Instance?.GetCropStageCount("corn") ?? 0}, " +
+            $"Tomato {BlockRegistry.Instance?.GetCropStageCount("tomato") ?? 0}."
+        );
     }
 
     public override void _ExitTree()
@@ -39,8 +52,8 @@ public partial class CropManager : Node
         if (!cm.GetBlockAtWorld(target + Vector3I.Up).IsAir())
             return false;
 
-        var tilled = new BlockState("farmland_" + soil.BlockId);
-        cm.SetBlockAtWorld(target, tilled);
+        // All tilled ground uses the single shared soil block.
+        cm.SetBlockAtWorld(target, new BlockState("soil"));
         return true;
     }
 
@@ -62,9 +75,9 @@ public partial class CropManager : Node
         Vector3I cropPosition = target;
         BlockState targetBlock = cm.GetBlockAtWorld(target);
 
-        if (targetBlock.BlockId.StartsWith("farmland_"))
+        if (targetBlock.BlockId == "soil")
             cropPosition = target + Vector3I.Up;
-        else if (!cm.GetBlockAtWorld(target + Vector3I.Down).BlockId.StartsWith("farmland_"))
+        else if (cm.GetBlockAtWorld(target + Vector3I.Down).BlockId != "soil")
             return false;
 
         if (!cm.GetBlockAtWorld(cropPosition).IsAir())
@@ -138,20 +151,32 @@ public partial class CropManager : Node
         var cm = ChunkManager.Instance;
         if (cm == null) return;
 
+        int cropsFound = 0;
+        int cropsGrown = 0;
+        int chunksScanned = 0;
+
         foreach (Chunk chunk in cm.GetLoadedChunks())
         {
             if (chunk == null || !GodotObject.IsInstanceValid(chunk)) continue;
+            chunksScanned++;
 
             for (int x = 0; x < Chunk.SIZE; x++)
             for (int y = 0; y < Chunk.HEIGHT; y++)
             for (int z = 0; z < Chunk.SIZE; z++)
             {
                 BlockState crop = chunk.GetBlock(x, y, z);
-                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) ||
-                    stage >= (BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0))
+                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
                     continue;
 
-                if (!IsSeasonAllowed(cropId, season))
+                cropsFound++;
+                int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0;
+                if (stageCount <= 0)
+                {
+                    GD.PrintErr($"[CropManager] No registered growth stages for {cropId}.");
+                    continue;
+                }
+
+                if (stage >= stageCount || !IsSeasonAllowed(cropId, season))
                     continue;
 
                 int growth = 1; // Every suitable season day gives one stage.
@@ -163,13 +188,12 @@ public partial class CropManager : Node
                 );
 
                 BlockState soil = cm.GetBlockAtWorld(worldPos + Vector3I.Down);
-                if (soil.BlockId.StartsWith("farmland_"))
+                if (soil.BlockId == "soil")
                     growth++; // Tilled soil bonus.
 
                 if (HasNearbyWater(cm, worldPos + Vector3I.Down))
                     growth++; // Hydration bonus.
 
-                int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? stage;
                 int nextStage = Math.Min(stageCount, stage + growth);
 
                 // 16x32 sprites physically occupy two block heights. Do not
@@ -180,9 +204,17 @@ public partial class CropManager : Node
                     nextStage = stage;
 
                 if (nextStage > stage)
+                {
                     chunk.SetBlock(x, y, z, new BlockState($"crop_{cropId}_{nextStage}"));
+                    cropsGrown++;
+                }
             }
         }
+
+        GD.Print(
+            $"[CropManager] {season} day {newDay}: scanned {chunksScanned} chunks, " +
+            $"found {cropsFound} crops, advanced {cropsGrown}."
+        );
     }
 
     private bool HasNearbyWater(ChunkManager cm, Vector3I soilPosition)
