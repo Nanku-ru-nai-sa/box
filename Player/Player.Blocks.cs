@@ -372,6 +372,35 @@ public partial class Player : CharacterBody3D
 
         if (b.IsAir())
         {
+            // The upper half of a two-block crop is an invisible target cube.
+            // Resolve it back to the crop block one cell below.
+            Vector3I upperWorldPosition = new Vector3I(
+                chunk.ChunkPosition.X * Chunk.SIZE + bx,
+                chunk.ChunkPosition.Y * Chunk.HEIGHT + by,
+                chunk.ChunkPosition.Z * Chunk.SIZE + bz
+            );
+            Vector3I cropBelowPosition = upperWorldPosition + Vector3I.Down;
+
+            if (CropManager.Instance != null &&
+                CropManager.Instance.IsTallCropAt(cropBelowPosition) &&
+                CropManager.Instance.TryHarvest(
+                    cropBelowPosition,
+                    out string tallCropDrop,
+                    out int tallCropCount,
+                    out string tallCropBonus,
+                    out int tallCropBonusCount))
+            {
+                Vector3 tallDropPosition = chunk.GlobalPosition +
+                    new Vector3(bx + 0.5f, by - 0.5f, bz + 0.5f);
+
+                SpawnItemDrop(tallCropDrop, tallCropCount, tallDropPosition);
+                if (!string.IsNullOrEmpty(tallCropBonus) && tallCropBonusCount > 0)
+                    SpawnItemDrop(tallCropBonus, tallCropBonusCount, tallDropPosition + Vector3.Up * 0.15f);
+
+                ResetBreak();
+                return;
+            }
+
             ResetBreak();
             return;
         }
