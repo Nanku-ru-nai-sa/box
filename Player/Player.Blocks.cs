@@ -51,8 +51,13 @@ public partial class Player : CharacterBody3D
             return (customId, customCount);
         }
 
+        // Legacy farmland saves still return their original soil type.
         if (blockId.StartsWith("farmland_"))
             return (blockId.Substring("farmland_".Length), 1);
+
+        // Breaking tilled soil returns ordinary dirt.
+        if (blockId == "soil")
+            return ("dirt", 1);
 
         if (blockId == "grass_block")
             return ("dirt", 1);
@@ -853,7 +858,7 @@ else if (b.BlockId is "crate" or "barrel")
         var cm = hitChunk.GetParent() as ChunkManager;
         if (cm == null) return;
 
-        // Hoe: convert supported dirt-family blocks into tilled soil.
+        // Hoe: convert supported dirt-family blocks into the shared soil block.
         if (_selectedBlockId == "hoe")
         {
             if (CropManager.Instance != null &&
@@ -862,7 +867,7 @@ else if (b.BlockId is "crate" or "barrel")
             return;
         }
 
-        // Seeds: plant on the farmland block being targeted.
+        // Seeds: plant on the soil block being targeted.
         if (_selectedBlockId is "wheat_seed" or "corn_seed" or "tomato_seed")
         {
             if (CropManager.Instance != null &&
@@ -873,7 +878,7 @@ else if (b.BlockId is "crate" or "barrel")
             }
             else
             {
-                ShowFeedback("Seeds need empty space above tilled soil");
+                ShowFeedback("Seeds need empty space above soil");
             }
             return;
         }
