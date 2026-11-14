@@ -70,7 +70,7 @@ public partial class CropManager : Node
         if (!cm.GetBlockAtWorld(cropPosition).IsAir())
             return false;
 
-        cm.SetBlockAtWorld(cropPosition, new BlockState("crop_" + cropId + "_0"));
+        cm.SetBlockAtWorld(cropPosition, new BlockState("crop_" + cropId + "_1"));
         return true;
     }
 
@@ -88,7 +88,8 @@ public partial class CropManager : Node
         if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
             return false;
 
-        bool mature = stage >= 5;
+        int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0;
+        bool mature = stageCount > 0 && stage >= stageCount;
         var rng = new RandomNumberGenerator();
         rng.Randomize();
 
@@ -119,6 +120,19 @@ public partial class CropManager : Node
         return true;
     }
 
+    public bool IsTallCropAt(Vector3I position)
+    {
+        var cm = ChunkManager.Instance;
+        if (cm == null) return false;
+
+        BlockState crop = cm.GetBlockAtWorld(position);
+        if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
+            return false;
+
+        BlockResource resource = BlockRegistry.Instance?.GetBlock(crop.BlockId);
+        return resource != null && resource.CrossHeight > 1.0f;
+    }
+
     private void OnDayChanged(int newDay, SeasonManager.Season season)
     {
         var cm = ChunkManager.Instance;
@@ -133,7 +147,8 @@ public partial class CropManager : Node
             for (int z = 0; z < Chunk.SIZE; z++)
             {
                 BlockState crop = chunk.GetBlock(x, y, z);
-                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) || stage >= 5)
+                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) ||
+                    stage >= (BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0))
                     continue;
 
                 if (!IsSeasonAllowed(cropId, season))
@@ -154,8 +169,18 @@ public partial class CropManager : Node
                 if (HasNearbyWater(cm, worldPos + Vector3I.Down))
                     growth++; // Hydration bonus.
 
-                int nextStage = Math.Min(5, stage + growth);
-                chunk.SetBlock(x, y, z, new BlockState($"crop_{cropId}_{nextStage}"));
+                int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? stage;
+                int nextStage = Math.Min(stageCount, stage + growth);
+
+                // 16x32 sprites physically occupy two block heights. Do not
+                // advance into one if another block is occupying the upper space.
+                BlockResource nextResource = BlockRegistry.Instance?.GetBlock($"crop_{cropId}_{nextStage}");
+                if (nextResource != null && nextResource.CrossHeight > 1.0f &&
+                    !cm.GetBlockAtWorld(worldPos + Vector3I.Up).IsAir())
+                    nextStage = stage;
+
+                if (nextStage > stage)
+                    chunk.SetBlock(x, y, z, new BlockState($"crop_{cropId}_{nextStage}"));
             }
         }
     }
