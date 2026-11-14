@@ -17,7 +17,7 @@ public partial class BlockRegistry : Node
     {
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
-        var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/farmland.png") ?? dirtTex;
+        var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soil.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
         var grassTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/grass.png");
