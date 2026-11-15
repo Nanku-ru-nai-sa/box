@@ -39,6 +39,15 @@ public partial class MobSpawner : Node3D
     private string[] DefinitionPaths =
         Array.Empty<string>();
 
+    // Definitions are loaded once at startup. During daytime, only this
+    // passive-only list is eligible, so hostile JSON files are not loaded
+    // or checked repeatedly by the spawn loop.
+    private string[] DaytimeDefinitionPaths =
+        Array.Empty<string>();
+
+    private readonly Dictionary<string, MobDefinition> _definitionCache =
+        new Dictionary<string, MobDefinition>();
+
 
     // ---------------------------------------------------------
     // READY
@@ -59,6 +68,8 @@ public partial class MobSpawner : Node3D
 
         DefinitionPaths =
             FindAllMobDefinitions();
+
+        BuildDefinitionCache();
 
         GD.Print(
             $"[MobSpawner] Found " +
@@ -169,12 +180,10 @@ public partial class MobSpawner : Node3D
                 return;
             }
 
-            MobDefinition definition =
-                MobDefinitionLoader.Load(
-                    definitionPath
-                );
-
-            if (definition == null)
+            if (!_definitionCache.TryGetValue(
+                    definitionPath,
+                    out MobDefinition definition) ||
+                definition == null)
                 continue;
 
             if (definition.spawning == null ||
@@ -271,21 +280,50 @@ public partial class MobSpawner : Node3D
     // CHOOSE DEFINITION
     // ---------------------------------------------------------
 
-    private string ChooseRandomDefinition()
+    private void BuildDefinitionCache()
     {
-        if (DefinitionPaths == null ||
-            DefinitionPaths.Length == 0)
+        var daytime = new List<string>();
+
+        foreach (string path in DefinitionPaths)
         {
-            return null;
+            MobDefinition definition = MobDefinitionLoader.Load(path);
+            if (definition == null)
+                continue;
+
+            _definitionCache[path] = definition;
+
+            bool hostile =
+                definition.behavior != null &&
+                string.Equals(
+                    definition.behavior.type,
+                    "hostile",
+                    StringComparison.OrdinalIgnoreCase
+                );
+
+            if (!hostile)
+                daytime.Add(path);
         }
 
-        int index =
-            _rng.RandiRange(
-                0,
-                DefinitionPaths.Length - 1
-            );
+        DaytimeDefinitionPaths = daytime.ToArray();
 
-        return DefinitionPaths[index];
+        GD.Print(
+            $"[MobSpawner] Cached {_definitionCache.Count} mob definitions; " +
+            $"{DaytimeDefinitionPaths.Length} are eligible during daytime."
+        );
+    }
+
+    private string ChooseRandomDefinition()
+    {
+        bool isNight = IsDarkForHostileSpawn();
+        string[] eligiblePaths = isNight
+            ? DefinitionPaths
+            : DaytimeDefinitionPaths;
+
+        if (eligiblePaths == null || eligiblePaths.Length == 0)
+            return null;
+
+        int index = _rng.RandiRange(0, eligiblePaths.Length - 1);
+        return eligiblePaths[index];
     }
 
 
@@ -977,18 +1015,6 @@ public partial class MobSpawner : Node3D
 
         groundPosition.Y +=
             0.15f;
-
-        // Hostile mobs only spawn during dark hours.
-        // The current world does not calculate per-block light levels.
-        if (definition.behavior != null &&
-            string.Equals(
-                definition.behavior.type,
-                "hostile",
-                StringComparison.OrdinalIgnoreCase) &&
-            !IsDarkForHostileSpawn())
-        {
-            return Vector3.Inf;
-        }
 
         return groundPosition;
     }
