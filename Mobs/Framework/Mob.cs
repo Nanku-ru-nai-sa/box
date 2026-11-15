@@ -269,6 +269,13 @@ private float _stepTargetY = 0f;
     // A mob woken by an attack stays awake briefly before its night schedule resumes.
     private float _sleepWakeTimer = 0f;
 
+    // Hostile mobs sink completely below ground during daylight.
+    private bool _isDayDespawning = false;
+    private float _dayDespawnElapsed = 0f;
+    private Vector3 _dayDespawnStartPosition;
+    private const float DayDespawnDuration = 2.25f;
+    private const float DayDespawnSinkDistance = 2.5f;
+
     private DayNightCycle _dayNightCycle;
 
 
@@ -1052,6 +1059,71 @@ private void RollAppearance()
     }
 
 
+    private bool IsNaturallyHostile()
+    {
+        return _definition != null &&
+               _definition.behavior != null &&
+               string.Equals(
+                   _definition.behavior.type,
+                   "hostile",
+                   StringComparison.OrdinalIgnoreCase
+               );
+    }
+
+    private bool IsDaytime()
+    {
+        if (_dayNightCycle == null || !IsInstanceValid(_dayNightCycle))
+            return false;
+
+        float hour = Mathf.PosMod(_dayNightCycle.GetGameHour(), 24f);
+        return hour >= 6f && hour < 18f;
+    }
+
+    private void BeginDayDespawn()
+    {
+        if (_isDayDespawning)
+            return;
+
+        _isDayDespawning = true;
+        _dayDespawnElapsed = 0f;
+        _dayDespawnStartPosition = GlobalPosition;
+        _isSleeping = false;
+        _state = State.Idle;
+        _hasMovementTarget = false;
+        Velocity = Vector3.Zero;
+
+        // Stop colliding with the world/player while sinking away.
+        CollisionLayer = 0;
+        CollisionMask = 0;
+    }
+
+    private bool UpdateDayDespawn(float delta)
+    {
+        if (!_isDayDespawning)
+            return false;
+
+        _dayDespawnElapsed += delta;
+
+        float progress = Mathf.Clamp(
+            _dayDespawnElapsed / DayDespawnDuration,
+            0f,
+            1f
+        );
+
+        // Ease in gently as the mob sinks below the ground.
+        float easedProgress = progress * progress;
+
+        Vector3 position = _dayDespawnStartPosition;
+        position.Y -= DayDespawnSinkDistance * easedProgress;
+        GlobalPosition = position;
+
+        if (progress >= 1f)
+            QueueFree();
+
+        return true;
+    }
+
+
     private void UpdateSleepSchedule()
     {
         if (!_sleepEnabled ||
@@ -1711,6 +1783,20 @@ private void RollAppearance()
     {
         float dt =
             (float)delta;
+
+        if (UpdateDayDespawn(dt))
+            return;
+
+        // Only mobs whose original definition is hostile despawn.
+        // Neutral animals that become angry (for example, Beefalo) remain.
+        if (!_isDayDespawning &&
+            IsNaturallyHostile() &&
+            IsDaytime())
+        {
+            BeginDayDespawn();
+            UpdateDayDespawn(dt);
+            return;
+        }
 
         if (_sleepWakeTimer > 0f)
             _sleepWakeTimer = Mathf.Max(0f, _sleepWakeTimer - dt);
