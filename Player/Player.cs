@@ -2870,7 +2870,7 @@ if (key.Keycode == Key.Escape)
     if (parts.Length < 2)
     {
         ShowFeedback(
-            "Usage: /spawn <mob> [male/m/female/f]"
+            "Usage: /spawn <mob> [male/female] [shiny] [big]"
         );
 
         return;
