@@ -127,6 +127,65 @@ public partial class CropManager : Node
         return true;
     }
 
+    // Right-click harvesting is intentionally limited to crops with special
+    // harvest behaviour. Other crops keep their normal left-click break flow.
+    public bool TryRightClickHarvest(
+        Vector3I position,
+        bool hasCornSeed,
+        out string itemId,
+        out int count,
+        out bool consumeCornSeed)
+    {
+        itemId = "";
+        count = 0;
+        consumeCornSeed = false;
+
+        var cm = ChunkManager.Instance;
+        if (cm == null)
+            return false;
+
+        BlockState crop = cm.GetBlockAtWorld(position);
+        if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
+            return false;
+
+        if (stage < GetMaxStage(cropId))
+            return false;
+
+        var rng = new RandomNumberGenerator();
+        rng.Randomize();
+
+        if (cropId == "tomato")
+        {
+            // Remove the ripe fruit, but leave the plant alive to regrow.
+            itemId = "tomato";
+            count = rng.RandiRange(2, 4);
+            cm.SetBlockAtWorld(position, new BlockState("crop_tomato_2"));
+            return true;
+        }
+
+        if (cropId == "corn")
+        {
+            itemId = "corn";
+            count = rng.RandiRange(1, 2);
+
+            if (hasCornSeed)
+            {
+                // Replant in the same action and consume one seed.
+                consumeCornSeed = true;
+                cm.SetBlockAtWorld(position, new BlockState("crop_corn_0"));
+            }
+            else
+            {
+                // Without a seed, harvest normally and clear the plant.
+                cm.SetBlockAtWorld(position, BlockState.Air);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
     public bool TryHarvest(Vector3I position, out string itemId, out int count, out string bonusItem, out int bonusCount)
     {
         itemId = "";
