@@ -720,8 +720,14 @@ public partial class ToolBenchPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
-        var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        // Handle/material artwork now lives in the dedicated stick folder.
+        string stickPath = $"res://Assets/Textures/Items/tool/stick/{itemId}.png";
+        var tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+        if (tex == null)
+        {
+            string path = $"res://Assets/Textures/Items/{itemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
         _iconCache[itemId] = tex;
         return tex;
     }
