@@ -4,6 +4,7 @@ public partial class DebugMenu : CanvasLayer
 {
     private Panel _panel;
     private Label _label;
+    private Button _pauseTimeButton;
 
     private bool _visible = false;
 
@@ -220,7 +221,7 @@ public partial class DebugMenu : CanvasLayer
             new Vector2(20, 15);
 
         _label.Size =
-            new Vector2(335, 1050);
+            new Vector2(335, 900);
 
         _label.AddThemeFontSizeOverride(
             "font_size",
@@ -228,6 +229,24 @@ public partial class DebugMenu : CanvasLayer
         );
 
         _panel.AddChild(_label);
+
+        _pauseTimeButton = new Button();
+        _pauseTimeButton.Position = new Vector2(20, 960);
+        _pauseTimeButton.Size = new Vector2(335, 55);
+        _pauseTimeButton.Text = "Pause Time";
+        _pauseTimeButton.Pressed += OnPauseTimePressed;
+        _panel.AddChild(_pauseTimeButton);
+    }
+
+    private void OnPauseTimePressed()
+    {
+        DayNightCycle dayNight = GetDayNightCycle();
+
+        if (dayNight == null || !IsInstanceValid(dayNight))
+            return;
+
+        dayNight.ToggleTimePause();
+        UpdateDisplay();
     }
 
     // ============================================================
@@ -375,6 +394,12 @@ public partial class DebugMenu : CanvasLayer
             "F7   Advance One Day\n" +
             "F9   Toggle Season Lock\n" +
             "F10  Advance One Hour";
+
+        if (_pauseTimeButton != null)
+        {
+            _pauseTimeButton.Text =
+                dayNight.IsTimePaused ? "Resume Time" : "Pause Time";
+        }
     }
 
     // ============================================================
