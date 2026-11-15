@@ -1907,7 +1907,7 @@ private Mob GetMobUnderCrosshair()
         bool hasCornSeed = false;
         int cornSeedSlot = -1;
 
-        for (int i = 0; i < _inventory.Slots.Count; i++)
+        for (int i = 0; i < _inventory.Slots.Length; i++)
         {
             InventorySlot slot = _inventory.Slots[i];
             if (slot != null && !slot.IsEmpty && slot.ItemId == "corn_seed")
