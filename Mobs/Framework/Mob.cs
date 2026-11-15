@@ -266,6 +266,9 @@ private float _stepTargetY = 0f;
 
     private bool _isSleeping = false;
 
+    // A mob woken by an attack stays awake briefly before its night schedule resumes.
+    private float _sleepWakeTimer = 0f;
+
     private DayNightCycle _dayNightCycle;
 
 
@@ -1054,7 +1057,8 @@ private void RollAppearance()
         if (!_sleepEnabled ||
             _dayNightCycle == null ||
             _health <= 0f ||
-            IsMounted)
+            IsMounted ||
+            _sleepWakeTimer > 0f)
         {
             return;
         }
@@ -1707,6 +1711,9 @@ private void RollAppearance()
     {
         float dt =
             (float)delta;
+
+        if (_sleepWakeTimer > 0f)
+            _sleepWakeTimer = Mathf.Max(0f, _sleepWakeTimer - dt);
 
         UpdateSleepSchedule();
 
@@ -4316,6 +4323,7 @@ return true;
         if (_isSleeping)
         {
             SetSleeping(false);
+            _sleepWakeTimer = 30f;
         }
 
         Node3D sourceTarget =
