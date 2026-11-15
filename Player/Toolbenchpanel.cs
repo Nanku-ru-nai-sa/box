@@ -722,6 +722,11 @@ public partial class ToolBenchPanel : Control
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
         string path = $"res://Assets/Textures/Items/{itemId}.png";
         var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (tex == null)
+        {
+            string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
+            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+        }
         _iconCache[itemId] = tex;
         return tex;
     }
