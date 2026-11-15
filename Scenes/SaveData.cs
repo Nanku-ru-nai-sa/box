@@ -61,4 +61,7 @@ public class WorldMeta
     // 1.0   = Next Sunrise
 
     public float TimeOfDay { get; set; } = 0.0f;
+
+    // Whether this world's day/night clock was paused when last saved.
+    public bool TimePaused { get; set; } = false;
 }
