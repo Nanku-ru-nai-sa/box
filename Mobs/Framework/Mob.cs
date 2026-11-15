@@ -1049,6 +1049,33 @@ private void RollAppearance()
     }
 
 
+    private void UpdateSleepSchedule()
+    {
+        if (!_sleepEnabled ||
+            _dayNightCycle == null ||
+            _health <= 0f ||
+            IsMounted)
+        {
+            return;
+        }
+
+        // Normalize the game clock to 0-24 for overnight comparisons.
+        float hour = Mathf.PosMod(_dayNightCycle.GetGameHour(), 24f);
+        bool shouldSleep;
+
+        if (_sleepStartHour <= _sleepEndHour)
+        {
+            shouldSleep = hour >= _sleepStartHour && hour < _sleepEndHour;
+        }
+        else
+        {
+            shouldSleep = hour >= _sleepStartHour || hour < _sleepEndHour;
+        }
+
+        SetSleeping(shouldSleep);
+    }
+
+
     // =========================================================
     // GENDER
     // =========================================================
@@ -1680,6 +1707,9 @@ private void RollAppearance()
     {
         float dt =
             (float)delta;
+
+        UpdateSleepSchedule();
+
             if (_stepTimer > 0f)
 {
     _stepTimer -= dt;
@@ -3935,9 +3965,6 @@ return true;
         if (_health <= 0f)
             return false;
 
-        if (HasSaddle)
-            return true;
-
         return _health >= MaxHealth;
     }
 
@@ -3995,6 +4022,9 @@ return true;
 
         if (!CanRide())
             return false;
+
+        if (_isSleeping)
+            SetSleeping(false);
 
         _mountedPlayer =
             player;
@@ -4217,7 +4247,7 @@ return true;
         if (string.IsNullOrEmpty(itemId))
             return false;
 
-        if (!CanEat(itemId))
+        if (!CanEat(itemId) && !IsBreedFood(itemId))
             return false;
 
         return Feed(itemId);
@@ -4227,7 +4257,7 @@ return true;
     public bool Feed(
         string itemId)
     {
-        if (!CanEat(itemId))
+        if (!CanEat(itemId) && !IsBreedFood(itemId))
             return false;
 
         bool breedingFood =
