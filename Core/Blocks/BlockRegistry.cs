@@ -34,6 +34,7 @@ public partial class BlockRegistry : Node
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
         var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
         var kilnFrontTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln.png");
+        var kilnLitTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_lit.png");
         var kilnSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side.png");
         var kilnTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_top.png");
         var kilnBottomTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_bottom.png");
@@ -270,9 +271,10 @@ public partial class BlockRegistry : Node
         var kiln = new BlockResource();
         kiln.BlockId = "kiln"; kiln.DisplayName = "Kiln";
         kiln.IsSolid = true; kiln.CanChisel = false; kiln.Hardness = 1.5f;
-        kiln.CanHaveFeatures = false; kiln.GrassCanGrow = false;
+        kiln.CanHaveFeatures = true; kiln.GrassCanGrow = false;
         kiln.CanRotate = true;
         kiln.TextureFront = kilnFrontTex;
+        kiln.TextureFrontLit = kilnLitTex;
         kiln.TextureSide = kilnSideTex;
         kiln.TextureTop = kilnTopTex;
         kiln.TextureBottom = kilnBottomTex;
