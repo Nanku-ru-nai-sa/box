@@ -5,6 +5,11 @@ public partial class DebugMenu : CanvasLayer
     private Panel _panel;
     private Label _label;
     private Button _pauseTimeButton;
+    private Button _advanceDayButton;
+    private Button _advanceHourButton;
+    private Button _seasonLockButton;
+    private Button _closeButton;
+    private Input.MouseModeEnum _previousMouseMode = Input.MouseModeEnum.Captured;
 
     private bool _visible = false;
 
@@ -81,15 +86,7 @@ public partial class DebugMenu : CanvasLayer
             {
                 _f6Held = true;
 
-                _visible = !_visible;
-
-                _panel.Visible =
-                    _visible;
-
-                if (_visible)
-                {
-                    UpdateDisplay();
-                }
+                SetMenuVisible(!_visible);
             }
         }
         else
@@ -177,7 +174,9 @@ public partial class DebugMenu : CanvasLayer
             new Vector2(20, 20);
 
         _panel.Size =
-            new Vector2(375, 1050);
+            new Vector2(375, 1060);
+        _panel.ProcessMode = ProcessModeEnum.Always;
+        _panel.MouseFilter = Control.MouseFilterEnum.Stop;
 
         AddChild(_panel);
 
@@ -221,7 +220,8 @@ public partial class DebugMenu : CanvasLayer
             new Vector2(20, 15);
 
         _label.Size =
-            new Vector2(335, 900);
+            new Vector2(335, 730);
+        _label.MouseFilter = Control.MouseFilterEnum.Ignore;
 
         _label.AddThemeFontSizeOverride(
             "font_size",
@@ -230,12 +230,42 @@ public partial class DebugMenu : CanvasLayer
 
         _panel.AddChild(_label);
 
-        _pauseTimeButton = new Button();
-        _pauseTimeButton.Position = new Vector2(20, 960);
-        _pauseTimeButton.Size = new Vector2(335, 55);
-        _pauseTimeButton.Text = "Pause Time";
-        _pauseTimeButton.Pressed += OnPauseTimePressed;
-        _panel.AddChild(_pauseTimeButton);
+        _pauseTimeButton = CreateTestButton("Pause Time", 765, OnPauseTimePressed);
+        _advanceDayButton = CreateTestButton("Advance One Day", 820, AdvanceDay);
+        _advanceHourButton = CreateTestButton("Advance One Hour", 875, AdvanceHour);
+        _seasonLockButton = CreateTestButton("Toggle Season Lock", 930, ToggleSeasonLock);
+        _closeButton = CreateTestButton("Close Debug Menu", 985, () => SetMenuVisible(false));
+    }
+
+    private Button CreateTestButton(string text, float y, Action pressed)
+    {
+        var button = new Button();
+        button.Position = new Vector2(20, y);
+        button.Size = new Vector2(335, 45);
+        button.Text = text;
+        button.MouseFilter = Control.MouseFilterEnum.Stop;
+        button.Pressed += pressed;
+        _panel.AddChild(button);
+        return button;
+    }
+
+    private void SetMenuVisible(bool visible)
+    {
+        _visible = visible;
+        _panel.Visible = visible;
+
+        if (visible)
+        {
+            _previousMouseMode = Input.MouseMode;
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+            UpdateDisplay();
+        }
+        else
+        {
+            Input.MouseMode = _previousMouseMode == Input.MouseModeEnum.Captured
+                ? Input.MouseModeEnum.Captured
+                : _previousMouseMode;
+        }
     }
 
     private void OnPauseTimePressed()
@@ -388,18 +418,14 @@ public partial class DebugMenu : CanvasLayer
 
             "SEASON LOCK\n" +
             $"{lockState}\n\n" +
-
             "TEST CONTROLS\n" +
-            "F6   Close Debug Menu\n" +
-            "F7   Advance One Day\n" +
-            "F9   Toggle Season Lock\n" +
-            "F10  Advance One Hour";
+            "Use the buttons below or keyboard shortcuts.";
 
         if (_pauseTimeButton != null)
-        {
-            _pauseTimeButton.Text =
-                dayNight.IsTimePaused ? "Resume Time" : "Pause Time";
-        }
+            _pauseTimeButton.Text = dayNight.IsTimePaused ? "Resume Time" : "Pause Time";
+
+        if (_seasonLockButton != null)
+            _seasonLockButton.Text = seasonManager.SeasonLocked ? "Unlock Season" : "Lock Season";
     }
 
     // ============================================================
