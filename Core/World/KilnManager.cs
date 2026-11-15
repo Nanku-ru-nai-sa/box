@@ -87,8 +87,11 @@ public partial class KilnManager : Node
             _chunkManager = GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
         if (_chunkManager == null) return;
 
-        foreach (KilnState kiln in _kilns.Values)
-            ProcessKiln(kiln, (float)delta);
+        foreach (var pair in _kilns)
+        {
+            bool isCooking = ProcessKiln(pair.Value, (float)delta);
+            UpdateKilnLitVisual(pair.Key, isCooking);
+        }
 
         // Avoid writing a save file every frame while a kiln is running.
         _saveTimer += (float)delta;
@@ -275,6 +278,26 @@ public partial class KilnManager : Node
             return;
         }
         file.StoreString(JsonSerializer.Serialize(saved, JsonOptions));
+    }
+
+    private void UpdateKilnLitVisual(Vector3I position, bool isLit)
+    {
+        if (_chunkManager == null)
+            return;
+
+        BlockState block = _chunkManager.GetBlockAtWorld(position);
+        if (block.BlockId != "kiln")
+            return;
+
+        if (block.HasFeature("kiln:lit") == isLit)
+            return;
+
+        if (isLit)
+            block.AddFeature("kiln:lit");
+        else
+            block.RemoveFeature("kiln:lit");
+
+        _chunkManager.SetBlockAtWorld(position, block);
     }
 
     private bool ProcessKiln(KilnState kiln, float delta)
