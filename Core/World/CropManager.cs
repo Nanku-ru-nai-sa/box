@@ -135,11 +135,15 @@ public partial class CropManager : Node
         bool hasCornSeed,
         out string itemId,
         out int count,
-        out bool consumeCornSeed)
+        out bool consumeCornSeed,
+        out string bonusSeedId,
+        out int bonusSeedCount)
     {
         itemId = "";
         count = 0;
         consumeCornSeed = false;
+        bonusSeedId = "";
+        bonusSeedCount = 0;
 
         var cm = ChunkManager.Instance;
         if (cm == null)
@@ -168,6 +172,8 @@ public partial class CropManager : Node
         count = cropId == "wheat"
             ? rng.RandiRange(2, 3)
             : rng.RandiRange(1, 2);
+        bonusSeedId = cropId + "_seed";
+        bonusSeedCount = cropId == "wheat" ? rng.RandiRange(1, 2) : 1;
 
         if (cropId == "corn" && hasCornSeed)
         {
