@@ -127,8 +127,9 @@ public partial class CropManager : Node
         return true;
     }
 
-    // Right-click harvesting is intentionally limited to crops with special
-    // harvest behaviour. Other crops keep their normal left-click break flow.
+    // Right-click harvest supports every registered crop.
+    // Tomatoes only lose their fruit and regrow. Corn replants immediately
+    // when the player has a corn seed; other crops harvest like normal.
     public bool TryRightClickHarvest(
         Vector3I position,
         bool hasCornSeed,
@@ -148,42 +149,37 @@ public partial class CropManager : Node
         if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
             return false;
 
-        if (stage < GetMaxStage(cropId))
-            return false;
+        int maxStage = GetMaxStage(cropId);
+        if (stage < maxStage)
+            return true; // It is a crop, but it is not ready to harvest.
 
         var rng = new RandomNumberGenerator();
         rng.Randomize();
 
         if (cropId == "tomato")
         {
-            // Remove the ripe fruit, but leave the plant alive to regrow.
-            itemId = "tomato";
+            itemId = cropId;
             count = rng.RandiRange(2, 4);
             cm.SetBlockAtWorld(position, new BlockState("crop_tomato_2"));
             return true;
         }
 
-        if (cropId == "corn")
+        itemId = cropId;
+        count = cropId == "wheat"
+            ? rng.RandiRange(2, 3)
+            : rng.RandiRange(1, 2);
+
+        if (cropId == "corn" && hasCornSeed)
         {
-            itemId = "corn";
-            count = rng.RandiRange(1, 2);
-
-            if (hasCornSeed)
-            {
-                // Replant in the same action and consume one seed.
-                consumeCornSeed = true;
-                cm.SetBlockAtWorld(position, new BlockState("crop_corn_0"));
-            }
-            else
-            {
-                // Without a seed, harvest normally and clear the plant.
-                cm.SetBlockAtWorld(position, BlockState.Air);
-            }
-
-            return true;
+            consumeCornSeed = true;
+            cm.SetBlockAtWorld(position, new BlockState("crop_corn_0"));
+        }
+        else
+        {
+            cm.SetBlockAtWorld(position, BlockState.Air);
         }
 
-        return false;
+        return true;
     }
 
     public bool TryHarvest(Vector3I position, out string itemId, out int count, out string bonusItem, out int bonusCount)
@@ -324,6 +320,7 @@ public partial class CropManager : Node
             return false;
 
         cropId = parts[1];
-        return cropId == "wheat" || cropId == "corn" || cropId == "tomato";
+        return !string.IsNullOrEmpty(cropId) &&
+               GetMaxStage(cropId) >= 0;
     }
 }
