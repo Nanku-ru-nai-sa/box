@@ -311,7 +311,9 @@ public partial class MobSpawner : Node3D
     public bool TrySpawnMob(
         string mobId,
         string gender,
-        Vector3 spawnPosition)
+        Vector3 spawnPosition,
+        bool? shinyOverride = null,
+        bool? bigOverride = null)
     {
         if (string.IsNullOrWhiteSpace(
             mobId))
@@ -411,6 +413,9 @@ public partial class MobSpawner : Node3D
             mob.ForcedGender =
                 forcedGender.Value;
         }
+
+        mob.SavedShinyOverride = shinyOverride;
+        mob.SavedBigOverride = bigOverride;
 
         AddChild(mob);
 
@@ -651,7 +656,9 @@ public partial class MobSpawner : Node3D
     private void SpawnMob(
         string definitionPath,
         Vector3 spawnPosition,
-        float rotationY = 0f)
+        float rotationY = 0f,
+        bool? isShiny = null,
+        bool? isBig = null)
     {
         if (MobScene == null)
             return;
@@ -670,6 +677,9 @@ public partial class MobSpawner : Node3D
 
         mob.DefinitionPath =
             definitionPath;
+
+        mob.SavedShinyOverride = isShiny;
+        mob.SavedBigOverride = isBig;
 
         AddChild(mob);
 
@@ -771,7 +781,9 @@ public partial class MobSpawner : Node3D
             SpawnMob(
                 saved.DefinitionPath,
                 position,
-                saved.RotationY
+                saved.RotationY,
+                saved.IsShiny,
+                saved.IsBig
             );
         }
 
@@ -966,6 +978,30 @@ public partial class MobSpawner : Node3D
         groundPosition.Y +=
             0.15f;
 
+        // Hostile mobs only spawn during dark hours.
+        // The current world does not calculate per-block light levels.
+        if (definition.behavior != null &&
+            string.Equals(
+                definition.behavior.type,
+                "hostile",
+                StringComparison.OrdinalIgnoreCase) &&
+            !IsDarkForHostileSpawn())
+        {
+            return Vector3.Inf;
+        }
+
         return groundPosition;
+    }
+
+    private bool IsDarkForHostileSpawn()
+    {
+        DayNightCycle cycle =
+            GetTree().GetFirstNodeInGroup("day_night_cycle") as DayNightCycle;
+
+        if (cycle == null)
+            return false;
+
+        float hour = Mathf.PosMod(cycle.GetGameHour(), 24f);
+        return hour >= 18f || hour < 6f;
     }
 }
