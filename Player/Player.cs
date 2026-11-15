@@ -1905,14 +1905,33 @@ public override void _UnhandledInput(InputEvent @event)
             // Right mouse: mount, interact, or place.
             if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
             {
-                // Mount mob with empty hand.
-                if (_heldSlot.IsEmpty)
-                {
-                    Mob mob = GetMobUnderCrosshair();
+                // Use the selected hotbar slot for mob interactions.
+                Mob targetMob = GetMobUnderCrosshair();
 
-                    if (mob != null && mob.StartRiding(this))
+                if (targetMob != null)
+                {
+                    InventorySlot handSlot =
+                        _inventory.Slots[MainInvSize + _selectedSlot];
+
+                    // Feeding takes priority over mounting.
+                    if (!handSlot.IsEmpty)
                     {
-                        _mountedMob = mob;
+                        if (targetMob.TryFeed(handSlot.ItemId))
+                        {
+                            handSlot.Count--;
+
+                            if (handSlot.Count <= 0)
+                                handSlot.Clear();
+
+                            FireChanged();
+                            _isPlacing = false;
+                            return;
+                        }
+                    }
+                    // Mounting requires a genuinely empty selected hotbar slot.
+                    else if (targetMob.StartRiding(this))
+                    {
+                        _mountedMob = targetMob;
 
                         if (_playerCollision != null)
                             _playerCollision.Disabled = true;
@@ -2870,39 +2889,49 @@ if (key.Keycode == Key.Escape)
     string mobId =
         parts[1].Trim();
 
-    string gender =
-        parts.Length >= 3
-            ? parts[2].Trim()
-            : "";
+    string gender = "";
+    bool? shinyOverride = null;
+    bool? bigOverride = null;
 
-    if (parts.Length > 3)
+    // Options can be supplied in any order:
+    // /spawn pig male shiny big
+    // /spawn pig big female
+    for (int i = 2; i < parts.Length; i++)
     {
-        ShowFeedback(
-            "Usage: /spawn <mob> [male/m/female/f]"
-        );
+        string option = parts[i].Trim().ToLowerInvariant();
 
-        return;
-    }
+        if (option == "male" || option == "m" ||
+            option == "female" || option == "f")
+        {
+            if (!string.IsNullOrEmpty(gender))
+            {
+                ShowFeedback("Only one gender option can be used.");
+                return;
+            }
 
-    if (!string.IsNullOrEmpty(gender) &&
-        !gender.Equals(
-            "male",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "m",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "female",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "f",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        ShowFeedback(
-            "Gender must be male/m or female/f."
-        );
-
-        return;
+            gender = option;
+        }
+        else if (option == "shiny")
+        {
+            shinyOverride = true;
+        }
+        else if (option == "notshiny")
+        {
+            shinyOverride = false;
+        }
+        else if (option == "big")
+        {
+            bigOverride = true;
+        }
+        else if (option == "notbig")
+        {
+            bigOverride = false;
+        }
+        else
+        {
+            ShowFeedback("Usage: /spawn <mob> [male/female] [shiny] [big]");
+            return;
+        }
     }
 
     MobSpawner spawner =
@@ -2941,18 +2970,27 @@ if (key.Keycode == Key.Escape)
         spawner.TrySpawnMob(
             mobId,
             gender,
-            spawnPosition
+            spawnPosition,
+            shinyOverride,
+            bigOverride
         );
 
     if (spawned)
     {
-        string genderText =
-            string.IsNullOrEmpty(gender)
-                ? "random gender"
-                : gender;
+        var spawnDetails = new List<string>();
+
+        spawnDetails.Add(
+            string.IsNullOrEmpty(gender) ? "random gender" : gender
+        );
+
+        if (shinyOverride == true) spawnDetails.Add("shiny");
+        else if (shinyOverride == false) spawnDetails.Add("not shiny");
+
+        if (bigOverride == true) spawnDetails.Add("big");
+        else if (bigOverride == false) spawnDetails.Add("not big");
 
         ShowFeedback(
-            $"Spawned {mobId} ({genderText})."
+            $"Spawned {mobId} ({string.Join(", ", spawnDetails)})."
         );
     }
     else
