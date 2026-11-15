@@ -449,7 +449,7 @@ if (overlayC != null &&
 {
     AddItemToInventory(
         overlayC.ItemId,
-        1
+        Mathf.Max(1, overlayC.DropCount)
     );
 }
 Vector3I brokenWorldPosition = new Vector3I(
@@ -562,7 +562,7 @@ if (overlay != null &&
 {
     SpawnItemDrop(
         overlay.ItemId,
-        1,
+        Mathf.Max(1, overlay.DropCount),
         dropWorldPos
     );
 }
