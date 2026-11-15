@@ -34,7 +34,8 @@ public partial class BlockRegistry : Node
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
         var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
         var kilnFrontTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln.png");
-        var kilnLitTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_lit.png");
+        const string kilnLitPath = "res://Assets/Textures/Blocks/kiln_lit.png";
+        var kilnLitTex = ResourceLoader.Exists(kilnLitPath) ? ResourceLoader.Load<Texture2D>(kilnLitPath) : null;
         var kilnSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side.png");
         var kilnTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_top.png");
         var kilnBottomTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_bottom.png");
