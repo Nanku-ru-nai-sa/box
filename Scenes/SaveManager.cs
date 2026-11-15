@@ -538,7 +538,8 @@ public partial class SaveManager : Node
     // ============================================================
 
     public void SaveWorldTime(
-        float timeOfDay)
+        float timeOfDay,
+        bool? isTimePaused = null)
     {
         if (string.IsNullOrEmpty(
             ActiveWorldId))
@@ -571,6 +572,9 @@ public partial class SaveManager : Node
                 timeOfDay,
                 1.0f
             );
+
+        if (isTimePaused.HasValue)
+            meta.TimePaused = isTimePaused.Value;
 
         meta.LastPlayed =
             DateTime.UtcNow;
@@ -624,6 +628,15 @@ public partial class SaveManager : Node
         );
 
         return time;
+    }
+
+    public bool LoadWorldTimePaused()
+    {
+        if (string.IsNullOrEmpty(ActiveWorldId))
+            return false;
+
+        var meta = LoadWorldMeta(ActiveWorldId);
+        return meta?.TimePaused ?? false;
     }
 
 
