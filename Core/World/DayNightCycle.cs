@@ -1061,6 +1061,8 @@ public void ResetCelestialHarvest()
                 1.0f
             );
 
+        IsTimePaused = SaveManager.Instance.LoadWorldTimePaused();
+
         GD.Print(
             $"[DayNightCycle] Starting at saved time: " +
             $"{_timeOfDay:0.000} ({GetTimeString()})"
@@ -1121,6 +1123,7 @@ public void ResetCelestialHarvest()
     public void ToggleTimePause()
     {
         IsTimePaused = !IsTimePaused;
+        SaveCurrentWorldState();
 
         GD.Print(
             $"[DayNightCycle] Time {(IsTimePaused ? "PAUSED" : "RESUMED")}."
@@ -2224,7 +2227,8 @@ _moonCube.Visible =
         return;
 
     SaveManager.Instance.SaveWorldTime(
-        _timeOfDay
+        _timeOfDay,
+        IsTimePaused
     );
 
     SeasonManager seasonManager =

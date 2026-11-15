@@ -34,7 +34,10 @@ public partial class BlockRegistry : Node
         var crateTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/crate.png");
         var barrelTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/barrel.png");
         var kilnFrontTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln.png");
+        var kilnLitTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_lit.png");
         var kilnSideTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side.png");
+        var kilnSideLeftTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side_left.png");
+        var kilnSideRightTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_side_right.png");
         var kilnTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_top.png");
         var kilnBottomTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/kiln_bottom.png");
         var rootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/root.png");
@@ -50,6 +53,8 @@ public partial class BlockRegistry : Node
         var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
 
         var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/bamboo_shoot.png");
+        var bambooTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo.png");
+        var bambooTopTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo_top.png");
         var saplingTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/sapling.png");
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/clover.png");
@@ -225,10 +230,13 @@ public partial class BlockRegistry : Node
         var kiln = new BlockResource();
         kiln.BlockId = "kiln"; kiln.DisplayName = "Kiln";
         kiln.IsSolid = true; kiln.CanChisel = false; kiln.Hardness = 1.5f;
-        kiln.CanHaveFeatures = false; kiln.GrassCanGrow = false;
+        kiln.CanHaveFeatures = true; kiln.GrassCanGrow = false;
         kiln.CanRotate = true;
         kiln.TextureFront = kilnFrontTex;
+        kiln.TextureFrontLit = kilnLitTex;
         kiln.TextureSide = kilnSideTex;
+        kiln.TextureSideLeft = kilnSideLeftTex;
+        kiln.TextureSideRight = kilnSideRightTex;
         kiln.TextureTop = kilnTopTex;
         kiln.TextureBottom = kilnBottomTex;
         kiln.Drops = new[] { "kiln" };
@@ -514,6 +522,50 @@ Register(root);
         bambooShoot.TextureSide = bambooShootTex;
         bambooShoot.TextureBottom = bambooShootTex;
         Register(bambooShoot);
+
+        // Bamboo uses the same centered custom block shapes as tree materials.
+        // Shoot -> 2x16x2 twig -> 4x16x4 tiny bamboo -> 4x8x4 mature bamboo.
+        var bambooTwig = new BlockResource();
+        bambooTwig.BlockId = "bamboo_twig";
+        bambooTwig.DisplayName = "Bamboo Twig";
+        bambooTwig.IsSolid = true;
+        bambooTwig.CanChisel = false;
+        bambooTwig.IsFlammable = true;
+        bambooTwig.IsCustomShape = true;
+        bambooTwig.CustomShapeSize = new Vector3(2f / 16f, 1f, 2f / 16f);
+        bambooTwig.TextureTop = bambooTopTex;
+        bambooTwig.TextureSide = bambooTex;
+        bambooTwig.TextureBottom = bambooTopTex;
+        bambooTwig.Drops = new[] { "bamboo_twig" };
+        Register(bambooTwig);
+
+        var tinyBamboo = new BlockResource();
+        tinyBamboo.BlockId = "tiny_bamboo";
+        tinyBamboo.DisplayName = "Tiny Bamboo";
+        tinyBamboo.IsSolid = true;
+        tinyBamboo.CanChisel = false;
+        tinyBamboo.IsFlammable = true;
+        tinyBamboo.IsCustomShape = true;
+        tinyBamboo.CustomShapeSize = new Vector3(4f / 16f, 1f, 4f / 16f);
+        tinyBamboo.TextureTop = bambooTopTex;
+        tinyBamboo.TextureSide = bambooTex;
+        tinyBamboo.TextureBottom = bambooTopTex;
+        tinyBamboo.Drops = new[] { "tiny_bamboo" };
+        Register(tinyBamboo);
+
+        var bamboo = new BlockResource();
+        bamboo.BlockId = "bamboo";
+        bamboo.DisplayName = "Bamboo";
+        bamboo.IsSolid = true;
+        bamboo.CanChisel = false;
+        bamboo.IsFlammable = true;
+        bamboo.IsCustomShape = true;
+        bamboo.CustomShapeSize = new Vector3(4f / 16f, 8f / 16f, 4f / 16f);
+        bamboo.TextureTop = bambooTopTex;
+        bamboo.TextureSide = bambooTex;
+        bamboo.TextureBottom = bambooTopTex;
+        bamboo.Drops = new[] { "bamboo" };
+        Register(bamboo);
 
 
         // ============================================================

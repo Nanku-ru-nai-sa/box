@@ -129,21 +129,27 @@ public partial class OverlayRegistry : Node
         {
             OverlayId = "root:root1",
             DisplayName = "Roots",
-            OverlayTexture = root1Tex
+            OverlayTexture = root1Tex,
+            ItemId = "root",
+            DropCount = 1
         });
 
         Register(new OverlayResource
         {
             OverlayId = "root:root2",
             DisplayName = "Roots",
-            OverlayTexture = root2Tex
+            OverlayTexture = root2Tex,
+            ItemId = "root",
+            DropCount = 2
         });
 
         Register(new OverlayResource
         {
             OverlayId = "root:root3",
             DisplayName = "Roots",
-            OverlayTexture = root3Tex
+            OverlayTexture = root3Tex,
+            ItemId = "root",
+            DropCount = 3
         });
 
         GD.Print("Overlays registered.");
