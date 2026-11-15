@@ -53,7 +53,8 @@ public partial class BlockRegistry : Node
 
         var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/bamboo_shoot.png");
         // Mature bamboo artwork can be added at this path; use the shoot art until then.
-        var bambooTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo.png") ?? bambooShootTex;
+        const string bambooTexturePath = "res://Assets/Textures/Blocks/bamboo.png";
+        var bambooTex = ResourceLoader.Exists(bambooTexturePath) ? ResourceLoader.Load<Texture2D>(bambooTexturePath) : bambooShootTex;
         var saplingTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/sapling.png");
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/clover.png");
