@@ -1,0 +1,9 @@
+{
+  "plantable_blocks": [
+    "dirt",
+    "grass_block",
+    "silt",
+    "clay",
+    "mud"
+  ]
+}

@@ -1,18 +1,24 @@
 using Godot;
 using System;
+using System.Collections.Generic;
 
 public partial class CropManager : Node
 {
     public static CropManager Instance { get; private set; }
 
-    private static readonly string[] FarmableSoils =
+    private const string PlantableSoilsPath = "res://Data/Farming/plantable_soils.json";
+    private const string TilledSoilId = "soil";
+    private readonly HashSet<string> _plantableSoils = new HashSet<string>();
+    private static readonly string[] DefaultPlantableSoils =
     {
-        "dirt", "grass_block", "silt", "clay"
+        "dirt", "grass_block", "silt", "clay", "mud"
     };
 
     public override void _Ready()
     {
         Instance = this;
+        LoadPlantableSoils();
+
         var seasons = GetNodeOrNull<SeasonManager>("/root/SeasonManager");
         if (seasons != null)
             seasons.DayChanged += OnDayChanged;
@@ -27,20 +33,67 @@ public partial class CropManager : Node
         if (Instance == this) Instance = null;
     }
 
+
+    private void LoadPlantableSoils()
+    {
+        _plantableSoils.Clear();
+        foreach (string id in DefaultPlantableSoils)
+            _plantableSoils.Add(id);
+
+        if (!FileAccess.FileExists(PlantableSoilsPath))
+        {
+            GD.PrintErr($"[CropManager] Missing {PlantableSoilsPath}. Using defaults.");
+            return;
+        }
+
+        Variant parsed = Json.ParseString(FileAccess.GetFileAsString(PlantableSoilsPath));
+        if (parsed.VariantType != Variant.Type.Dictionary)
+        {
+            GD.PrintErr("[CropManager] Invalid plantable_soils.json. Using defaults.");
+            return;
+        }
+
+        Godot.Collections.Dictionary data = parsed.AsGodotDictionary();
+        if (!data.ContainsKey("plantable_blocks") ||
+            data["plantable_blocks"].VariantType != Variant.Type.Array)
+        {
+            GD.PrintErr("[CropManager] plantable_blocks must be an array.");
+            return;
+        }
+
+        _plantableSoils.Clear();
+        foreach (Variant entry in data["plantable_blocks"].AsGodotArray())
+        {
+            string id = entry.AsString().Trim();
+            if (!string.IsNullOrEmpty(id))
+                _plantableSoils.Add(id);
+        }
+
+        GD.Print($"[CropManager] Loaded {_plantableSoils.Count} plantable soil blocks.");
+    }
+
+    private bool IsPlantableSoil(string blockId) =>
+        _plantableSoils.Contains(blockId);
+
+    private bool IsTilledSoil(string blockId) =>
+        blockId == TilledSoilId || blockId.StartsWith("farmland_");
+
+    private bool CanSupportCrops(string blockId) =>
+        IsTilledSoil(blockId) || IsPlantableSoil(blockId);
+
     public bool TryUseHoe(Vector3I target)
     {
         var cm = ChunkManager.Instance;
         if (cm == null) return false;
 
         BlockState soil = cm.GetBlockAtWorld(target);
-        if (Array.IndexOf(FarmableSoils, soil.BlockId) < 0)
+        if (!IsPlantableSoil(soil.BlockId))
             return false;
 
         if (!cm.GetBlockAtWorld(target + Vector3I.Up).IsAir())
             return false;
 
-        var tilled = new BlockState("farmland_" + soil.BlockId);
-        cm.SetBlockAtWorld(target, tilled);
+        cm.SetBlockAtWorld(target, new BlockState(TilledSoilId));
         return true;
     }
 
@@ -62,9 +115,9 @@ public partial class CropManager : Node
         Vector3I cropPosition = target;
         BlockState targetBlock = cm.GetBlockAtWorld(target);
 
-        if (targetBlock.BlockId.StartsWith("farmland_"))
+        if (CanSupportCrops(targetBlock.BlockId))
             cropPosition = target + Vector3I.Up;
-        else if (!cm.GetBlockAtWorld(target + Vector3I.Down).BlockId.StartsWith("farmland_"))
+        else if (!CanSupportCrops(cm.GetBlockAtWorld(target + Vector3I.Down).BlockId))
             return false;
 
         if (!cm.GetBlockAtWorld(cropPosition).IsAir())
@@ -88,7 +141,8 @@ public partial class CropManager : Node
         if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
             return false;
 
-        bool mature = stage >= 5;
+        int maxStage = GetMaxStage(cropId);
+        bool mature = stage >= maxStage;
         var rng = new RandomNumberGenerator();
         rng.Randomize();
 
@@ -133,7 +187,7 @@ public partial class CropManager : Node
             for (int z = 0; z < Chunk.SIZE; z++)
             {
                 BlockState crop = chunk.GetBlock(x, y, z);
-                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) || stage >= 5)
+                if (!TryParseCrop(crop.BlockId, out string cropId, out int stage) || stage >= GetMaxStage(cropId))
                     continue;
 
                 if (!IsSeasonAllowed(cropId, season))
@@ -148,16 +202,22 @@ public partial class CropManager : Node
                 );
 
                 BlockState soil = cm.GetBlockAtWorld(worldPos + Vector3I.Down);
-                if (soil.BlockId.StartsWith("farmland_"))
+                if (IsTilledSoil(soil.BlockId))
                     growth++; // Tilled soil bonus.
 
                 if (HasNearbyWater(cm, worldPos + Vector3I.Down))
                     growth++; // Hydration bonus.
 
-                int nextStage = Math.Min(5, stage + growth);
+                int nextStage = Math.Min(GetMaxStage(cropId), stage + growth);
                 chunk.SetBlock(x, y, z, new BlockState($"crop_{cropId}_{nextStage}"));
             }
         }
+    }
+
+    private int GetMaxStage(string cropId)
+    {
+        int stageCount = BlockRegistry.Instance?.GetCropStageCount(cropId) ?? 0;
+        return Math.Max(0, stageCount - 1);
     }
 
     private bool HasNearbyWater(ChunkManager cm, Vector3I soilPosition)

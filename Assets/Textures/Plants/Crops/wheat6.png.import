@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://gaxgxb2x71wt"
-path="res://.godot/imported/sugarcane.png-bd489a98230c9c45302596aa62f16280.ctex"
+uid="uid://cubry6f67fco4"
+path="res://.godot/imported/wheat6.png-427eda6c16b10e8f642708e6c5464bc0.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/seed/sugarcane.png"
-dest_files=["res://.godot/imported/sugarcane.png-bd489a98230c9c45302596aa62f16280.ctex"]
+source_file="res://Assets/Textures/Plants/Crops/wheat6.png"
+dest_files=["res://.godot/imported/wheat6.png-427eda6c16b10e8f642708e6c5464bc0.ctex"]
 
 [params]
 

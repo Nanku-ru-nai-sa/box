@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://c4bjyxc6u3fma"
-path="res://.godot/imported/9.png-7880d8c0b7e77ecb399c3b34132a1561.ctex"
+uid="uid://bvl7hlmhafkbs"
+path="res://.godot/imported/corn4.png-d4e6b2743f2ed234bf231f4789f608a2.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/veggys/9.png"
-dest_files=["res://.godot/imported/9.png-7880d8c0b7e77ecb399c3b34132a1561.ctex"]
+source_file="res://Assets/Textures/Plants/Crops/corn4.png"
+dest_files=["res://.godot/imported/corn4.png-d4e6b2743f2ed234bf231f4789f608a2.ctex"]
 
 [params]
 

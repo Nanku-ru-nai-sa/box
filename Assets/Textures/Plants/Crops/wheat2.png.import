@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dj8rk2t6styr1"
-path="res://.godot/imported/10.png-a7312f052d41d9604df149ca849f2dbb.ctex"
+uid="uid://kfb0q7yqpaif"
+path="res://.godot/imported/wheat2.png-8f651167d306db71090a6b0bfd862bd7.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/veggys/10.png"
-dest_files=["res://.godot/imported/10.png-a7312f052d41d9604df149ca849f2dbb.ctex"]
+source_file="res://Assets/Textures/Plants/Crops/wheat2.png"
+dest_files=["res://.godot/imported/wheat2.png-8f651167d306db71090a6b0bfd862bd7.ctex"]
 
 [params]
 

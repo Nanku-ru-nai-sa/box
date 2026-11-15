@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b15qnlinlswfm"
-path="res://.godot/imported/Grid_Carrot_(Harvest).png-e90ea0eeaf3b7fa66e1ec456c6219784.ctex"
+uid="uid://qjuxc8reho1w"
+path="res://.godot/imported/soil.png-e3cea15c2194a6369a858f920f34a60b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/veggys/Grid_Carrot_(Harvest).png"
-dest_files=["res://.godot/imported/Grid_Carrot_(Harvest).png-e90ea0eeaf3b7fa66e1ec456c6219784.ctex"]
+source_file="res://Assets/Textures/Blocks/soil.png"
+dest_files=["res://.godot/imported/soil.png-e3cea15c2194a6369a858f920f34a60b.ctex"]
 
 [params]
 
