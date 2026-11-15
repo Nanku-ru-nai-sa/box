@@ -308,30 +308,25 @@ public bool IsMounted =>
                     );
             }
 
-            // Seed item IDs are singular, while their icon files use
-            // the plural "_seeds" naming convention.
+            // Farming seed icons live in the dedicated "seed" folder.
+            // Match the real filenames there (including the existing "whaet" typo).
             if (tex == null)
             {
-                string seedTextureId = itemId switch
+                string seedTexturePath = itemId switch
                 {
-                    "wheat_seed" => "wheat_seeds",
-                    "tomato_seed" => "tomato_seeds",
-                    "corn_seed" => "corn_seeds",
+                    "wheat_seed" => "res://Assets/Textures/Items/seed/whaet.png",
+                    "tomato_seed" => "res://Assets/Textures/Items/seed/tomato.png",
+                    "corn_seed" => "res://Assets/Textures/Items/seed/corn.png",
+                    "carrot_seed" => "res://Assets/Textures/Items/seed/carrot.png",
+                    "potato_seed" => "res://Assets/Textures/Items/seed/potato.png",
+                    "sugarcane_seed" => "res://Assets/Textures/Items/seed/sugarcane.png",
                     _ => ""
                 };
 
-                if (!string.IsNullOrEmpty(seedTextureId))
+                if (!string.IsNullOrEmpty(seedTexturePath) &&
+                    ResourceLoader.Exists(seedTexturePath))
                 {
-                    string seedTexturePath = FindItemTexturePath(
-                        "res://Assets/Textures/Items",
-                        seedTextureId
-                    );
-
-                    if (!string.IsNullOrEmpty(seedTexturePath) &&
-                        ResourceLoader.Exists(seedTexturePath))
-                    {
-                        tex = ResourceLoader.Load<Texture2D>(seedTexturePath);
-                    }
+                    tex = ResourceLoader.Load<Texture2D>(seedTexturePath);
                 }
             }
         }
@@ -1904,6 +1899,7 @@ private Mob GetMobUnderCrosshair()
             chunk.ChunkPosition.Z * Chunk.SIZE + bz
         );
 
+        // Corn's seed can be anywhere in the inventory, including the hotbar.
         bool hasCornSeed = false;
         int cornSeedSlot = -1;
 
@@ -1936,11 +1932,13 @@ private Mob GetMobUnderCrosshair()
             FireChanged();
         }
 
-        Vector3 dropPosition = chunk.GlobalPosition +
-            new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
-
+        // Immature crops consume the interaction but do not harvest or place a block.
         if (!string.IsNullOrEmpty(harvestItem) && harvestCount > 0)
+        {
+            Vector3 dropPosition = chunk.GlobalPosition +
+                new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
             SpawnItemDrop(harvestItem, harvestCount, dropPosition);
+        }
 
         ResetBreak();
         return true;
