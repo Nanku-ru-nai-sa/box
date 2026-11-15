@@ -307,6 +307,33 @@ public bool IsMounted =>
                         itemTexturePath
                     );
             }
+
+            // Seed item IDs are singular, while their icon files use
+            // the plural "_seeds" naming convention.
+            if (tex == null)
+            {
+                string seedTextureId = itemId switch
+                {
+                    "wheat_seed" => "wheat_seeds",
+                    "tomato_seed" => "tomato_seeds",
+                    "corn_seed" => "corn_seeds",
+                    _ => ""
+                };
+
+                if (!string.IsNullOrEmpty(seedTextureId))
+                {
+                    string seedTexturePath = FindItemTexturePath(
+                        "res://Assets/Textures/Items",
+                        seedTextureId
+                    );
+
+                    if (!string.IsNullOrEmpty(seedTexturePath) &&
+                        ResourceLoader.Exists(seedTexturePath))
+                    {
+                        tex = ResourceLoader.Load<Texture2D>(seedTexturePath);
+                    }
+                }
+            }
         }
 
         if (tex == null)
