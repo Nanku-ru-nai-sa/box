@@ -1920,7 +1920,9 @@ private Mob GetMobUnderCrosshair()
                 hasCornSeed,
                 out string harvestItem,
                 out int harvestCount,
-                out bool consumeCornSeed))
+                out bool consumeCornSeed,
+                out string bonusSeedId,
+                out int bonusSeedCount))
             return false;
 
         if (consumeCornSeed && cornSeedSlot >= 0)
@@ -1938,6 +1940,9 @@ private Mob GetMobUnderCrosshair()
             Vector3 dropPosition = chunk.GlobalPosition +
                 new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
             SpawnItemDrop(harvestItem, harvestCount, dropPosition);
+
+            if (!string.IsNullOrEmpty(bonusSeedId) && bonusSeedCount > 0)
+                SpawnItemDrop(bonusSeedId, bonusSeedCount, dropPosition + Vector3.Up * 0.15f);
         }
 
         ResetBreak();
