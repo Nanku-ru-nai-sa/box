@@ -1840,6 +1840,85 @@ private Mob GetMobUnderCrosshair()
     // =========================================================================
 
    
+    private bool TryRightClickHarvestCrop()
+    {
+        if (_rayCast == null || !_rayCast.IsColliding())
+            return false;
+
+        var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory)
+            return false;
+
+        Node collider = _rayCast.GetCollider() as Node;
+        if (collider == null || !collider.HasMeta("chunk"))
+            return false;
+
+        Chunk chunk = collider.GetMeta("chunk").AsGodotObject() as Chunk;
+        if (chunk == null)
+            return false;
+
+        Vector3 localPosition =
+            _rayCast.GetCollisionPoint() -
+            _rayCast.GetCollisionNormal() * 0.5f -
+            chunk.GlobalPosition;
+
+        int bx = Mathf.FloorToInt(localPosition.X);
+        int by = Mathf.FloorToInt(localPosition.Y);
+        int bz = Mathf.FloorToInt(localPosition.Z);
+
+        if (bx < 0 || bx >= Chunk.SIZE ||
+            by < 0 || by >= Chunk.HEIGHT ||
+            bz < 0 || bz >= Chunk.SIZE)
+            return false;
+
+        Vector3I worldPosition = new Vector3I(
+            chunk.ChunkPosition.X * Chunk.SIZE + bx,
+            chunk.ChunkPosition.Y * Chunk.HEIGHT + by,
+            chunk.ChunkPosition.Z * Chunk.SIZE + bz
+        );
+
+        bool hasCornSeed = false;
+        int cornSeedSlot = -1;
+
+        for (int i = 0; i < _inventory.Slots.Count; i++)
+        {
+            InventorySlot slot = _inventory.Slots[i];
+            if (slot != null && !slot.IsEmpty && slot.ItemId == "corn_seed")
+            {
+                hasCornSeed = true;
+                cornSeedSlot = i;
+                break;
+            }
+        }
+
+        if (CropManager.Instance == null ||
+            !CropManager.Instance.TryRightClickHarvest(
+                worldPosition,
+                hasCornSeed,
+                out string harvestItem,
+                out int harvestCount,
+                out bool consumeCornSeed))
+            return false;
+
+        if (consumeCornSeed && cornSeedSlot >= 0)
+        {
+            InventorySlot seedSlot = _inventory.Slots[cornSeedSlot];
+            seedSlot.Count--;
+            if (seedSlot.Count <= 0)
+                seedSlot.Clear();
+            FireChanged();
+        }
+
+        Vector3 dropPosition = chunk.GlobalPosition +
+            new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
+
+        if (!string.IsNullOrEmpty(harvestItem) && harvestCount > 0)
+            SpawnItemDrop(harvestItem, harvestCount, dropPosition);
+
+        ResetBreak();
+        return true;
+    }
+
 public override void _UnhandledInput(InputEvent @event)
 {
     // Stop continuous dropping when Q is released.
@@ -1906,9 +1985,12 @@ public override void _UnhandledInput(InputEvent @event)
                 }
             }
 
-            // Right mouse: mount, interact, or place.
+            // Right mouse: harvest special mature crops, mount, interact, or place.
             if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
             {
+                if (TryRightClickHarvestCrop())
+                    return;
+
                 // Use the selected hotbar slot for mob interactions.
                 Mob targetMob = GetMobUnderCrosshair();
 
