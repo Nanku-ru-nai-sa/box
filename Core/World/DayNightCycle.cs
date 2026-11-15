@@ -210,6 +210,12 @@ private bool _moonBroken = false;
         UpdateMoonPhysicsPosition();
     }
 
+    public override void _ExitTree()
+    {
+        // Save the exact clock and pause state when leaving this world scene.
+        SaveCurrentWorldState();
+    }
+
     // ============================================================
     // CREATE SUN
     // ============================================================
