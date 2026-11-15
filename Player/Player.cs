@@ -316,7 +316,7 @@ public bool IsMounted =>
                 {
                     "wheat_seed" => "res://Assets/Textures/Items/seed/whaet.png",
                     "tomato_seed" => "res://Assets/Textures/Items/seed/tomato.png",
-                    "corn_seed" => "res://Assets/Textures/Items/seed/corn.png",
+                    "corn_seed" => "res://Assets/Textures/Items/veggys/corn.png",
                     "carrot_seed" => "res://Assets/Textures/Items/seed/carrot.png",
                     "potato_seed" => "res://Assets/Textures/Items/seed/potato.png",
                     "sugarcane_seed" => "res://Assets/Textures/Items/seed/sugarcane.png",
