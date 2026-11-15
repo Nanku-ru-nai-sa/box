@@ -50,6 +50,8 @@ public partial class BlockRegistry : Node
         var bombTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bomb.png");
 
         var bambooShootTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/bamboo_shoot.png");
+        // Mature bamboo artwork can be added at this path; use the shoot art until then.
+        var bambooTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/bamboo.png") ?? bambooShootTex;
         var saplingTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/sapling.png");
         var roseTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/rose.png");
         var cloverTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Plants/clover.png");
@@ -204,6 +206,49 @@ public partial class BlockRegistry : Node
         smallLog.TextureBottom = logTopTex;
         Register(smallLog);
 
+        // Bamboo uses the same compact custom-shape style as the tree materials.
+        var bambooTwig = new BlockResource();
+        bambooTwig.BlockId = "bamboo_twig";
+        bambooTwig.DisplayName = "Bamboo Twig";
+        bambooTwig.IsSolid = true;
+        bambooTwig.CanChisel = false;
+        bambooTwig.Hardness = 0.5f;
+        bambooTwig.IsFlammable = true;
+        bambooTwig.IsCustomShape = true;
+        bambooTwig.CustomShapeSize = new Vector3(2f / 16f, 1f, 2f / 16f);
+        bambooTwig.TextureTop = bambooTex;
+        bambooTwig.TextureSide = bambooTex;
+        bambooTwig.TextureBottom = bambooTex;
+        Register(bambooTwig);
+
+        var tinyBamboo = new BlockResource();
+        tinyBamboo.BlockId = "tiny_bamboo";
+        tinyBamboo.DisplayName = "Tiny Bamboo";
+        tinyBamboo.IsSolid = true;
+        tinyBamboo.CanChisel = false;
+        tinyBamboo.Hardness = 0.75f;
+        tinyBamboo.IsFlammable = true;
+        tinyBamboo.IsCustomShape = true;
+        tinyBamboo.CustomShapeSize = new Vector3(4f / 16f, 1f, 4f / 16f);
+        tinyBamboo.TextureTop = bambooTex;
+        tinyBamboo.TextureSide = bambooTex;
+        tinyBamboo.TextureBottom = bambooTex;
+        Register(tinyBamboo);
+
+        var bamboo = new BlockResource();
+        bamboo.BlockId = "bamboo";
+        bamboo.DisplayName = "Bamboo";
+        bamboo.IsSolid = true;
+        bamboo.CanChisel = false;
+        bamboo.Hardness = 1.0f;
+        bamboo.IsFlammable = true;
+        bamboo.IsCustomShape = true;
+        bamboo.CustomShapeSize = new Vector3(4f / 16f, 8f / 16f, 4f / 16f);
+        bamboo.TextureTop = bambooTex;
+        bamboo.TextureSide = bambooTex;
+        bamboo.TextureBottom = bambooTex;
+        Register(bamboo);
+
         var planks = new BlockResource();
         planks.BlockId = "planks"; planks.DisplayName = "Planks";
         planks.IsSolid = true; planks.CanChisel = true; planks.Hardness = 1.0f; planks.IsFlammable = true;
@@ -341,6 +386,21 @@ Register(root);
         sapling.TextureSide = saplingTex;
         sapling.TextureBottom = saplingTex;
         Register(sapling);
+
+        // Bamboo starts as a cross-shaped shoot and advances one form per day.
+        var bambooShoot = new BlockResource();
+        bambooShoot.BlockId = "bamboo_shoot";
+        bambooShoot.DisplayName = "Bamboo Shoot";
+        bambooShoot.IsSolid = false;
+        bambooShoot.CanChisel = false;
+        bambooShoot.IsTransparent = true;
+        bambooShoot.IsCross = true;
+        bambooShoot.Hardness = 0f;
+        bambooShoot.TextureTop = bambooShootTex;
+        bambooShoot.TextureSide = bambooShootTex;
+        bambooShoot.TextureBottom = bambooShootTex;
+        bambooShoot.Drops = new[] { "bamboo_shoot" };
+        Register(bambooShoot);
 
         var rose = new BlockResource();
         rose.BlockId = "rose"; rose.DisplayName = "Rose";
