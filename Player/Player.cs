@@ -1248,6 +1248,10 @@ public bool IsMounted =>
     if (!_heldSlot.IsEmpty &&
         _cursorPanel != null)
     {
+        // The floating item icon follows the cursor but must not
+        // intercept the mouse when dropping items outside the UI.
+        _cursorPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
+
         _cursorPanel.GlobalPosition =
             mouse -
             new Vector2(
