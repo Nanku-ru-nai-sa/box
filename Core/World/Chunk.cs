@@ -2283,12 +2283,17 @@ private void AddQuadCropped(
     }
 
     // Rotation: 0 = North (-Z), 1 = East (+X), 2 = South (+Z), 3 = West (-X).
-    private static Texture2D GetHorizontalFaceTexture(BlockResource resource, byte rotation, FaceDirection face)
+    private static Texture2D GetHorizontalFaceTexture(BlockResource resource, BlockState block, FaceDirection face)
     {
-        if (resource.TextureFront == null)
+        Texture2D frontTexture =
+            block.HasFeature("kiln:lit") && resource.TextureFrontLit != null
+                ? resource.TextureFrontLit
+                : resource.TextureFront;
+
+        if (frontTexture == null)
             return resource.TextureSide;
 
-        FaceDirection front = (rotation % 4) switch
+        FaceDirection front = (block.Rotation % 4) switch
         {
             0 => FaceDirection.North,
             1 => FaceDirection.East,
@@ -2296,7 +2301,7 @@ private void AddQuadCropped(
             _ => FaceDirection.West
         };
 
-        return face == front ? resource.TextureFront : resource.TextureSide;
+        return face == front ? frontTexture : resource.TextureSide;
     }
 
     private void AddFullBlockFaces(
@@ -2358,7 +2363,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.North)
+                    GetHorizontalFaceTexture(resource, block, FaceDirection.North)
                 ),
                 GetFaceVertices(
                     x,
@@ -2379,7 +2384,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.South)
+                    GetHorizontalFaceTexture(resource, block, FaceDirection.South)
                 ),
                 GetFaceVertices(
                     x,
@@ -2400,7 +2405,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.West)
+                    GetHorizontalFaceTexture(resource, block, FaceDirection.West)
                 ),
                 GetFaceVertices(
                     x,
@@ -2421,7 +2426,7 @@ private void AddQuadCropped(
             AddQuad(
                 GetOrCreateSurface(
                     surfaces,
-                    GetHorizontalFaceTexture(resource, block.Rotation, FaceDirection.East)
+                    GetHorizontalFaceTexture(resource, block, FaceDirection.East)
                 ),
                 GetFaceVertices(
                     x,
