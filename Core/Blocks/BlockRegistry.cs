@@ -555,9 +555,9 @@ Register(root);
         soil.Drops = new[] { "dirt" };
         Register(soil);
 
-        RegisterCropStages("wheat", "Wheat");
-        RegisterCropStages("corn", "Corn");
-        RegisterCropStages("tomato", "Tomato");
+        RegisterCropStages("wheat", "Wheat", 6, saplingTex);
+        RegisterCropStages("corn", "Corn", 6, saplingTex);
+        RegisterCropStages("tomato", "Tomato", 6, saplingTex);
 
         GD.Print("Blocks registered.");
     }
