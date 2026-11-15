@@ -9,6 +9,21 @@
 	"turnSpeed": 5.0
   },
 
+  "sleep": {
+    "enabled": true,
+    "startHour": 20.0,
+    "endHour": 6.0
+  },
+
+  "mount": {
+    "enabled": true,
+    "saddleAllowed": false,
+    "speedMultiplier": 1.0,
+    "sprintMultiplier": 1.5,
+    "jumpMultiplier": 1.0,
+    "canSprint": true
+  },
+
   "behavior": {
   "type": "neutral",
   "wanderRadius": 10.0,
