@@ -6,4 +6,5 @@ public partial class OverlayResource : Resource
     [Export] public string DisplayName { get; set; } = "";
     [Export] public Texture2D OverlayTexture { get; set; }
     [Export] public string ItemId { get; set; } = "";
+    [Export] public int DropCount { get; set; } = 1;
 }
