@@ -155,8 +155,13 @@ public const int SlotsPerBarrel = 16;
     Vector3I position,
     int slotCount = SlotsPerCrate)
 {
-    if (_containers.ContainsKey(position))
+    if (_containers.TryGetValue(position, out List<InventorySlot> existing))
+    {
+        while (existing.Count < slotCount)
+            existing.Add(new InventorySlot());
+
         return;
+    }
 
     var slots = new List<InventorySlot>();
 

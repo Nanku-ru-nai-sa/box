@@ -127,6 +127,67 @@ public partial class CropManager : Node
         return true;
     }
 
+    // Right-click harvest supports every registered crop.
+    // Tomatoes only lose their fruit and regrow. Corn replants immediately
+    // when the player has a corn seed; other crops harvest like normal.
+    public bool TryRightClickHarvest(
+        Vector3I position,
+        bool hasCornSeed,
+        out string itemId,
+        out int count,
+        out bool consumeCornSeed,
+        out string bonusSeedId,
+        out int bonusSeedCount)
+    {
+        itemId = "";
+        count = 0;
+        consumeCornSeed = false;
+        bonusSeedId = "";
+        bonusSeedCount = 0;
+
+        var cm = ChunkManager.Instance;
+        if (cm == null)
+            return false;
+
+        BlockState crop = cm.GetBlockAtWorld(position);
+        if (!TryParseCrop(crop.BlockId, out string cropId, out int stage))
+            return false;
+
+        int maxStage = GetMaxStage(cropId);
+        if (stage < maxStage)
+            return true; // It is a crop, but it is not ready to harvest.
+
+        var rng = new RandomNumberGenerator();
+        rng.Randomize();
+
+        if (cropId == "tomato")
+        {
+            itemId = cropId;
+            count = rng.RandiRange(2, 4);
+            cm.SetBlockAtWorld(position, new BlockState("crop_tomato_2"));
+            return true;
+        }
+
+        itemId = cropId;
+        count = cropId == "wheat"
+            ? rng.RandiRange(2, 3)
+            : rng.RandiRange(1, 2);
+        bonusSeedId = cropId + "_seed";
+        bonusSeedCount = cropId == "wheat" ? rng.RandiRange(1, 2) : 1;
+
+        if (cropId == "corn" && hasCornSeed)
+        {
+            consumeCornSeed = true;
+            cm.SetBlockAtWorld(position, new BlockState("crop_corn_0"));
+        }
+        else
+        {
+            cm.SetBlockAtWorld(position, BlockState.Air);
+        }
+
+        return true;
+    }
+
     public bool TryHarvest(Vector3I position, out string itemId, out int count, out string bonusItem, out int bonusCount)
     {
         itemId = "";
@@ -265,6 +326,8 @@ public partial class CropManager : Node
             return false;
 
         cropId = parts[1];
-        return cropId == "wheat" || cropId == "corn" || cropId == "tomato";
+        return !string.IsNullOrEmpty(cropId) &&
+               BlockRegistry.Instance != null &&
+               BlockRegistry.Instance.GetCropStageCount(cropId) > 0;
     }
 }

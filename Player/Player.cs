@@ -307,6 +307,28 @@ public bool IsMounted =>
                         itemTexturePath
                     );
             }
+
+            // Farming seed icons live in the dedicated "seed" folder.
+            // Match the real filenames there (including the existing "whaet" typo).
+            if (tex == null)
+            {
+                string seedTexturePath = itemId switch
+                {
+                    "wheat_seed" => "res://Assets/Textures/Items/seed/whaet.png",
+                    "tomato_seed" => "res://Assets/Textures/Items/seed/tomato.png",
+                    "corn_seed" => "res://Assets/Textures/Items/seed/corn.png",
+                    "carrot_seed" => "res://Assets/Textures/Items/seed/carrot.png",
+                    "potato_seed" => "res://Assets/Textures/Items/seed/potato.png",
+                    "sugarcane_seed" => "res://Assets/Textures/Items/seed/sugarcane.png",
+                    _ => ""
+                };
+
+                if (!string.IsNullOrEmpty(seedTexturePath) &&
+                    ResourceLoader.Exists(seedTexturePath))
+                {
+                    tex = ResourceLoader.Load<Texture2D>(seedTexturePath);
+                }
+            }
         }
 
         if (tex == null)
@@ -1248,6 +1270,10 @@ public bool IsMounted =>
     if (!_heldSlot.IsEmpty &&
         _cursorPanel != null)
     {
+        // The floating item icon follows the cursor but must not
+        // intercept the mouse when dropping items outside the UI.
+        _cursorPanel.MouseFilter = Control.MouseFilterEnum.Ignore;
+
         _cursorPanel.GlobalPosition =
             mouse -
             new Vector2(
@@ -1836,6 +1862,93 @@ private Mob GetMobUnderCrosshair()
     // =========================================================================
 
    
+    private bool TryRightClickHarvestCrop()
+    {
+        if (_rayCast == null || !_rayCast.IsColliding())
+            return false;
+
+        var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory)
+            return false;
+
+        Node collider = _rayCast.GetCollider() as Node;
+        if (collider == null || !collider.HasMeta("chunk"))
+            return false;
+
+        Chunk chunk = collider.GetMeta("chunk").AsGodotObject() as Chunk;
+        if (chunk == null)
+            return false;
+
+        Vector3 localPosition =
+            _rayCast.GetCollisionPoint() -
+            _rayCast.GetCollisionNormal() * 0.5f -
+            chunk.GlobalPosition;
+
+        int bx = Mathf.FloorToInt(localPosition.X);
+        int by = Mathf.FloorToInt(localPosition.Y);
+        int bz = Mathf.FloorToInt(localPosition.Z);
+
+        if (bx < 0 || bx >= Chunk.SIZE ||
+            by < 0 || by >= Chunk.HEIGHT ||
+            bz < 0 || bz >= Chunk.SIZE)
+            return false;
+
+        Vector3I worldPosition = new Vector3I(
+            chunk.ChunkPosition.X * Chunk.SIZE + bx,
+            chunk.ChunkPosition.Y * Chunk.HEIGHT + by,
+            chunk.ChunkPosition.Z * Chunk.SIZE + bz
+        );
+
+        // Corn's seed can be anywhere in the inventory, including the hotbar.
+        bool hasCornSeed = false;
+        int cornSeedSlot = -1;
+
+        for (int i = 0; i < _inventory.Slots.Length; i++)
+        {
+            InventorySlot slot = _inventory.Slots[i];
+            if (slot != null && !slot.IsEmpty && slot.ItemId == "corn_seed")
+            {
+                hasCornSeed = true;
+                cornSeedSlot = i;
+                break;
+            }
+        }
+
+        if (CropManager.Instance == null ||
+            !CropManager.Instance.TryRightClickHarvest(
+                worldPosition,
+                hasCornSeed,
+                out string harvestItem,
+                out int harvestCount,
+                out bool consumeCornSeed,
+                out string bonusSeedId,
+                out int bonusSeedCount))
+            return false;
+
+        if (consumeCornSeed && cornSeedSlot >= 0)
+        {
+            InventorySlot seedSlot = _inventory.Slots[cornSeedSlot];
+            seedSlot.Count--;
+            if (seedSlot.Count <= 0)
+                seedSlot.Clear();
+            FireChanged();
+        }
+
+        // Immature crops consume the interaction but do not harvest or place a block.
+        if (!string.IsNullOrEmpty(harvestItem) && harvestCount > 0)
+        {
+            Vector3 dropPosition = chunk.GlobalPosition +
+                new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
+            SpawnItemDrop(harvestItem, harvestCount, dropPosition);
+
+            if (!string.IsNullOrEmpty(bonusSeedId) && bonusSeedCount > 0)
+                SpawnItemDrop(bonusSeedId, bonusSeedCount, dropPosition + Vector3.Up * 0.15f);
+        }
+
+        ResetBreak();
+        return true;
+    }
+
 public override void _UnhandledInput(InputEvent @event)
 {
     // Stop continuous dropping when Q is released.
@@ -1902,17 +2015,39 @@ public override void _UnhandledInput(InputEvent @event)
                 }
             }
 
-            // Right mouse: mount, interact, or place.
+            // Right mouse: harvest special mature crops, mount, interact, or place.
             if (mb.ButtonIndex == MouseButton.Right && mb.Pressed)
             {
-                // Mount mob with empty hand.
-                if (_heldSlot.IsEmpty)
-                {
-                    Mob mob = GetMobUnderCrosshair();
+                if (TryRightClickHarvestCrop())
+                    return;
 
-                    if (mob != null && mob.StartRiding(this))
+                // Use the selected hotbar slot for mob interactions.
+                Mob targetMob = GetMobUnderCrosshair();
+
+                if (targetMob != null)
+                {
+                    InventorySlot handSlot =
+                        _inventory.Slots[MainInvSize + _selectedSlot];
+
+                    // Feeding takes priority over mounting.
+                    if (!handSlot.IsEmpty)
                     {
-                        _mountedMob = mob;
+                        if (targetMob.TryFeed(handSlot.ItemId))
+                        {
+                            handSlot.Count--;
+
+                            if (handSlot.Count <= 0)
+                                handSlot.Clear();
+
+                            FireChanged();
+                            _isPlacing = false;
+                            return;
+                        }
+                    }
+                    // Mounting requires a genuinely empty selected hotbar slot.
+                    else if (targetMob.StartRiding(this))
+                    {
+                        _mountedMob = targetMob;
 
                         if (_playerCollision != null)
                             _playerCollision.Disabled = true;
@@ -2851,7 +2986,7 @@ if (key.Keycode == Key.Escape)
     if (parts.Length < 2)
     {
         ShowFeedback(
-            "Usage: /spawn <mob> [male/m/female/f]"
+            "Usage: /spawn <mob> [male/female] [shiny] [big]"
         );
 
         return;
@@ -2870,39 +3005,49 @@ if (key.Keycode == Key.Escape)
     string mobId =
         parts[1].Trim();
 
-    string gender =
-        parts.Length >= 3
-            ? parts[2].Trim()
-            : "";
+    string gender = "";
+    bool? shinyOverride = null;
+    bool? bigOverride = null;
 
-    if (parts.Length > 3)
+    // Options can be supplied in any order:
+    // /spawn pig male shiny big
+    // /spawn pig big female
+    for (int i = 2; i < parts.Length; i++)
     {
-        ShowFeedback(
-            "Usage: /spawn <mob> [male/m/female/f]"
-        );
+        string option = parts[i].Trim().ToLowerInvariant();
 
-        return;
-    }
+        if (option == "male" || option == "m" ||
+            option == "female" || option == "f")
+        {
+            if (!string.IsNullOrEmpty(gender))
+            {
+                ShowFeedback("Only one gender option can be used.");
+                return;
+            }
 
-    if (!string.IsNullOrEmpty(gender) &&
-        !gender.Equals(
-            "male",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "m",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "female",
-            StringComparison.OrdinalIgnoreCase) &&
-        !gender.Equals(
-            "f",
-            StringComparison.OrdinalIgnoreCase))
-    {
-        ShowFeedback(
-            "Gender must be male/m or female/f."
-        );
-
-        return;
+            gender = option;
+        }
+        else if (option == "shiny")
+        {
+            shinyOverride = true;
+        }
+        else if (option == "notshiny")
+        {
+            shinyOverride = false;
+        }
+        else if (option == "big")
+        {
+            bigOverride = true;
+        }
+        else if (option == "notbig")
+        {
+            bigOverride = false;
+        }
+        else
+        {
+            ShowFeedback("Usage: /spawn <mob> [male/female] [shiny] [big]");
+            return;
+        }
     }
 
     MobSpawner spawner =
@@ -2941,18 +3086,27 @@ if (key.Keycode == Key.Escape)
         spawner.TrySpawnMob(
             mobId,
             gender,
-            spawnPosition
+            spawnPosition,
+            shinyOverride,
+            bigOverride
         );
 
     if (spawned)
     {
-        string genderText =
-            string.IsNullOrEmpty(gender)
-                ? "random gender"
-                : gender;
+        var spawnDetails = new List<string>();
+
+        spawnDetails.Add(
+            string.IsNullOrEmpty(gender) ? "random gender" : gender
+        );
+
+        if (shinyOverride == true) spawnDetails.Add("shiny");
+        else if (shinyOverride == false) spawnDetails.Add("not shiny");
+
+        if (bigOverride == true) spawnDetails.Add("big");
+        else if (bigOverride == false) spawnDetails.Add("not big");
 
         ShowFeedback(
-            $"Spawned {mobId} ({genderText})."
+            $"Spawned {mobId} ({string.Join(", ", spawnDetails)})."
         );
     }
     else

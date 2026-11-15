@@ -850,6 +850,66 @@ public partial class Player : CharacterBody3D
         SpawnItemDrop(itemId, 1, spawnPos, tossVel);
     }
 
+    private void DropEntireHeldStack()
+    {
+        var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory)
+            return;
+
+        if (_heldSlot.IsEmpty)
+            return;
+
+        string itemId = _heldSlot.ItemId;
+        int count = _heldSlot.Count;
+        _heldSlot.Clear();
+
+        Vector3 forward = -_rayCast.GlobalTransform.Basis.Z;
+        Vector3 spawnPos =
+            GlobalPosition +
+            new Vector3(0f, DropSpawnHeight, 0f) +
+            forward * 0.6f;
+
+        Vector3 tossVelocity =
+            forward * DropForwardSpeed +
+            Vector3.Up * DropUpSpeed;
+
+        SpawnItemDrop(itemId, count, spawnPos, tossVelocity);
+
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    private void DropHeldCursorItem()
+    {
+        var gm = GameModeManager.Instance;
+        if (gm != null && gm.IsStory)
+            return;
+
+        if (_heldSlot.IsEmpty)
+            return;
+
+        string itemId = _heldSlot.ItemId;
+        _heldSlot.Count--;
+
+        if (_heldSlot.Count <= 0)
+            _heldSlot.Clear();
+
+        Vector3 forward = -_rayCast.GlobalTransform.Basis.Z;
+        Vector3 spawnPos =
+            GlobalPosition +
+            new Vector3(0f, DropSpawnHeight, 0f) +
+            forward * 0.6f;
+
+        Vector3 tossVelocity =
+            forward * DropForwardSpeed +
+            Vector3.Up * DropUpSpeed;
+
+        SpawnItemDrop(itemId, 1, spawnPos, tossVelocity);
+
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
     // =========================================================================
     // INVENTORY MOUSE INPUT
     // =========================================================================
@@ -858,6 +918,24 @@ public partial class Player : CharacterBody3D
     {
         if (!_inventoryOpen)
             return;
+
+        // Clicking outside every inventory/panel drops the held item.
+        // Left-click drops the whole stack; right-click drops one item.
+        if (@event is InputEventMouseButton dropClick &&
+            dropClick.Pressed &&
+            (dropClick.ButtonIndex == MouseButton.Left ||
+             dropClick.ButtonIndex == MouseButton.Right) &&
+            !_heldSlot.IsEmpty &&
+            GetSlotUnderMouse() < 0 &&
+            GetViewport().GuiGetHoveredControl() == null)
+        {
+            if (dropClick.ButtonIndex == MouseButton.Left)
+                DropEntireHeldStack();
+            else
+                DropHeldCursorItem();
+
+            return;
+        }
 
         if (@event is InputEventMouseButton mb && !mb.Pressed)
         {

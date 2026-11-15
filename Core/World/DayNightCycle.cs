@@ -19,6 +19,9 @@ public partial class DayNightCycle : Node3D
 
     private float _timeOfDay = 0.0f;
 
+    // Pauses the in-game clock and automatic calendar progression.
+    public bool IsTimePaused { get; private set; } = false;
+
     // ============================================================
     // LIGHT COLORS
     // ============================================================
@@ -1092,22 +1095,36 @@ public void ResetCelestialHarvest()
     public override void _Process(
         double delta)
     {
-        _timeOfDay +=
-            (float)delta /
-            DayDurationSeconds;
-
-        if (_timeOfDay >= 1f)
+        // Time pause freezes the clock and all automatic calendar
+        // progression. Celestial visuals remain at their current position.
+        if (!IsTimePaused)
         {
-            _timeOfDay -= 1f;
+            _timeOfDay +=
+                (float)delta /
+                DayDurationSeconds;
 
-            AdvanceCalendarDay();
+            if (_timeOfDay >= 1f)
+            {
+                _timeOfDay -= 1f;
 
-            SaveCurrentWorldState();
+                AdvanceCalendarDay();
+
+                SaveCurrentWorldState();
+            }
         }
 
-        // Visuals and lighting can update every render frame.
+        // Keep visuals synchronized, even immediately after unpausing.
         UpdateCelestialBodies();
         UpdateLightColor();
+    }
+
+    public void ToggleTimePause()
+    {
+        IsTimePaused = !IsTimePaused;
+
+        GD.Print(
+            $"[DayNightCycle] Time {(IsTimePaused ? "PAUSED" : "RESUMED")}."
+        );
     }
 
     // ============================================================

@@ -41,7 +41,7 @@ private void CloseCrateOnly()
     RemoveContainerWindowFromInventory();
 
     _containerOpen = false;
-    _activeContainerSlots.Clear();
+    _activeContainerSlots = new List<InventorySlot>();
 
     // Leave the normal inventory and side panels open.
     EndDrag();
