@@ -321,6 +321,7 @@ public partial class CropManager : Node
 
         cropId = parts[1];
         return !string.IsNullOrEmpty(cropId) &&
-               GetMaxStage(cropId) >= 0;
+               BlockRegistry.Instance != null &&
+               BlockRegistry.Instance.GetCropStageCount(cropId) > 0;
     }
 }
