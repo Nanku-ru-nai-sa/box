@@ -174,6 +174,8 @@ public partial class TreeGrowth
 
         List<(Vector3I BasePosition, int Stage)> treesToGrow =
             new List<(Vector3I BasePosition, int Stage)>();
+        List<(Vector3I Position, int Stage)> bambooToGrow =
+            new List<(Vector3I Position, int Stage)>();
 
         foreach (
             KeyValuePair<Vector3I, Chunk> pair
@@ -222,6 +224,33 @@ public partial class TreeGrowth
                                 y,
                                 z
                             );
+
+                        // ------------------------------------------------
+                        // BAMBOO
+                        // Shoot -> Twig -> Tiny Bamboo -> Bamboo.
+                        // Plants are collected before growth so none can
+                        // advance more than one stage during this day pass.
+                        // ------------------------------------------------
+
+                        int bambooStage = block.BlockId switch
+                        {
+                            "bamboo_shoot" => 0,
+                            "bamboo_twig" => 1,
+                            "tiny_bamboo" => 2,
+                            _ => -1
+                        };
+
+                        if (bambooStage >= 0)
+                        {
+                            Vector3I bambooPosition = new Vector3I(
+                                chunkPosition.X * Chunk.SIZE + x,
+                                chunkPosition.Y * Chunk.HEIGHT + y,
+                                chunkPosition.Z * Chunk.SIZE + z
+                            );
+
+                            bambooToGrow.Add((bambooPosition, bambooStage));
+                            continue;
+                        }
 
                         // ------------------------------------------------
                         // NEW TREE
@@ -346,11 +375,66 @@ public partial class TreeGrowth
             }
         }
 
+        int bambooGrown = 0;
+
+        foreach ((Vector3I Position, int Stage) bambooData in bambooToGrow)
+        {
+            string expectedBlock = bambooData.Stage switch
+            {
+                0 => "bamboo_shoot",
+                1 => "bamboo_twig",
+                2 => "tiny_bamboo",
+                _ => ""
+            };
+
+            BlockState current = _chunkManager.GetBlockAtWorld(bambooData.Position);
+            if (current.BlockId != expectedBlock)
+                continue;
+
+            if (TryGrowBamboo(bambooData.Position, bambooData.Stage))
+                bambooGrown++;
+        }
+
         GD.Print(
             $"[TreeGrowth] Daily growth check complete. " +
-            $"Trees found: {treesFound}, " +
-            $"trees grown: {treesGrown}"
+            $"Trees found: {treesFound}, trees grown: {treesGrown}, " +
+            $"bamboo found: {bambooToGrow.Count}, bamboo grown: {bambooGrown}"
         );
+    }
+
+    // ============================================================
+    // BAMBOO GROWTH
+    // ============================================================
+
+    private bool TryGrowBamboo(Vector3I position, int currentStage)
+    {
+        if (currentStage < 0 || currentStage > 2)
+            return false;
+
+        // Bamboo needs solid ground and open daylight above it.
+        BlockState ground = _chunkManager.GetBlockAtWorld(position + Vector3I.Down);
+        BlockResource groundResource = BlockRegistry.Instance?.GetBlock(ground.BlockId);
+
+        if (ground.IsAir() || groundResource == null || !groundResource.IsSolid)
+            return false;
+
+        if (!HasGrowthLight(position))
+            return false;
+
+        string nextBlock = currentStage switch
+        {
+            0 => "bamboo_twig",
+            1 => "tiny_bamboo",
+            2 => "bamboo",
+            _ => ""
+        };
+
+        if (string.IsNullOrEmpty(nextBlock))
+            return false;
+
+        SetTreeBlock(position, nextBlock);
+        GD.Print($"[TreeGrowth] Bamboo at {position} grew into {nextBlock}.");
+        return true;
     }
 
     // ============================================================
