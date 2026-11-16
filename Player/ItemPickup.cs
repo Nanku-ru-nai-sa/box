@@ -148,7 +148,7 @@ public partial class ItemPickup : Node3D
         // 1. BLOCK
         // --------------------------------------------------------
 
-        if (ResourceLoader.Exists(blockPath))
+        if (ResourceLoader.Exists(blockPath) && ItemId != "bamboo")
         {
             _isBlock = true;
 
