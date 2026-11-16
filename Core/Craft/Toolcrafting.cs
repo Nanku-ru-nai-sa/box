@@ -214,41 +214,76 @@ public static class ToolCrafting
 
         void Blend(string path)
         {
-            if (!ResourceLoader.Exists(path)) return;
+            if (!ResourceLoader.Exists(path))
+            {
+                GD.PrintErr($"ToolCrafting: texture not found: {path}");
+                return;
+            }
+
             var partTex = ResourceLoader.Load<Texture2D>(path);
+            if (partTex == null)
+            {
+                GD.PrintErr($"ToolCrafting: could not load texture: {path}");
+                return;
+            }
+
             var partImg = partTex.GetImage();
-            if (partImg == null) return;
+            if (partImg == null)
+            {
+                GD.PrintErr($"ToolCrafting: texture has no readable image: {path}");
+                return;
+            }
 
             if (canvas == null)
                 canvas = Image.CreateEmpty(partImg.GetWidth(), partImg.GetHeight(), false, Image.Format.Rgba8);
 
+            // Keep the original pixel placement and blend transparent pixels correctly.
             canvas.BlendRect(partImg, new Rect2I(Vector2I.Zero, partImg.GetSize()), Vector2I.Zero);
         }
 
-        if (materialsBySlot.TryGetValue(PartSlot.Handle, out var handleMat))
-        {
-            // Current handle textures live directly in Items/stick/.
-            string handlePath = $"res://Assets/Textures/Items/stick/{handleMat}.png";
-
-            // Compatibility fallback for any older texture still in the old folder.
-            if (!ResourceLoader.Exists(handlePath))
-                handlePath = $"res://Assets/Textures/Items/tool/stick/{handleMat}.png";
-
-            Blend(handlePath);
-        }
-
+        // Draw the head(s) first. The newer head artwork can contain pixels
+        // across the handle area, so drawing the handle last prevents it
+        // from being hidden in the finished-tool icon.
         if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
             Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
 
         if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
             Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
 
+        // Handle materials are item IDs, matching the PNG filename in Items/stick/.
+        if (materialsBySlot.TryGetValue(PartSlot.Handle, out var handleMat))
+        {
+            string id = handleMat.Trim();
+            string lowerId = id.ToLowerInvariant();
+
+            string[] handlePaths =
+            {
+                $"res://Assets/Textures/Items/stick/{id}.png",
+                $"res://Assets/Textures/Items/stick/{lowerId}.png",
+                $"res://Assets/Textures/Items/tool/stick/{id}.png",
+                $"res://Assets/Textures/Items/tool/stick/{lowerId}.png",
+                $"res://Assets/Textures/Items/{id}.png",
+                $"res://Assets/Textures/Items/{lowerId}.png"
+            };
+
+            bool loaded = false;
+            foreach (string handlePath in handlePaths)
+            {
+                if (!ResourceLoader.Exists(handlePath))
+                    continue;
+
+                Blend(handlePath);
+                loaded = true;
+                break;
+            }
+
+            if (!loaded)
+                GD.PrintErr($"ToolCrafting: no handle texture found for material ID '{handleMat}'. Checked Assets/Textures/Items/stick/ and compatibility paths.");
+        }
+
         if (canvas != null)
             return ImageTexture.CreateFromImage(canvas);
 
-        // Nothing found at all (no head/handle art yet for this recipe) -
-        // fall back to the same "unknown" chalk texture the center diamond
-        // uses when no tool type is selected, rather than a blank icon.
         const string unknownPath = "res://Assets/Textures/Items/tool/chalk/unknown.png";
         return ResourceLoader.Exists(unknownPath) ? ResourceLoader.Load<Texture2D>(unknownPath) : null;
     }
