@@ -226,12 +226,14 @@ public static class ToolCrafting
         }
 
         if (materialsBySlot.TryGetValue(PartSlot.Handle, out var handleMat))
+        {
             // Stick/handle textures now live directly in Items/stick/.
             // Keep the previous tool/stick path as a compatibility fallback.
             string handlePath = $"res://Assets/Textures/Items/stick/{handleMat}.png";
             if (!ResourceLoader.Exists(handlePath))
                 handlePath = $"res://Assets/Textures/Items/tool/stick/{handleMat}.png";
             Blend(handlePath);
+        }
 
         if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
             Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
