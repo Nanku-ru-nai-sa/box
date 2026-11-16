@@ -237,20 +237,10 @@ public static class ToolCrafting
             if (canvas == null)
                 canvas = Image.CreateEmpty(partImg.GetWidth(), partImg.GetHeight(), false, Image.Format.Rgba8);
 
-            // Keep the original pixel placement and blend transparent pixels correctly.
             canvas.BlendRect(partImg, new Rect2I(Vector2I.Zero, partImg.GetSize()), Vector2I.Zero);
         }
 
-        // Draw the head(s) first. The newer head artwork can contain pixels
-        // across the handle area, so drawing the handle last prevents it
-        // from being hidden in the finished-tool icon.
-        if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
-            Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
-
-        if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
-            Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
-
-        // Handle materials are item IDs, matching the PNG filename in Items/stick/.
+        // Draw the handle FIRST so it sits behind the tool head.
         if (materialsBySlot.TryGetValue(PartSlot.Handle, out var handleMat))
         {
             string id = handleMat.Trim();
@@ -280,6 +270,13 @@ public static class ToolCrafting
             if (!loaded)
                 GD.PrintErr($"ToolCrafting: no handle texture found for material ID '{handleMat}'. Checked Assets/Textures/Items/stick/ and compatibility paths.");
         }
+
+        // Draw the head(s) AFTER the handle so their pixels appear in front.
+        if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
+            Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
+
+        if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
+            Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
 
         if (canvas != null)
             return ImageTexture.CreateFromImage(canvas);
