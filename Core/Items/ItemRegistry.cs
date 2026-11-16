@@ -96,6 +96,7 @@ public partial class ItemRegistry : Node
         // Rebuild any Tool Bench crafted tools from their persisted recipes
         // BEFORE anything (e.g. loading a save) tries to look one up by id.
         // Fixes: crafted tools showing no icon/stats after restarting the game.
+        ToolCrafting.RegisterBasicFlintTools();
         ToolCrafting.LoadPersistedRecipes();
     }
 
