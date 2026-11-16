@@ -2616,6 +2616,27 @@ if (key.Keycode == Key.Escape)
 
     public override void _ExitTree()
     {
+        // Save the player's inventory and position when leaving the world,
+        // not only when the player manually presses F5.
+        var chunkManager = GetTree().Root.FindChild(
+            "ChunkManager",
+            true,
+            false
+        ) as ChunkManager;
+
+        if (chunkManager != null && _inventory != null)
+        {
+            chunkManager.SaveModifiedChunks();
+            chunkManager.SaveInventory(_inventory);
+            chunkManager.SavePlayerPosition(
+                GlobalPosition,
+                Rotation.Y,
+                _playerCamera?.GetPitch() ?? 0f
+            );
+        }
+
+        SaveManager.Instance?.SaveCurrentWorld();
+
         _hotbarLayer?.QueueFree();
         _chatLayer?.QueueFree();
         _craftingLayer?.QueueFree();
