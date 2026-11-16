@@ -190,6 +190,13 @@ public partial class CreativeMenu : Panel
             tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         }
 
+        // Plant icons such as saplings and flowers are stored separately.
+        if (tex == null)
+        {
+            string path = $"res://Assets/Textures/Plants/{item.ItemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
+
         if (tex == null)
             tex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/tool/chalk/unknown.png");
 
