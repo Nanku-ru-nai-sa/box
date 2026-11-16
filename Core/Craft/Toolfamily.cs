@@ -11,7 +11,7 @@ public enum ToolFamily
     Axe,
     Shovel,
     Sword,
-    Hoe,
+    Scythe,
     Hammer
 }
 

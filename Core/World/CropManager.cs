@@ -81,7 +81,7 @@ public partial class CropManager : Node
     private bool CanSupportCrops(string blockId) =>
         IsTilledSoil(blockId) || IsPlantableSoil(blockId);
 
-    public bool TryUseHoe(Vector3I target)
+    public bool TryUseScythe(Vector3I target)
     {
         var cm = ChunkManager.Instance;
         if (cm == null) return false;

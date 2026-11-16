@@ -15,7 +15,7 @@ public static class ToolCraftingRules
         { (ToolFamily.Pickaxe, PartSlot.HeadA), 3 },
         { (ToolFamily.Axe,     PartSlot.HeadA), 3 },
         { (ToolFamily.Shovel,  PartSlot.HeadA), 1 },
-        { (ToolFamily.Hoe,     PartSlot.HeadA), 1 },
+        { (ToolFamily.Scythe,     PartSlot.HeadA), 1 },
         { (ToolFamily.Hammer,  PartSlot.HeadA), 4 },
         // Anything not listed here (Handle, Binding, HeadB) defaults to 1 below.
     };

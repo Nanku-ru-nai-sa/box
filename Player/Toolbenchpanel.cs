@@ -75,7 +75,7 @@ public partial class ToolBenchPanel : Control
     private Panel   _familyPickerBg;
     private TextureRect _centerIconTex;
     private static readonly ToolFamily[] PickableFamilies =
-        { ToolFamily.Pickaxe, ToolFamily.Shovel, ToolFamily.Axe, ToolFamily.Sword, ToolFamily.Hoe, ToolFamily.Hammer };
+        { ToolFamily.Pickaxe, ToolFamily.Shovel, ToolFamily.Axe, ToolFamily.Sword, ToolFamily.Scythe, ToolFamily.Hammer };
 
     // Same constants as CraftingPanel so the two panels' grids line up exactly.
     private const int SlotSz  = 56;
@@ -575,6 +575,9 @@ public partial class ToolBenchPanel : Control
             tex.OffsetLeft    = 6f; tex.OffsetTop = 6f; tex.OffsetRight = -6f; tex.OffsetBottom = -6f;
             tex.MouseFilter   = MouseFilterEnum.Ignore;
             string path = $"res://Assets/Textures/Items/tool/chalk/{fam.ToString().ToLower()}.png";
+            // Use the new flint scythe head as a fallback until a dedicated chalk/scythe icon is added.
+            if (!ResourceLoader.Exists(path) && fam == ToolFamily.Scythe)
+                path = "res://Assets/Textures/Items/tool/scythe/flint_scythe_head.png";
             tex.Texture = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
             slot.AddChild(tex);
 
@@ -612,6 +615,8 @@ public partial class ToolBenchPanel : Control
         string path = PrimaryFamily.HasValue
             ? $"res://Assets/Textures/Items/tool/chalk/{PrimaryFamily.Value.ToString().ToLower()}.png"
             : "res://Assets/Textures/Items/tool/chalk/unknown.png";
+        if (PrimaryFamily == ToolFamily.Scythe && !ResourceLoader.Exists(path))
+            path = "res://Assets/Textures/Items/tool/scythe/flint_scythe_head.png";
         _centerIconTex.Texture = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
     }
 

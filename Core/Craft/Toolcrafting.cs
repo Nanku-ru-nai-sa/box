@@ -200,7 +200,7 @@ public static class ToolCrafting
     }
 
     // Composites a tool's icon from its part shape textures:
-    //   Head:   res://Assets/Textures/Items/tool/{family}/{material}_head.png
+    //   Head:   res://Assets/Textures/Items/tool/{family}/{material}_{family}_head.png (legacy _head.png fallback)
     //   Handle: res://Assets/Textures/Items/tool/stick/{material}.png
     // Draw order is handle first (sits behind), then head(s) on top.
     // Returns null if none of the expected files exist yet (safe to leave
@@ -273,10 +273,20 @@ public static class ToolCrafting
 
         // Draw the head(s) AFTER the handle so their pixels appear in front.
         if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
-            Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
+        {
+            string familyName = primaryFamily.ToString().ToLowerInvariant();
+            string familyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headAMat}_{familyName}_head.png";
+            string legacyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headAMat}_head.png";
+            Blend(ResourceLoader.Exists(familyHeadPath) ? familyHeadPath : legacyHeadPath);
+        }
 
         if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
-            Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
+        {
+            string familyName = secondaryFamily.Value.ToString().ToLowerInvariant();
+            string familyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headBMat}_{familyName}_head.png";
+            string legacyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headBMat}_head.png";
+            Blend(ResourceLoader.Exists(familyHeadPath) ? familyHeadPath : legacyHeadPath);
+        }
 
         if (canvas != null)
             return ImageTexture.CreateFromImage(canvas);

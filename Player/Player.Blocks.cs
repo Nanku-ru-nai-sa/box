@@ -796,11 +796,11 @@ else if (b.BlockId is "crate" or "barrel")
         var cm = hitChunk.GetParent() as ChunkManager;
         if (cm == null) return;
 
-        // Hoe: convert supported dirt-family blocks into tilled soil.
-        if (_selectedBlockId == "hoe")
+        // Scythe: convert supported dirt-family blocks into tilled soil.
+        if ((_selectedBlockId == "scythe" || _selectedBlockId == "hoe"))
         {
             if (CropManager.Instance != null &&
-                CropManager.Instance.TryUseHoe(hitBlockPosition))
+                CropManager.Instance.TryUseScythe(hitBlockPosition))
                 ShowFeedback("Soil tilled");
             return;
         }

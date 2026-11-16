@@ -36,7 +36,7 @@ public static List<string> GetAllItemIds()
 
 
     // Core farming items remain available in Creative even before their PNGs exist.
-    foreach (string id in new[] { "hoe", "wheat_seed", "corn_seed", "tomato_seed", "wheat", "corn", "tomato" })
+    foreach (string id in new[] { "scythe", "wheat_seed", "corn_seed", "tomato_seed", "wheat", "corn", "tomato" })
         if (!_allItemIds.Exists(existing => string.Equals(existing, id, StringComparison.OrdinalIgnoreCase)))
             _allItemIds.Add(id);
 
@@ -89,7 +89,10 @@ private static void ScanItemFolder(string folderPath)
                     fileName.Length - 4
                 );
 
-            _allItemIds.Add(id);
+            // The old chalk/hoe.png texture is retained only as a UI fallback;
+            // do not expose a duplicate "hoe" item in Creative.
+            if (!string.Equals(id, "hoe", StringComparison.OrdinalIgnoreCase))
+                _allItemIds.Add(id);
         }
 
         fileName = dir.GetNext();
