@@ -23,7 +23,7 @@ public static class ToolDefinition
         Axe,
         Shovel,
         Sword,
-        Hoe,
+        Scythe,
         Hammer,
         // Future upgrades:
         // IronPickaxe, DiamondPickaxe, etc.
@@ -76,7 +76,7 @@ public static class ToolDefinition
         { ToolType.Axe,     4 },
         { ToolType.Shovel,  4 },
         { ToolType.Sword,   5 }, // sword is weak at breaking blocks
-        { ToolType.Hoe,     4 },
+        { ToolType.Scythe,  4 },
         { ToolType.Hammer,  3 }, // heavier, hits harder - tune as needed
     };
 
@@ -89,6 +89,7 @@ public static class ToolDefinition
         { "axe",             ToolType.Axe },
         { "shovel",          ToolType.Shovel },
         { "sword",           ToolType.Sword },
+        { "scythe",          ToolType.Scythe },
         // Future: iron_pickaxe, diamond_axe, etc.
     };
 
