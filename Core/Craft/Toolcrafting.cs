@@ -273,10 +273,20 @@ public static class ToolCrafting
 
         // Draw the head(s) AFTER the handle so their pixels appear in front.
         if (materialsBySlot.TryGetValue(PartSlot.HeadA, out var headAMat))
-            Blend($"res://Assets/Textures/Items/tool/{primaryFamily.ToString().ToLower()}/{headAMat}_head.png");
+        {
+            string familyName = primaryFamily.ToString().ToLowerInvariant();
+            string familyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headAMat}_{familyName}_head.png";
+            string legacyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headAMat}_head.png";
+            Blend(ResourceLoader.Exists(familyHeadPath) ? familyHeadPath : legacyHeadPath);
+        }
 
         if (secondaryFamily.HasValue && materialsBySlot.TryGetValue(PartSlot.HeadB, out var headBMat))
-            Blend($"res://Assets/Textures/Items/tool/{secondaryFamily.Value.ToString().ToLower()}/{headBMat}_head.png");
+        {
+            string familyName = secondaryFamily.Value.ToString().ToLowerInvariant();
+            string familyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headBMat}_{familyName}_head.png";
+            string legacyHeadPath = $"res://Assets/Textures/Items/tool/{familyName}/{headBMat}_head.png";
+            Blend(ResourceLoader.Exists(familyHeadPath) ? familyHeadPath : legacyHeadPath);
+        }
 
         if (canvas != null)
             return ImageTexture.CreateFromImage(canvas);
