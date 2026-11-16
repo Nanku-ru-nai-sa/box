@@ -22,6 +22,7 @@ public partial class CraftingPanel : Control
     private InventorySlot[] _grid3 = new InventorySlot[9];  // 3x3 = 9 slots
 
     public int GridSize { get; private set; } = 2;
+    public bool IsShowingLearnedRecipes => _learnedView != null && _learnedView.Visible;
     private bool _atTable = false;
 
     private RecipeManager.Recipe _currentMatch = null;
