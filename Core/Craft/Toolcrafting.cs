@@ -101,6 +101,32 @@ public static class ToolCrafting
         return (itemId, durability);
     }
 
+    // Pre-register the basic flint tools so the normal Crafter can use
+    // the same finished tools and IDs as the Tool Bench.
+    public static void RegisterBasicFlintTools()
+    {
+        if (ItemRegistry.Instance == null)
+            return;
+
+        foreach (ToolFamily family in new[]
+        {
+            ToolFamily.Pickaxe,
+            ToolFamily.Axe,
+            ToolFamily.Shovel,
+            ToolFamily.Sword,
+            ToolFamily.Scythe,
+            ToolFamily.Hammer
+        })
+        {
+            var materials = new Dictionary<PartSlot, string>
+            {
+                { PartSlot.HeadA, "flint" },
+                { PartSlot.Handle, "stick" }
+            };
+
+            CraftTool(family, null, materials);
+        }
+    }
     // =========================================================================
     // PERSISTENCE — crafted tools only exist as ItemResource templates in
     // memory. On restart, ItemRegistry starts empty except for the hardcoded
