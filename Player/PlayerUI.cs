@@ -1208,11 +1208,15 @@ private void OnSlotMouseEntered(int slotIndex)
         if (texture == null)
             return;
 
-        Vector2 available = rect.Size;
-        if (available.X < 1f || available.Y < 1f)
+        Vector2 available = Vector2.Zero;
+        if (rect.GetParent() is Control parent)
         {
-            if (rect.GetParent() is Control parent)
-                available = parent.GetCombinedMinimumSize() - new Vector2(12f, 12f);
+            available = parent.Size;
+            if (available.X < 1f || available.Y < 1f)
+                available = parent.GetCombinedMinimumSize();
+
+            // Keep the same six-pixel inset used by the original slot icons.
+            available -= new Vector2(12f, 12f);
         }
 
         if (available.X < 1f || available.Y < 1f)
