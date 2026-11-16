@@ -796,8 +796,15 @@ else if (b.BlockId is "crate" or "barrel")
         var cm = hitChunk.GetParent() as ChunkManager;
         if (cm == null) return;
 
-        // Scythe: convert supported dirt-family blocks into tilled soil.
-        if ((_selectedBlockId == "scythe" || _selectedBlockId == "hoe"))
+        // Every crafted scythe uses ToolType = "Scythe", regardless of
+        // its material recipe, so all scythes can prepare soil.
+        string selectedToolType = ItemRegistry.Instance?.GetItem(_selectedBlockId)?.ToolType ?? "";
+        bool isScythe =
+            _selectedBlockId == "scythe" ||
+            _selectedBlockId == "hoe" ||
+            selectedToolType == "Scythe";
+
+        if (isScythe)
         {
             if (CropManager.Instance != null &&
                 CropManager.Instance.TryUseScythe(hitBlockPosition))
