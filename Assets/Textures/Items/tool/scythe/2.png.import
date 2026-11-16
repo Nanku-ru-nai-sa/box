@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dlpd8l1xju1by"
-path="res://.godot/imported/flint.png-b7bfaaa2ed2ede80484b109a053f5d40.ctex"
+uid="uid://uuenanbmnrxm"
+path="res://.godot/imported/2.png-32ab99b58dc3ff16b1bd5b9a6008e067.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/hoe/flint.png"
-dest_files=["res://.godot/imported/flint.png-b7bfaaa2ed2ede80484b109a053f5d40.ctex"]
+source_file="res://Assets/Textures/Items/tool/scythe/2.png"
+dest_files=["res://.godot/imported/2.png-32ab99b58dc3ff16b1bd5b9a6008e067.ctex"]
 
 [params]
 

@@ -575,50 +575,73 @@ public partial class ChunkManager : Node3D
     }
 
     public void SaveInventory(Inventory inventory)
-{
-    DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
-
-    var slots = new Godot.Collections.Array();
-    foreach (var slot in inventory.Slots)
     {
-        var entry = new Godot.Collections.Dictionary();
-        entry["id"] = slot.IsEmpty ? "" : slot.ItemId;
-        entry["count"] = slot.IsEmpty ? 0 : slot.Count;
-        slots.Add(entry);
-    }
+        if (inventory == null || inventory.Slots == null)
+            return;
 
-    string json = Json.Stringify(slots);
-    using var file = FileAccess.Open(PlayerSaveDirectory + "inventory.json", FileAccess.ModeFlags.Write);
-    file.StoreString(json);
-    GD.Print("Inventory saved.");
-}
+        DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
 
-public void LoadInventory(Inventory inventory)
-{
-    string path = PlayerSaveDirectory + "inventory.json";
-    if (!FileAccess.FileExists(path)) return;
-
-    using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
-    string json = file.GetAsText();
-
-    var parsed = Json.ParseString(json).AsGodotArray();
-    for (int i = 0; i < parsed.Count && i < inventory.Slots.Length; i++)
-    {
-        var entry = parsed[i].AsGodotDictionary();
-        string id = (string)entry["id"];
-        int count = (int)entry["count"];
-
-        if (string.IsNullOrEmpty(id) || count <= 0)
-            inventory.Slots[i].Clear();
-        else
+        var slots = new Godot.Collections.Array();
+        foreach (var slot in inventory.Slots)
         {
-            inventory.Slots[i].ItemId = id;
-            inventory.Slots[i].Count = count;
+            var entry = new Godot.Collections.Dictionary();
+            entry["id"] = slot.IsEmpty ? "" : slot.ItemId;
+            entry["count"] = slot.IsEmpty ? 0 : slot.Count;
+            entry["durability"] = slot.IsEmpty ? 0 : slot.CurrentDurability;
+            entry["custom_name"] = slot.IsEmpty ? "" : slot.CustomName;
+            slots.Add(entry);
         }
+
+        string json = Json.Stringify(slots);
+        using var file = FileAccess.Open(PlayerSaveDirectory + "inventory.json", FileAccess.ModeFlags.Write);
+        if (file == null)
+        {
+            GD.PrintErr("Could not save inventory: " + PlayerSaveDirectory + "inventory.json");
+            return;
+        }
+
+        file.StoreString(json);
+        GD.Print("Inventory saved (including tool durability).");
     }
 
-    GD.Print("Inventory loaded.");
-}
+    public void LoadInventory(Inventory inventory)
+    {
+        if (inventory == null || inventory.Slots == null)
+            return;
+
+        string path = PlayerSaveDirectory + "inventory.json";
+        if (!FileAccess.FileExists(path)) return;
+
+        using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (file == null)
+            return;
+
+        string json = file.GetAsText();
+        var parsed = Json.ParseString(json).AsGodotArray();
+
+        for (int i = 0; i < parsed.Count && i < inventory.Slots.Length; i++)
+        {
+            var entry = parsed[i].AsGodotDictionary();
+            string id = entry.ContainsKey("id") ? (string)entry["id"] : "";
+            int count = entry.ContainsKey("count") ? (int)entry["count"] : 0;
+
+            if (string.IsNullOrEmpty(id) || count <= 0)
+            {
+                inventory.Slots[i].Clear();
+            }
+            else
+            {
+                inventory.Slots[i].ItemId = id;
+                inventory.Slots[i].Count = count;
+                inventory.Slots[i].CurrentDurability =
+                    entry.ContainsKey("durability") ? (int)entry["durability"] : 0;
+                inventory.Slots[i].CustomName =
+                    entry.ContainsKey("custom_name") ? (string)entry["custom_name"] : "";
+            }
+        }
+
+        GD.Print("Inventory loaded (including saved tool durability).");
+    }
 
 public void SavePlayerPosition(
     Vector3 position,

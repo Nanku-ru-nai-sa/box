@@ -81,6 +81,25 @@ public static class MaterialStatsDb
         return null;
     }
 
+    // Wood/plant handle variants are defined by their textures in
+    // Assets/Textures/Items/stick/ rather than individual JSON stat files.
+    // They inherit the base stick stats, while keeping their own material ID
+    // so the correct variant texture is used on the finished tool.
+    public static MaterialStatEntryData GetHandle(string materialId)
+    {
+        EnsureLoaded();
+
+        if (_lookup.TryGetValue(materialId, out var material))
+            return material;
+
+        string texturePath = $"res://Assets/Textures/Items/stick/{materialId}.png";
+        if (ResourceLoader.Exists(texturePath) && _lookup.TryGetValue("stick", out var stickStats))
+            return stickStats;
+
+        GD.PrintErr($"MaterialStatsDb: Handle material not found: {materialId}");
+        return null;
+    }
+
     // Call this (e.g. from a debug key) to re-scan the Materials folder
     // without restarting the game - handy while playtesting.
     public static void Reload() => _lookup = null;

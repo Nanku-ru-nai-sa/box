@@ -47,7 +47,9 @@ public static class ToolCraftingRules
 
             int qty = GetRequiredQuantity(familyForSlot, slot);
 
-            var stats = MaterialStatsDb.Get(materialId);
+            var stats = slot == PartSlot.Handle
+                ? MaterialStatsDb.GetHandle(materialId)
+                : MaterialStatsDb.Get(materialId);
             int durabilityPerUnit = stats?.DurabilityPerUnit ?? 0;
 
             total += qty * durabilityPerUnit;

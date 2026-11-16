@@ -511,10 +511,10 @@ private void RefreshContainerSlotVisuals()
             !GodotObject.IsInstanceValid(panel))
             continue;
 
-        panel.GetChild<TextureRect>(0).Texture =
-            slot.IsEmpty
-                ? null
-                : GetItemIcon(slot.ItemId);
+        SetPixelIcon(
+            panel.GetChild<TextureRect>(0),
+            slot.IsEmpty ? null : GetItemIcon(slot.ItemId)
+        );
 
         _containerSlotLabels[i].Text =
             !slot.IsEmpty && slot.Count > 1
@@ -896,7 +896,7 @@ private void OnSlotMouseEntered(int slotIndex)
     {
         _stationSlots[index].Visible = true;
         _stationSlots[index].TooltipText = tooltip;
-        _stationSlotIcons[index].Texture = GetItemIcon(itemId);
+        SetPixelIcon(_stationSlotIcons[index], GetItemIcon(itemId));
     }
 
     private void HandleStationSlotClick(int index)
@@ -1194,6 +1194,52 @@ private void OnSlotMouseEntered(int slotIndex)
         return slot;
     }
 
+    // Display pixel-art icons at whole-number scale factors. Nearest filtering
+    // alone can still make pixels uneven when (for example) a 32px icon is
+    // squeezed into a 48px slot. This keeps each source pixel the same size.
+    private void SetPixelIcon(TextureRect rect, Texture2D texture)
+    {
+        if (rect == null)
+            return;
+
+        rect.Texture = texture;
+        rect.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+
+        if (texture == null)
+            return;
+
+        Vector2 available = Vector2.Zero;
+        if (rect.GetParent() is Control parent)
+        {
+            available = parent.Size;
+            if (available.X < 1f || available.Y < 1f)
+                available = parent.GetCombinedMinimumSize();
+
+            // Keep the same six-pixel inset used by the original slot icons.
+            available -= new Vector2(4f, 4f);
+        }
+
+        if (available.X < 1f || available.Y < 1f)
+            return;
+
+        int scaleX = Mathf.FloorToInt(available.X / texture.GetWidth());
+        int scaleY = Mathf.FloorToInt(available.Y / texture.GetHeight());
+        int scale = Mathf.Max(1, Mathf.Min(scaleX, scaleY));
+
+        float drawWidth = texture.GetWidth() * scale;
+        float drawHeight = texture.GetHeight() * scale;
+
+        rect.AnchorLeft = 0.5f;
+        rect.AnchorRight = 0.5f;
+        rect.AnchorTop = 0.5f;
+        rect.AnchorBottom = 0.5f;
+        rect.OffsetLeft = -drawWidth * 0.5f;
+        rect.OffsetRight = drawWidth * 0.5f;
+        rect.OffsetTop = -drawHeight * 0.5f;
+        rect.OffsetBottom = drawHeight * 0.5f;
+        rect.StretchMode = TextureRect.StretchModeEnum.Scale;
+    }
+
     private TextureRect MakeSlotTexRect()
     {
         var tex =
@@ -1446,12 +1492,10 @@ private Control GetSlotControl(int slotIndex)
             var s =
                 _inventory.Slots[i];
 
-            _invSlotPanels[i]
-                .GetChild<TextureRect>(0)
-                .Texture =
-                    s.IsEmpty
-                        ? null
-                        : GetItemIcon(s.ItemId);
+            SetPixelIcon(
+                _invSlotPanels[i].GetChild<TextureRect>(0),
+                s.IsEmpty ? null : GetItemIcon(s.ItemId)
+            );
 
             _invSlotLabels[i].Text =
                 (!s.IsEmpty && s.Count > 1)
@@ -1471,13 +1515,8 @@ private Control GetSlotControl(int slotIndex)
                     ? null
                     : GetItemIcon(s.ItemId);
 
-            _hotbarSlots[i]
-                .GetChild<TextureRect>(0)
-                .Texture = icon;
-
-            _invHotbarSlots[i]
-                .GetChild<TextureRect>(0)
-                .Texture = icon;
+            SetPixelIcon(_hotbarSlots[i].GetChild<TextureRect>(0), icon);
+            SetPixelIcon(_invHotbarSlots[i].GetChild<TextureRect>(0), icon);
 
             string t =
                 (!s.IsEmpty && s.Count > 1)
@@ -1563,10 +1602,10 @@ private Control GetSlotControl(int slotIndex)
             return;
         }
 
-        _cursorTex.Texture =
-            GetItemIcon(
-                _heldSlot.ItemId
-            );
+        SetPixelIcon(
+            _cursorTex,
+            GetItemIcon(_heldSlot.ItemId)
+        );
 
         _cursorLabel.Text =
             _heldSlot.Count > 1

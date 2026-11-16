@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d26jg1xscv3ku"
-path="res://.godot/imported/amethyst.png-c906a9eb09c7074c51db3996948c0039.ctex"
+uid="uid://be7waw00hnwmx"
+path="res://.godot/imported/bone.png-bf9a6a32f3ec9c4d60562c0dc27dde1f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/hoe/amethyst.png"
-dest_files=["res://.godot/imported/amethyst.png-c906a9eb09c7074c51db3996948c0039.ctex"]
+source_file="res://Assets/Textures/Items/tool/scythe/bone.png"
+dest_files=["res://.godot/imported/bone.png-bf9a6a32f3ec9c4d60562c0dc27dde1f.ctex"]
 
 [params]
 

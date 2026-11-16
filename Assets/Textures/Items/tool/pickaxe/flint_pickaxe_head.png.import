@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://ryio3uv0q5g4"
-path="res://.godot/imported/flint_head.png-bad928f3eb2e7af10eff769f3239f5da.ctex"
+uid="uid://dg6tu3kcdsovm"
+path="res://.godot/imported/flint_pickaxe_head.png-afae3bf3ba37b9a1bf78b2b73e4c6a4b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/pickaxe/flint_head.png"
-dest_files=["res://.godot/imported/flint_head.png-bad928f3eb2e7af10eff769f3239f5da.ctex"]
+source_file="res://Assets/Textures/Items/tool/pickaxe/flint_pickaxe_head.png"
+dest_files=["res://.godot/imported/flint_pickaxe_head.png-afae3bf3ba37b9a1bf78b2b73e4c6a4b.ctex"]
 
 [params]
 

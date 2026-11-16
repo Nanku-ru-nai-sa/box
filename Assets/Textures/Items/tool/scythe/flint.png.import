@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bqs2dhfl3tt0m"
-path="res://.godot/imported/tool_hoe_steel.png-0679891a7bb52fe8148837a75cfe3a60.ctex"
+uid="uid://dlpd8l1xju1by"
+path="res://.godot/imported/flint.png-40e9fafbbb53bbe235e6684ab975c8bd.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/hoe/tool_hoe_steel.png"
-dest_files=["res://.godot/imported/tool_hoe_steel.png-0679891a7bb52fe8148837a75cfe3a60.ctex"]
+source_file="res://Assets/Textures/Items/tool/scythe/flint.png"
+dest_files=["res://.godot/imported/flint.png-40e9fafbbb53bbe235e6684ab975c8bd.ctex"]
 
 [params]
 

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://be7waw00hnwmx"
-path="res://.godot/imported/bone.png-030c2a04768dc03f9e94801f76b1727c.ctex"
+uid="uid://y6nns8tjkc85"
+path="res://.godot/imported/note.png-7398f3c1717c262fb124bbb4827cc5f1.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/hoe/bone.png"
-dest_files=["res://.godot/imported/bone.png-030c2a04768dc03f9e94801f76b1727c.ctex"]
+source_file="res://Assets/Textures/UI/note.png"
+dest_files=["res://.godot/imported/note.png-7398f3c1717c262fb124bbb4827cc5f1.ctex"]
 
 [params]
 

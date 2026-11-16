@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://uyv8675e33kv"
-path="res://.godot/imported/copper.png-e9724d9e35bbb4c7613295db754cd1e4.ctex"
+uid="uid://d26jg1xscv3ku"
+path="res://.godot/imported/amethyst.png-4776b34bab8cfb362faae1536e7d8f2c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Textures/Items/tool/hoe/copper.png"
-dest_files=["res://.godot/imported/copper.png-e9724d9e35bbb4c7613295db754cd1e4.ctex"]
+source_file="res://Assets/Textures/Items/tool/scythe/amethyst.png"
+dest_files=["res://.godot/imported/amethyst.png-4776b34bab8cfb362faae1536e7d8f2c.ctex"]
 
 [params]
 

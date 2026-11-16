@@ -40,7 +40,13 @@ public static class ToolBenchCraftResolver
             InventorySlot invSlot = kvp.Value;
             string materialId = invSlot.ItemId; // the socketed item's own id IS the material id
 
-            if (MaterialStatsDb.Get(materialId) == null)
+            // Handle variants are texture-defined in Items/stick/ and inherit
+            // the base stick stats. Other slots still require a material JSON.
+            var materialStats = slot == PartSlot.Handle
+                ? MaterialStatsDb.GetHandle(materialId)
+                : MaterialStatsDb.Get(materialId);
+
+            if (materialStats == null)
                 return Fail($"{ToolBenchPanel.SocketLabels[SlotIndex(slot)]}: '{materialId}' isn't set up as a crafting material yet.");
 
             ToolFamily familyForSlot = (slot == PartSlot.HeadB && panel.SecondaryFamily.HasValue)

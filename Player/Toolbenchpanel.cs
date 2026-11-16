@@ -720,12 +720,16 @@ public partial class ToolBenchPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
-        var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        // Stick variants now live in Items/stick/. Check this folder FIRST:
+        // there is also an older Items/stick.png at the root, and checking the
+        // root first would hide the newer stick/stick.png texture.
+        string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
+        var tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+
         if (tex == null)
         {
-            string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
-            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+            string path = $"res://Assets/Textures/Items/{itemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         }
         _iconCache[itemId] = tex;
         return tex;
