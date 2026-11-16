@@ -200,7 +200,7 @@ public static class ToolCrafting
     }
 
     // Composites a tool's icon from its part shape textures:
-    //   Head:   res://Assets/Textures/Items/tool/{family}/{material}_head.png
+    //   Head:   res://Assets/Textures/Items/tool/{family}/{material}_{family}_head.png (legacy _head.png fallback)
     //   Handle: res://Assets/Textures/Items/tool/stick/{material}.png
     // Draw order is handle first (sits behind), then head(s) on top.
     // Returns null if none of the expected files exist yet (safe to leave
