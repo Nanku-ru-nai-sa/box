@@ -89,7 +89,10 @@ private static void ScanItemFolder(string folderPath)
                     fileName.Length - 4
                 );
 
-            _allItemIds.Add(id);
+            // The old chalk/hoe.png texture is retained only as a UI fallback;
+            // do not expose a duplicate "hoe" item in Creative.
+            if (!string.Equals(id, "hoe", StringComparison.OrdinalIgnoreCase))
+                _allItemIds.Add(id);
         }
 
         fileName = dir.GetNext();
