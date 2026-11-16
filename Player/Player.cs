@@ -336,6 +336,18 @@ public bool IsMounted =>
             }
         }
 
+        // Plant sprites (saplings, flowers, mushrooms, etc.) live outside Items/.
+        if (tex == null)
+        {
+            string plantTexturePath = FindItemTexturePath(
+                "res://Assets/Textures/Plants",
+                itemId
+            );
+
+            if (!string.IsNullOrEmpty(plantTexturePath) && ResourceLoader.Exists(plantTexturePath))
+                tex = ResourceLoader.Load<Texture2D>(plantTexturePath);
+        }
+
         if (tex == null)
         {
             string blockPath =
