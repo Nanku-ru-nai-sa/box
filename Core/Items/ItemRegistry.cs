@@ -81,7 +81,7 @@ public partial class ItemRegistry : Node
         }
 
 
-        RegisterFarmingItem("hoe", "Hoe", false, "Tool for tilling dirt-family soil.");
+        RegisterFarmingItem("scythe", "Scythe", false, "Tool for preparing soil.");
         RegisterFarmingItem("wheat_seed", "Wheat Seeds", true, "Plant on tilled soil.");
         RegisterFarmingItem("corn_seed", "Corn Seeds", true, "Plant on tilled soil.");
         RegisterFarmingItem("tomato_seed", "Tomato Seeds", true, "Plant on tilled soil.");
@@ -106,7 +106,7 @@ public partial class ItemRegistry : Node
         item.Description = description;
         item.IsStackable = stackable;
         item.MaxStackSize = stackable ? 64 : 1;
-        if (id == "hoe") item.ToolType = "hoe";
+        if (id == "scythe") item.ToolType = "Scythe";
         _items[id] = item;
     }
 
