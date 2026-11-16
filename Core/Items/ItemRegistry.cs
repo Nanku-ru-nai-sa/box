@@ -82,6 +82,8 @@ public partial class ItemRegistry : Node
 
 
         RegisterFarmingItem("scythe", "Scythe", false, "Tool for preparing soil.");
+        // Legacy save compatibility: old hoe items now behave and display as scythes.
+        RegisterFarmingItem("hoe", "Scythe", false, "Legacy item now treated as a scythe.");
         RegisterFarmingItem("wheat_seed", "Wheat Seeds", true, "Plant on tilled soil.");
         RegisterFarmingItem("corn_seed", "Corn Seeds", true, "Plant on tilled soil.");
         RegisterFarmingItem("tomato_seed", "Tomato Seeds", true, "Plant on tilled soil.");
@@ -106,7 +108,7 @@ public partial class ItemRegistry : Node
         item.Description = description;
         item.IsStackable = stackable;
         item.MaxStackSize = stackable ? 64 : 1;
-        if (id == "scythe") item.ToolType = "Scythe";
+        if (id == "scythe" || id == "hoe") item.ToolType = "Scythe";
         _items[id] = item;
     }
 
