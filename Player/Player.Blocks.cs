@@ -797,7 +797,7 @@ else if (b.BlockId is "crate" or "barrel")
         if (cm == null) return;
 
         // Scythe: convert supported dirt-family blocks into tilled soil.
-        if (_selectedBlockId == "scythe")
+        if ((_selectedBlockId == "scythe" || _selectedBlockId == "hoe"))
         {
             if (CropManager.Instance != null &&
                 CropManager.Instance.TryUseHoe(hitBlockPosition))
