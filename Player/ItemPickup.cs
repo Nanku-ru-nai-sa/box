@@ -178,6 +178,27 @@ public partial class ItemPickup : Node3D
                     ItemId
                 );
 
+            // Seed item IDs are singular, while their texture files use
+            // the plural "_seeds" naming convention.
+            if (string.IsNullOrWhiteSpace(itemPath))
+            {
+                string seedTextureId = ItemId switch
+                {
+                    "wheat_seed" => "wheat_seeds",
+                    "corn_seed" => "corn_seeds",
+                    "tomato_seed" => "tomato_seeds",
+                    _ => ""
+                };
+
+                if (!string.IsNullOrEmpty(seedTextureId))
+                    itemPath = FindItemTexturePath(ItemTextureRoot, seedTextureId);
+            }
+
+            // Plants such as saplings use Assets/Textures/Plants rather
+            // than the Items folder, but still need proper pickup sprites.
+            if (string.IsNullOrWhiteSpace(itemPath))
+                itemPath = FindItemTexturePath("res://Assets/Textures/Plants", ItemId);
+
             if (!string.IsNullOrWhiteSpace(itemPath))
             {
                 _isBlock = false;
