@@ -800,7 +800,7 @@ else if (b.BlockId is "crate" or "barrel")
         if ((_selectedBlockId == "scythe" || _selectedBlockId == "hoe"))
         {
             if (CropManager.Instance != null &&
-                CropManager.Instance.TryUseHoe(hitBlockPosition))
+                CropManager.Instance.TryUseScythe(hitBlockPosition))
                 ShowFeedback("Soil tilled");
             return;
         }
