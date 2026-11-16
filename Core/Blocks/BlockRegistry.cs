@@ -524,7 +524,7 @@ Register(root);
         Register(bambooShoot);
 
         // Bamboo uses the same centered custom block shapes as tree materials.
-        // Shoot -> 2x16x2 twig -> 4x16x4 tiny bamboo -> 4x8x4 mature bamboo.
+        // Shoot -> 2x16x2 bamboo stick -> 4x16x4 bamboo -> 8x16x8 small bamboo.
         var bambooTwig = new BlockResource();
         bambooTwig.BlockId = "bamboo_twig";
         bambooTwig.DisplayName = "Bamboo Twig";
@@ -536,7 +536,7 @@ Register(root);
         bambooTwig.TextureTop = bambooTopTex;
         bambooTwig.TextureSide = bambooTex;
         bambooTwig.TextureBottom = bambooTopTex;
-        bambooTwig.Drops = new[] { "bamboo_twig" };
+        bambooTwig.Drops = new[] { "bamboo_stick" };
         Register(bambooTwig);
 
         var tinyBamboo = new BlockResource();
@@ -550,7 +550,7 @@ Register(root);
         tinyBamboo.TextureTop = bambooTopTex;
         tinyBamboo.TextureSide = bambooTex;
         tinyBamboo.TextureBottom = bambooTopTex;
-        tinyBamboo.Drops = new[] { "tiny_bamboo" };
+        tinyBamboo.Drops = new[] { "bamboo" };
         Register(tinyBamboo);
 
         var bamboo = new BlockResource();
@@ -560,11 +560,11 @@ Register(root);
         bamboo.CanChisel = false;
         bamboo.IsFlammable = true;
         bamboo.IsCustomShape = true;
-        bamboo.CustomShapeSize = new Vector3(4f / 16f, 8f / 16f, 4f / 16f);
+        bamboo.CustomShapeSize = new Vector3(8f / 16f, 1f, 8f / 16f);
         bamboo.TextureTop = bambooTopTex;
         bamboo.TextureSide = bambooTex;
         bamboo.TextureBottom = bambooTopTex;
-        bamboo.Drops = new[] { "bamboo" };
+        bamboo.Drops = new[] { "small_bamboo" };
         Register(bamboo);
 
 
