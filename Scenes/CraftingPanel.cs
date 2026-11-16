@@ -742,8 +742,14 @@ public partial class CraftingPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
-        var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        // Tool Bench items (including the built-in flint tools) already have
+        // their finished, layered icon stored on their ItemResource.
+        Texture2D tex = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
+        if (tex == null)
+        {
+            string path = $"res://Assets/Textures/Items/{itemId}.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
         _iconCache[itemId] = tex;
         return tex;
     }
