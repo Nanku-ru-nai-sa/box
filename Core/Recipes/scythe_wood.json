@@ -1,0 +1,8 @@
+{
+  "id": "scythe_wood",
+  "result": "scythe",
+  "count": 1,
+  "shaped": true,
+  "pattern": ["PP ", " S ", " S "],
+  "key": { "P": "planks", "S": "stick" }
+}
