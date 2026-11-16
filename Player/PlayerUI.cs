@@ -862,6 +862,7 @@ private void OnSlotMouseEntered(int slotIndex)
 
         _stationSlotIds[0] = "default";
         SetStationSlot(0, "crafter", "Hand Crafting (2x2) — click to switch to learned recipes");
+        UpdateDefaultCrafterTabIcon();
 
         for (int i = 1; i < 4; i++)
         {
@@ -912,6 +913,7 @@ private void OnSlotMouseEntered(int slotIndex)
         {
             if (_activeStation == "default")
                 _craftingPanel?.ToggleRecipeMemory();
+                UpdateDefaultCrafterTabIcon();
             else
             {
                 SwitchStation("default");
@@ -967,6 +969,24 @@ private void OnSlotMouseEntered(int slotIndex)
             _kilnPanel.Visible = stationId == "kiln";
 
         RefreshStationSlotStyles();
+        UpdateDefaultCrafterTabIcon();
+    }
+
+    private void UpdateDefaultCrafterTabIcon()
+    {
+        if (_stationSlotIcons == null || _stationSlotIcons[0] == null)
+            return;
+
+        bool showingRecipes = _craftingPanel?.IsShowingLearnedRecipes ?? false;
+        string texturePath = showingRecipes
+            ? "res://Assets/Textures/UI/note_grid.png"
+            : "res://Assets/Textures/UI/note_list.png";
+
+        Texture2D texture = ResourceLoader.Exists(texturePath)
+            ? ResourceLoader.Load<Texture2D>(texturePath)
+            : null;
+
+        SetPixelIcon(_stationSlotIcons[0], texture);
     }
 
     private void RefreshStationSlotStyles()
