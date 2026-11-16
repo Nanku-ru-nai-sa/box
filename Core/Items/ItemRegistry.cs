@@ -54,7 +54,9 @@ public partial class ItemRegistry : Node
                 item.DisplayName  = block.DisplayName;
                 item.IsStackable  = true;
                 item.MaxStackSize = 64;
-                item.PlacesBlockId = block.BlockId;
+                // Mature bamboo is harvested as the 4x16x4 bamboo material;
+                // the 8x16x8 growing form drops small_bamboo separately.
+                item.PlacesBlockId = block.BlockId == "bamboo" ? "" : block.BlockId;
                 item.FuelBurnSeconds = block.IsFlammable ? 10f : 0f;
                 if (block.BlockId == "log") item.FuelBurnSeconds = 20f;
                 if (block.BlockId == "planks") item.FuelBurnSeconds = 10f;
