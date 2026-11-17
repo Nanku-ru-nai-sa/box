@@ -743,8 +743,10 @@ public partial class CraftingPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
+        Texture2D tex = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
         string path = $"res://Assets/Textures/Items/{itemId}.png";
-        var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (tex == null)
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         if (tex == null && itemId == "sapling")
         {
             path = "res://Assets/Textures/Plants/sapling.png";
