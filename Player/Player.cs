@@ -336,6 +336,14 @@ public bool IsMounted =>
             }
         }
 
+        // Saplings use the Plants texture folder rather than Items.
+        if (tex == null && itemId == "sapling")
+        {
+            const string plantPath = "res://Assets/Textures/Plants/sapling.png";
+            if (ResourceLoader.Exists(plantPath))
+                tex = ResourceLoader.Load<Texture2D>(plantPath);
+        }
+
         if (tex == null)
         {
             string blockPath =
