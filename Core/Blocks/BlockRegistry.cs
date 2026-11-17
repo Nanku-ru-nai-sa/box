@@ -524,7 +524,7 @@ Register(root);
         Register(bambooShoot);
 
         // Bamboo uses the same centered custom block shapes as tree materials.
-        // Shoot -> 2x16x2 twig -> 4x16x4 tiny bamboo -> 4x8x4 mature bamboo.
+        // Shoot -> 2x16x2 twig -> 4x16x4 bamboo -> 8x16x8 mature bamboo.
         var bambooTwig = new BlockResource();
         bambooTwig.BlockId = "bamboo_twig";
         bambooTwig.DisplayName = "Bamboo Twig";
@@ -560,7 +560,7 @@ Register(root);
         bamboo.CanChisel = false;
         bamboo.IsFlammable = true;
         bamboo.IsCustomShape = true;
-        bamboo.CustomShapeSize = new Vector3(4f / 16f, 8f / 16f, 4f / 16f);
+        bamboo.CustomShapeSize = new Vector3(8f / 16f, 1f, 8f / 16f);
         bamboo.TextureTop = bambooTopTex;
         bamboo.TextureSide = bambooTex;
         bamboo.TextureBottom = bambooTopTex;
