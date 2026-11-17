@@ -1,0 +1,10 @@
+{
+  "id": "flint_scythe",
+  "result": "tool_scythe_flint_stick",
+  "count": 1,
+  "shaped": false,
+  "ingredients": [
+    "flint",
+    "stick"
+  ]
+}
