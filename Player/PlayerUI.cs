@@ -971,6 +971,7 @@ private void OnSlotMouseEntered(int slotIndex)
             {
                 _craftingPanel.SetGridSize(2, false);
                 _craftingPanel.ShowCraftingGrid();
+                SetStationSlot(0, "crafter", "Hand Crafting — click to view learned recipes");
             }
             else if (stationId == "crafter")
             {
