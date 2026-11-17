@@ -4,9 +4,8 @@
   "count": 1,
   "shaped": true,
   "pattern": [
-    "FFF",
-    "FS ",
-    "   "
+    "FS",
+    "FF"
   ],
   "key": {
     "F": "flint",
