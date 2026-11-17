@@ -172,7 +172,7 @@ public partial class CraftingPanel : Control
         _viewToggleButton.Position = new Vector2(PanelW - 30f, -27f);
         _viewToggleButton.CustomMinimumSize = new Vector2(24f, 24f);
         _viewToggleButton.Size = new Vector2(24f, 24f);
-        _viewToggleButton.ExpandMode = TextureButton.ExpandModeEnum.IgnoreSize;
+        _viewToggleButton.IgnoreTextureSize = true;
         _viewToggleButton.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
         _viewToggleButton.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
         _viewToggleButton.MouseFilter = MouseFilterEnum.Stop;
