@@ -2,9 +2,13 @@
   "id": "flint_scythe",
   "result": "tool_scythe_flint_stick",
   "count": 1,
-  "shaped": false,
-  "ingredients": [
-    "flint",
-    "stick"
-  ]
+  "shaped": true,
+  "pattern": [
+    "FS",
+    "  "
+  ],
+  "key": {
+    "F": "flint",
+    "S": "stick"
+  }
 }
