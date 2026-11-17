@@ -2,12 +2,14 @@
   "id": "flint_hammer",
   "result": "tool_hammer_flint_stick",
   "count": 1,
-  "shaped": false,
-  "ingredients": [
-    "flint",
-    "flint",
-    "flint",
-    "flint",
-    "stick"
-  ]
+  "shaped": true,
+  "pattern": [
+    "FFF",
+    "FS ",
+    "   "
+  ],
+  "key": {
+    "F": "flint",
+    "S": "stick"
+  }
 }
