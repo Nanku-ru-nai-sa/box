@@ -145,10 +145,31 @@ public partial class ItemPickup : Node3D
 
 
         // --------------------------------------------------------
+        // BAMBOO ITEMS
+        // These share names with block/tool textures in other folders.
+        // Always use the dedicated stick-item art before checking Blocks/.
+        // --------------------------------------------------------
+
+        bool isBambooItem =
+            ItemId == "bamboo" ||
+            ItemId == "bamboo_stick" ||
+            ItemId == "small_bamboo";
+
+        string bambooItemPath =
+            $"{ItemTextureRoot}/stick/{ItemId}.png";
+
+        if (isBambooItem && ResourceLoader.Exists(bambooItemPath))
+        {
+            _isBlock = false;
+            sourceTexture = ResourceLoader.Load<Texture2D>(bambooItemPath);
+            GD.Print($"[ItemPickup] Loaded bamboo item texture: {bambooItemPath}");
+        }
+
+        // --------------------------------------------------------
         // 1. BLOCK
         // --------------------------------------------------------
 
-        if (ResourceLoader.Exists(blockPath))
+        else if (ResourceLoader.Exists(blockPath))
         {
             _isBlock = true;
 
@@ -256,11 +277,12 @@ public partial class ItemPickup : Node3D
         // CROP TEXTURE
         // --------------------------------------------------------
 
+        // Bamboo is a long, narrow item icon. Cropping its centre into
+        // a 4x4 patch cuts off most of the actual item, so keep the full art.
         Texture2D croppedTexture =
-            CropCenter(
-                sourceTexture,
-                CropPixels
-            );
+            isBambooItem && sourceTexture != null
+                ? sourceTexture
+                : CropCenter(sourceTexture, CropPixels);
 
 
         // --------------------------------------------------------
