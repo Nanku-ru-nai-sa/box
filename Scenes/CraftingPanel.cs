@@ -51,6 +51,7 @@ public partial class CraftingPanel : Control
     // Learned view
     private Control       _learnedView;
     private GridContainer _learnedGrid;
+    private TextureButton _viewToggleButton;
 
     // Tooltip
     private Panel _tooltip;
@@ -165,6 +166,18 @@ public partial class CraftingPanel : Control
         externalTitle.AddThemeColorOverride("font_color", new Color(0.75f, 0.75f, 0.75f));
         externalTitle.MouseFilter = MouseFilterEnum.Ignore;
         AddChild(externalTitle);
+
+        // Switch between the classic crafting grid and learned recipes.
+        _viewToggleButton = new TextureButton();
+        _viewToggleButton.Position = new Vector2(PanelW - 30f, -27f);
+        _viewToggleButton.CustomMinimumSize = new Vector2(24f, 24f);
+        _viewToggleButton.Size = new Vector2(24f, 24f);
+        _viewToggleButton.ExpandMode = TextureButton.ExpandModeEnum.IgnoreSize;
+        _viewToggleButton.StretchMode = TextureButton.StretchModeEnum.KeepAspectCentered;
+        _viewToggleButton.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
+        _viewToggleButton.MouseFilter = MouseFilterEnum.Stop;
+        _viewToggleButton.Pressed += ToggleRecipeMemory;
+        AddChild(_viewToggleButton);
     }
 
     private void BuildGridView()
@@ -349,6 +362,15 @@ public partial class CraftingPanel : Control
     {
         _gridView.Visible = grid;
         _learnedView.Visible = !grid;
+
+        string iconPath = grid
+            ? "res://Assets/Textures/UI/note_list.png"
+            : "res://Assets/Textures/UI/note_grid.png";
+        _viewToggleButton.TextureNormal = ResourceLoader.Exists(iconPath)
+            ? ResourceLoader.Load<Texture2D>(iconPath)
+            : null;
+        _viewToggleButton.TextureHover = _viewToggleButton.TextureNormal;
+        _viewToggleButton.TexturePressed = _viewToggleButton.TextureNormal;
     }
 
     // =========================================================================
@@ -743,6 +765,11 @@ public partial class CraftingPanel : Control
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
         string path = $"res://Assets/Textures/Items/{itemId}.png";
         var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (tex == null && itemId == "sapling")
+        {
+            path = "res://Assets/Textures/Plants/sapling.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
         _iconCache[itemId] = tex;
         return tex;
     }
