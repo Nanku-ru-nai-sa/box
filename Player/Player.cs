@@ -1144,9 +1144,12 @@ public bool IsMounted =>
 
             if (!_heldSlot.IsEmpty)
             {
+                var outputItem = ItemRegistry.Instance?.GetItem(peekId);
+                bool outputIsStackable = outputItem == null || outputItem.IsStackable;
+
                 if (_heldSlot.ItemId != peekId ||
-                    _heldSlot.Count >=
-                    _inventory.MaxStackSize)
+                    !outputIsStackable ||
+                    _heldSlot.Count >= _inventory.MaxStackSize)
                     return;
             }
 
@@ -1156,11 +1159,13 @@ public bool IsMounted =>
             {
                 if (_heldSlot.IsEmpty)
                 {
-                    _heldSlot.ItemId =
-                        resultId;
+                    _heldSlot.ItemId = resultId;
+                    _heldSlot.Count = resultCount;
 
-                    _heldSlot.Count =
-                        resultCount;
+                    // Crafted tools are non-stackable and must start with full durability.
+                    var resultItem = ItemRegistry.Instance?.GetItem(resultId);
+                    if (resultItem != null && !resultItem.IsStackable)
+                        _heldSlot.CurrentDurability = resultItem.MaxDurability;
                 }
                 else
                 {
@@ -1185,37 +1190,41 @@ public bool IsMounted =>
         string resultId,
         int resultCount)
     {
-        if (!_heldSlot.IsEmpty)
+        var resultItem = ItemRegistry.Instance?.GetItem(resultId);
+        bool stackable = resultItem == null || resultItem.IsStackable;
+        int durability = resultItem?.MaxDurability ?? 0;
+
+        if (!stackable)
         {
-            if (_heldSlot.ItemId != resultId ||
-                _heldSlot.Count >=
-                _inventory.MaxStackSize)
+            // Tools need their own slot and a full durability value.
+            if (_heldSlot.IsEmpty)
             {
-                AddItemToInventory(
-                    resultId,
-                    resultCount
-                );
+                _heldSlot.ItemId = resultId;
+                _heldSlot.Count = 1;
+                _heldSlot.CurrentDurability = durability;
             }
             else
             {
-                int space =
-                    _inventory.MaxStackSize -
-                    _heldSlot.Count;
-
-                _heldSlot.Count +=
-                    Mathf.Min(
-                        space,
-                        resultCount
-                    );
+                AddItemToInventory(resultId, resultCount, durability);
+            }
+        }
+        else if (!_heldSlot.IsEmpty)
+        {
+            if (_heldSlot.ItemId != resultId ||
+                _heldSlot.Count >= _inventory.MaxStackSize)
+            {
+                AddItemToInventory(resultId, resultCount);
+            }
+            else
+            {
+                int space = _inventory.MaxStackSize - _heldSlot.Count;
+                _heldSlot.Count += Mathf.Min(space, resultCount);
             }
         }
         else
         {
-            _heldSlot.ItemId =
-                resultId;
-
-            _heldSlot.Count =
-                resultCount;
+            _heldSlot.ItemId = resultId;
+            _heldSlot.Count = resultCount;
         }
 
         FireChanged();
