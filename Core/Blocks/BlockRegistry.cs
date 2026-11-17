@@ -564,7 +564,7 @@ Register(root);
         bamboo.TextureTop = bambooTopTex;
         bamboo.TextureSide = bambooTex;
         bamboo.TextureBottom = bambooTopTex;
-        bamboo.Drops = new[] { "small_bamboo" };
+        bamboo.Drops = new[] { "big_bamboo" };
         Register(bamboo);
 
 
