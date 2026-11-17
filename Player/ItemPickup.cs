@@ -153,7 +153,7 @@ public partial class ItemPickup : Node3D
         bool isBambooItem =
             ItemId == "bamboo" ||
             ItemId == "bamboo_stick" ||
-            ItemId == "small_bamboo";
+            ItemId == "big_bamboo";
 
         string bambooItemPath =
             $"{ItemTextureRoot}/stick/{ItemId}.png";
