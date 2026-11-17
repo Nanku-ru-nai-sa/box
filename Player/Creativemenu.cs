@@ -186,6 +186,13 @@ public partial class CreativeMenu : Panel
 
         if (tex == null)
         {
+            // Stick and bamboo item textures live in Items/stick/.
+            string stickPath = $"res://Assets/Textures/Items/stick/{item.ItemId}.png";
+            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+        }
+
+        if (tex == null)
+        {
             string path = $"res://Assets/Textures/Items/{item.ItemId}.png";
             tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
         }
