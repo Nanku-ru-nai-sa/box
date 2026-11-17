@@ -896,7 +896,21 @@ private void OnSlotMouseEntered(int slotIndex)
     {
         _stationSlots[index].Visible = true;
         _stationSlots[index].TooltipText = tooltip;
-        SetPixelIcon(_stationSlotIcons[index], GetItemIcon(itemId));
+
+        if (index == 0 && _craftingPanel != null)
+        {
+            string iconPath = _craftingPanel.IsShowingLearnedRecipes
+                ? "res://Assets/Textures/UI/note_grid.png"
+                : "res://Assets/Textures/UI/note_list.png";
+            Texture2D icon = ResourceLoader.Exists(iconPath)
+                ? ResourceLoader.Load<Texture2D>(iconPath)
+                : GetItemIcon(itemId);
+            SetPixelIcon(_stationSlotIcons[index], icon);
+        }
+        else
+        {
+            SetPixelIcon(_stationSlotIcons[index], GetItemIcon(itemId));
+        }
     }
 
     private void HandleStationSlotClick(int index)
@@ -911,7 +925,12 @@ private void OnSlotMouseEntered(int slotIndex)
         if (stationId == "default")
         {
             if (_activeStation == "default")
+            {
                 _craftingPanel?.ToggleRecipeMemory();
+                SetStationSlot(0, "crafter", _craftingPanel?.IsShowingLearnedRecipes == true
+                    ? "Hand Crafting — click to return to crafting grid"
+                    : "Hand Crafting — click to view learned recipes");
+            }
             else
             {
                 SwitchStation("default");
