@@ -536,7 +536,7 @@ Register(root);
         bambooTwig.TextureTop = bambooTopTex;
         bambooTwig.TextureSide = bambooTex;
         bambooTwig.TextureBottom = bambooTopTex;
-        bambooTwig.Drops = new[] { "bamboo_twig" };
+        bambooTwig.Drops = new[] { "bamboo_stick" };
         Register(bambooTwig);
 
         var tinyBamboo = new BlockResource();
@@ -550,7 +550,7 @@ Register(root);
         tinyBamboo.TextureTop = bambooTopTex;
         tinyBamboo.TextureSide = bambooTex;
         tinyBamboo.TextureBottom = bambooTopTex;
-        tinyBamboo.Drops = new[] { "tiny_bamboo" };
+        tinyBamboo.Drops = new[] { "bamboo" };
         Register(tinyBamboo);
 
         var bamboo = new BlockResource();
@@ -564,7 +564,7 @@ Register(root);
         bamboo.TextureTop = bambooTopTex;
         bamboo.TextureSide = bambooTex;
         bamboo.TextureBottom = bambooTopTex;
-        bamboo.Drops = new[] { "bamboo" };
+        bamboo.Drops = new[] { "small_bamboo" };
         Register(bamboo);
 
 
