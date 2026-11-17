@@ -97,6 +97,27 @@ public partial class ItemRegistry : Node
         // BEFORE anything (e.g. loading a save) tries to look one up by id.
         // Fixes: crafted tools showing no icon/stats after restarting the game.
         ToolCrafting.LoadPersistedRecipes();
+        RegisterBasicFlintTools();
+    }
+
+    // Make the basic flint-and-stick versions available to the normal
+    // crafting grid as well as the Tool Bench. Their ids match the dynamic
+    // ids used by ToolCrafting, so crafted items remain fully compatible.
+    private void RegisterBasicFlintTools()
+    {
+        foreach (ToolFamily family in new[]
+        {
+            ToolFamily.Pickaxe, ToolFamily.Axe, ToolFamily.Shovel,
+            ToolFamily.Sword, ToolFamily.Scythe, ToolFamily.Hammer
+        })
+        {
+            var materials = new Dictionary<PartSlot, string>
+            {
+                [PartSlot.HeadA] = "flint",
+                [PartSlot.Handle] = "stick"
+            };
+            ToolCrafting.CraftTool(family, null, materials);
+        }
     }
 
 
