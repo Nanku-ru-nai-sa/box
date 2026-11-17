@@ -176,6 +176,10 @@ public partial class KilnPanel : Control
 
     private static Texture2D GetIcon(string itemId)
     {
+        // Prefer the dedicated item art for bamboo/stick variants.
+        string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
+        if (ResourceLoader.Exists(stickPath)) return ResourceLoader.Load<Texture2D>(stickPath);
+
         string itemPath = $"res://Assets/Textures/Items/{itemId}.png";
         if (ResourceLoader.Exists(itemPath)) return ResourceLoader.Load<Texture2D>(itemPath);
 
