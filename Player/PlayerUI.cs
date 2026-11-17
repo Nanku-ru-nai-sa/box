@@ -861,7 +861,9 @@ private void OnSlotMouseEntered(int slotIndex)
             return;
 
         _stationSlotIds[0] = "default";
-        SetStationSlot(0, "crafter", "Hand Crafting (2x2) — click to switch to learned recipes");
+        SetStationSlot(0, "crafter", _craftingPanel?.IsShowingLearnedRecipes == true
+            ? "Hand Crafting — click to return to crafting grid"
+            : "Hand Crafting — click to view learned recipes");
 
         for (int i = 1; i < 4; i++)
         {
