@@ -579,7 +579,8 @@ else if (b.BlockId is "crate" or "barrel")
             _breakOverlay?.UpdateBreak(
                 blockWorldPos,
                 _breakHitCount,
-                _breakMiningPower
+                _breakMiningPower,
+                BlockRegistry.Instance?.GetBlock(b.BlockId)
             )
             ??
             (

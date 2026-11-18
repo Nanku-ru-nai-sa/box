@@ -190,9 +190,9 @@ public partial class OverlayRegistry : Node
 
         foreach (var feature in block.Features)
         {
-            OverlayResource overlay = GetOverlay(feature);
-
-            if (overlay != null)
+            // Features can describe visual states (such as bamboo:leaves),
+            // not just overlays. Only registered overlays should be looked up.
+            if (_overlays.TryGetValue(feature, out OverlayResource overlay))
                 return overlay;
         }
 

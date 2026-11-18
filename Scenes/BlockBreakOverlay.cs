@@ -141,7 +141,8 @@ public partial class BlockBreakOverlay : Node3D
     public bool UpdateBreak(
         Vector3I blockWorldPos,
         int hitCount,
-        int miningPower)
+        int miningPower,
+        BlockResource blockResource = null)
     {
         if (miningPower < 1)
             miningPower = 1;
@@ -163,6 +164,29 @@ public partial class BlockBreakOverlay : Node3D
         // Celestial bodies keep the position supplied by
         // SetCelestialMode().
         SyncPosition(blockWorldPos);
+
+        // Match the overlay bounds to the actual custom block shape.
+        if (!_celestialMode && blockResource != null &&
+            blockResource.IsCustomShape)
+        {
+            Vector3 shapeSize = blockResource.CustomShapeSize;
+            shapeSize.X = Mathf.Clamp(shapeSize.X, 0.001f, 1f);
+            shapeSize.Y = Mathf.Clamp(shapeSize.Y, 0.001f, 1f);
+            shapeSize.Z = Mathf.Clamp(shapeSize.Z, 0.001f, 1f);
+
+            _mesh.Scale = shapeSize;
+            // Custom shapes are bottom-aligned within their voxel.
+            _mesh.Position = new Vector3(
+                0f,
+                (shapeSize.Y - 1f) * 0.5f,
+                0f
+            );
+        }
+        else if (!_celestialMode)
+        {
+            _mesh.Scale = Vector3.One;
+            _mesh.Position = Vector3.Zero;
+        }
 
         // Update texture if stage changed or target changed.
         if (
@@ -220,6 +244,7 @@ public partial class BlockBreakOverlay : Node3D
         _celestialRotation = Vector3.Zero;
 
         _mesh.Scale = Vector3.One;
+        _mesh.Position = Vector3.Zero;
 
         _mesh.Rotation = Vector3.Zero;
     }
