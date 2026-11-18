@@ -772,6 +772,18 @@ public Vector2? LoadPlayerLook()
                 bool hasLiquidLevel = blockData.ContainsKey("liquid_level");
                 bool hasLiquidSource = blockData.ContainsKey("liquid_source");
 
+                string[] features = System.Array.Empty<string>();
+                if (blockData.ContainsKey("features"))
+                {
+                    var savedFeatures = blockData["features"].AsGodotArray();
+                    var featureList = new List<string>();
+
+                    foreach (Variant feature in savedFeatures)
+                        featureList.Add((string)feature);
+
+                    features = featureList.ToArray();
+                }
+
                 state = new BlockState
                 {
                     BlockId = savedBlockId,
@@ -784,10 +796,7 @@ public Vector2? LoadPlayerLook()
                     LiquidSource = hasLiquidSource
                         ? (bool)blockData["liquid_source"]
                         : savedBlockId == "water",
-                    Features = blockData.ContainsKey("features")
-                        ? blockData["features"].AsGodotArray()
-                            .Select(feature => (string)feature).ToArray()
-                        : System.Array.Empty<string>()
+                    Features = features
                 };
             }
 
