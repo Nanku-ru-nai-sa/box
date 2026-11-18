@@ -404,9 +404,9 @@ public partial class TreeGrowth
 
     private static bool IsBambooSegment(string blockId)
     {
-        return blockId == "bamboo_twig" ||
-               blockId == "tiny_bamboo" ||
-               blockId == "bamboo";
+        return blockId == "bamboo_stick" ||
+               blockId == "bamboo" ||
+               blockId == "big_bamboo";
     }
 
     private bool TryGrowBamboo(Vector3I basePosition)
@@ -425,8 +425,8 @@ public partial class TreeGrowth
         if (!HasGrowthLight(basePosition))
             return false;
 
-        // Pick a random mature height once, then save it on the base block
-        // so the stalk keeps the same height target across days and saves.
+        // Pick a random bamboo size and final height once, then save the
+        // height on the base block so it stays consistent across saves.
         int targetHeight = GetBambooTargetHeight(baseBlock);
         if (targetHeight < 3 || targetHeight > 7)
         {
@@ -441,9 +441,9 @@ public partial class TreeGrowth
                 int sizeRoll = (int)rng.RandiRange(0, 2);
                 baseBlock.BlockId = sizeRoll switch
                 {
-                    0 => "bamboo_twig",
-                    1 => "tiny_bamboo",
-                    _ => "bamboo"
+                    0 => "bamboo_stick",
+                    1 => "bamboo",
+                    _ => "big_bamboo"
                 };
             }
 
