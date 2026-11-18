@@ -553,6 +553,13 @@ public partial class ChunkManager : Node3D
             foreach (var mod in mods)
             {
                 string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
+                var savedFeatures = new Godot.Collections.Array();
+                if (mod.Value.Features != null)
+                {
+                    foreach (string feature in mod.Value.Features)
+                        savedFeatures.Add(feature);
+                }
+
                 var blockData = new Godot.Collections.Dictionary
                 {
                     ["id"] = mod.Value.BlockId,
@@ -561,9 +568,7 @@ public partial class ChunkManager : Node3D
                     ["liquid_level"] = (int)mod.Value.LiquidLevel,
                     ["liquid_falling"] = mod.Value.LiquidFalling,
                     ["liquid_source"] = mod.Value.LiquidSource,
-                    ["features"] = new Godot.Collections.Array(
-                        mod.Value.Features ?? System.Array.Empty<string>()
-                    )
+                    ["features"] = savedFeatures
                 };
                 saveData[key] = blockData;
             }
