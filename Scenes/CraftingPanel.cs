@@ -743,11 +743,11 @@ public partial class CraftingPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        Texture2D tex = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
-        // Bamboo and stick items are stored in the dedicated stick folder.
+        // Dedicated bamboo/stick textures take priority over generic item icons.
         string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
-        if (tex == null)
-            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+        Texture2D tex = ResourceLoader.Exists(stickPath)
+            ? ResourceLoader.Load<Texture2D>(stickPath)
+            : ItemRegistry.Instance?.GetItem(itemId)?.Icon;
 
         string path = $"res://Assets/Textures/Items/{itemId}.png";
         if (tex == null)
