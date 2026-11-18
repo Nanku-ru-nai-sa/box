@@ -67,6 +67,52 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
+    // LEAF AND BAMBOO BONUS DROPS
+    // =========================================================================
+
+    private void GiveOrSpawnBonusDrop(
+        string itemId,
+        int count,
+        Vector3 dropPosition,
+        bool toInventory)
+    {
+        if (string.IsNullOrEmpty(itemId) || count <= 0)
+            return;
+
+        if (toInventory)
+            AddItemToInventory(itemId, count);
+        else
+            SpawnItemDrop(itemId, count, dropPosition);
+    }
+
+    private void RollLeafDrops(Vector3 dropPosition, bool toInventory)
+    {
+        var manager = BlockDropManager.Instance;
+        if (manager == null)
+        {
+            GD.PrintErr("[Player] BlockDropManager unavailable for leaf drops.");
+            return;
+        }
+
+        foreach (var drop in manager.RollAllDrops("leaves", _dropRng))
+            GiveOrSpawnBonusDrop(drop.ItemId, drop.Count, dropPosition, toInventory);
+    }
+
+    private void RollBambooLeafBonus(
+        BlockState block,
+        Vector3 dropPosition,
+        bool toInventory)
+    {
+        if (block.Features == null ||
+            !block.HasFeature("bamboo:leaves"))
+            return;
+
+        if (_dropRng.Randf() < 0.5f)
+            GiveOrSpawnBonusDrop("bamboo_shoot", 1, dropPosition, toInventory);
+    }
+
+
+    // =========================================================================
     // BREAK BLOCK
     // =========================================================================
 
@@ -428,17 +474,28 @@ public partial class Player : CharacterBody3D
 
         if (gm != null && gm.IsCreate)
         {
-            var (dropIdC, dropCountC) =
-                GetDrop(b.BlockId);
+            Vector3 creativeDropPosition =
+                chunk.GlobalPosition +
+                new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
 
-            if (dropIdC is not
-                ("rose" or "dandelion" or "clover"))
+            if (b.BlockId == "leaves")
             {
-                AddItemToInventory(
-                    dropIdC,
-                    dropCountC
-                );
+                // Leaves never drop themselves; each reward rolls independently.
+                RollLeafDrops(creativeDropPosition, true);
             }
+            else
+            {
+                var (dropIdC, dropCountC) = GetDrop(b.BlockId);
+
+                if (!string.IsNullOrEmpty(dropIdC) &&
+                    dropCountC > 0 &&
+                    dropIdC is not ("rose" or "dandelion" or "clover"))
+                {
+                    AddItemToInventory(dropIdC, dropCountC);
+                }
+            }
+
+            RollBambooLeafBonus(b, creativeDropPosition, true);
 
             var overlayC =
     OverlayRegistry.Instance?
@@ -536,23 +593,29 @@ else if (b.BlockId is "crate" or "barrel")
             var (drop, dropCount) =
                 GetDrop(b.BlockId);
 
-            if (drop is not
-                ("rose" or "dandelion" or "clover"))
-            {
-                Vector3 dropWorldPos =
-                    chunk.GlobalPosition +
-                    new Vector3(
-                        bx + 0.5f,
-                        by + 0.5f,
-                        bz + 0.5f
-                    );
-
-                SpawnItemDrop(
-                    drop,
-                    dropCount,
-                    dropWorldPos
+            Vector3 dropWorldPos =
+                chunk.GlobalPosition +
+                new Vector3(
+                    bx + 0.5f,
+                    by + 0.5f,
+                    bz + 0.5f
                 );
 
+            if (b.BlockId == "leaves")
+            {
+                // Leaves never drop themselves; each reward rolls independently.
+                RollLeafDrops(dropWorldPos, false);
+            }
+            else if (!string.IsNullOrEmpty(drop) &&
+                     dropCount > 0 &&
+                     drop is not ("rose" or "dandelion" or "clover"))
+            {
+                SpawnItemDrop(drop, dropCount, dropWorldPos);
+            }
+
+            RollBambooLeafBonus(b, dropWorldPos, false);
+
+            {
                 var overlay =
     OverlayRegistry.Instance?
         .GetOverlayFromBlockState(b);
