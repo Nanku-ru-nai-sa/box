@@ -285,11 +285,19 @@ public bool IsMounted =>
         if (_iconCache.TryGetValue(itemId, out var cached))
             return cached;
 
-        var item =
-            ItemRegistry.Instance?.GetItem(itemId);
+        // Bamboo item art must take priority over generic ItemResource icons.
+        // The three bamboo textures live in Assets/Textures/Items/stick/.
+        string stickTexturePath =
+            $"res://Assets/Textures/Items/stick/{itemId}.png";
 
-        Texture2D tex =
-            item?.Icon;
+        Texture2D tex = ResourceLoader.Exists(stickTexturePath)
+            ? ResourceLoader.Load<Texture2D>(stickTexturePath)
+            : null;
+
+        var item = ItemRegistry.Instance?.GetItem(itemId);
+
+        if (tex == null)
+            tex = item?.Icon;
 
         if (tex == null)
         {
