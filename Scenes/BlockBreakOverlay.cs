@@ -280,13 +280,20 @@ public partial class BlockBreakOverlay : Node3D
         Vector3 a, Vector3 b, Vector3 c, Vector3 d,
         float uMin, float uMax, float vMin, float vMax)
     {
-        surface.SetUV(new Vector2(uMin, vMax)); surface.AddVertex(a);
-        surface.SetUV(new Vector2(uMax, vMax)); surface.AddVertex(b);
-        surface.SetUV(new Vector2(uMax, vMin)); surface.AddVertex(c);
+        // The shared break material applies Uv1Scale (3, 2, 1).
+        // Compensate for its X/Y UV scaling here so the cropped UV
+        // window remains a true crop of the original 16x16 texture,
+        // rather than being tiled/repeated and appearing shrunken.
+        float uvScaleX = 3f;
+        float uvScaleY = 2f;
 
-        surface.SetUV(new Vector2(uMin, vMax)); surface.AddVertex(a);
-        surface.SetUV(new Vector2(uMax, vMin)); surface.AddVertex(c);
-        surface.SetUV(new Vector2(uMin, vMin)); surface.AddVertex(d);
+        surface.SetUV(new Vector2(uMin / uvScaleX, vMax / uvScaleY)); surface.AddVertex(a);
+        surface.SetUV(new Vector2(uMax / uvScaleX, vMax / uvScaleY)); surface.AddVertex(b);
+        surface.SetUV(new Vector2(uMax / uvScaleX, vMin / uvScaleY)); surface.AddVertex(c);
+
+        surface.SetUV(new Vector2(uMin / uvScaleX, vMax / uvScaleY)); surface.AddVertex(a);
+        surface.SetUV(new Vector2(uMax / uvScaleX, vMin / uvScaleY)); surface.AddVertex(c);
+        surface.SetUV(new Vector2(uMin / uvScaleX, vMin / uvScaleY)); surface.AddVertex(d);
     }
 
     // ---------------------------------------------------------
