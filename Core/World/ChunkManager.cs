@@ -560,7 +560,10 @@ public partial class ChunkManager : Node3D
                     ["rotation"] = (int)mod.Value.Rotation,
                     ["liquid_level"] = (int)mod.Value.LiquidLevel,
                     ["liquid_falling"] = mod.Value.LiquidFalling,
-                    ["liquid_source"] = mod.Value.LiquidSource
+                    ["liquid_source"] = mod.Value.LiquidSource,
+                    ["features"] = new Godot.Collections.Array(
+                        mod.Value.Features ?? System.Array.Empty<string>()
+                    )
                 };
                 saveData[key] = blockData;
             }
@@ -775,7 +778,11 @@ public Vector2? LoadPlayerLook()
                     LiquidFalling = blockData.ContainsKey("liquid_falling") && (bool)blockData["liquid_falling"],
                     LiquidSource = hasLiquidSource
                         ? (bool)blockData["liquid_source"]
-                        : savedBlockId == "water"
+                        : savedBlockId == "water",
+                    Features = blockData.ContainsKey("features")
+                        ? blockData["features"].AsGodotArray()
+                            .Select(feature => (string)feature).ToArray()
+                        : System.Array.Empty<string>()
                 };
             }
 

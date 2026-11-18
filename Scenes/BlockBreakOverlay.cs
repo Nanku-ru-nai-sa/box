@@ -12,6 +12,9 @@ public partial class BlockBreakOverlay : Node3D
         new Vector3I(int.MinValue, 0, 0);
 
     private int _currentStage = -1;
+    private Vector3 _currentShapeSize = Vector3.One;
+    private bool _usingShapeMesh = false;
+    private BoxMesh _fullBlockMesh;
 
     // ---------------------------------------------------------
     // CELESTIAL MODE
@@ -28,14 +31,9 @@ public partial class BlockBreakOverlay : Node3D
         // Build the normal 1x1x1 block overlay.
         _mesh = new MeshInstance3D();
 
-        var boxMesh = new BoxMesh();
-        boxMesh.Size = new Vector3(
-            1.002f,
-            1.002f,
-            1.002f
-        );
-
-        _mesh.Mesh = boxMesh;
+        _fullBlockMesh = new BoxMesh();
+        _fullBlockMesh.Size = new Vector3(1.002f, 1.002f, 1.002f);
+        _mesh.Mesh = _fullBlockMesh;
 
         _mat = new StandardMaterial3D();
 
@@ -165,7 +163,10 @@ public partial class BlockBreakOverlay : Node3D
         // SetCelestialMode().
         SyncPosition(blockWorldPos);
 
-        // Match the overlay bounds to the actual custom block shape.
+        // Custom shapes use a fitted mesh with cropped UVs.
+        // This keeps the crack texture's pixel size unchanged:
+        // narrow stalks show only the matching narrow part of the
+        // 16x16 crack texture instead of stretching all 16 pixels.
         if (!_celestialMode && blockResource != null &&
             blockResource.IsCustomShape)
         {
@@ -174,16 +175,25 @@ public partial class BlockBreakOverlay : Node3D
             shapeSize.Y = Mathf.Clamp(shapeSize.Y, 0.001f, 1f);
             shapeSize.Z = Mathf.Clamp(shapeSize.Z, 0.001f, 1f);
 
-            _mesh.Scale = shapeSize;
-            // Custom shapes are bottom-aligned within their voxel.
-            _mesh.Position = new Vector3(
-                0f,
-                (shapeSize.Y - 1f) * 0.5f,
-                0f
-            );
+            if (!_usingShapeMesh || _currentShapeSize != shapeSize)
+            {
+                _mesh.Mesh = BuildShapeOverlayMesh(shapeSize);
+                _currentShapeSize = shapeSize;
+                _usingShapeMesh = true;
+            }
+
+            _mesh.Scale = Vector3.One;
+            _mesh.Position = new Vector3(0f, (shapeSize.Y - 1f) * 0.5f, 0f);
         }
         else if (!_celestialMode)
         {
+            if (_usingShapeMesh)
+            {
+                _mesh.Mesh = _fullBlockMesh;
+                _usingShapeMesh = false;
+                _currentShapeSize = Vector3.One;
+            }
+
             _mesh.Scale = Vector3.One;
             _mesh.Position = Vector3.Zero;
         }
@@ -217,6 +227,68 @@ public partial class BlockBreakOverlay : Node3D
         return pixelsProgressed >= TotalStages;
     }
 
+    private ArrayMesh BuildShapeOverlayMesh(Vector3 size)
+    {
+        var surface = new SurfaceTool();
+        surface.Begin(Mesh.PrimitiveType.Triangles);
+
+        float hx = size.X * 0.5f;
+        float hy = size.Y * 0.5f;
+        float hz = size.Z * 0.5f;
+
+        float uX0 = (1f - size.X) * 0.5f;
+        float uX1 = 1f - uX0;
+        float uZ0 = (1f - size.Z) * 0.5f;
+        float uZ1 = 1f - uZ0;
+
+        // Top and bottom crop in both horizontal dimensions.
+        AddOverlayQuad(surface,
+            new Vector3(-hx, hy, -hz), new Vector3(hx, hy, -hz),
+            new Vector3(hx, hy, hz), new Vector3(-hx, hy, hz),
+            uX0, uX1, uZ0, uZ1);
+        AddOverlayQuad(surface,
+            new Vector3(-hx, -hy, hz), new Vector3(hx, -hy, hz),
+            new Vector3(hx, -hy, -hz), new Vector3(-hx, -hy, -hz),
+            uX0, uX1, uZ0, uZ1);
+
+        // X-facing sides crop the texture width to the block's X size.
+        AddOverlayQuad(surface,
+            new Vector3(-hx, -hy, -hz), new Vector3(hx, -hy, -hz),
+            new Vector3(hx, hy, -hz), new Vector3(-hx, hy, -hz),
+            uX0, uX1, 0f, 1f);
+        AddOverlayQuad(surface,
+            new Vector3(hx, -hy, hz), new Vector3(-hx, -hy, hz),
+            new Vector3(-hx, hy, hz), new Vector3(hx, hy, hz),
+            uX0, uX1, 0f, 1f);
+
+        // Z-facing sides crop the texture width to the block's Z size.
+        AddOverlayQuad(surface,
+            new Vector3(hx, -hy, -hz), new Vector3(hx, -hy, hz),
+            new Vector3(hx, hy, hz), new Vector3(hx, hy, -hz),
+            uZ0, uZ1, 0f, 1f);
+        AddOverlayQuad(surface,
+            new Vector3(-hx, -hy, hz), new Vector3(-hx, -hy, -hz),
+            new Vector3(-hx, hy, -hz), new Vector3(-hx, hy, hz),
+            uZ0, uZ1, 0f, 1f);
+
+        surface.GenerateNormals();
+        return surface.Commit();
+    }
+
+    private static void AddOverlayQuad(
+        SurfaceTool surface,
+        Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+        float uMin, float uMax, float vMin, float vMax)
+    {
+        surface.SetUV(new Vector2(uMin, vMax)); surface.AddVertex(a);
+        surface.SetUV(new Vector2(uMax, vMax)); surface.AddVertex(b);
+        surface.SetUV(new Vector2(uMax, vMin)); surface.AddVertex(c);
+
+        surface.SetUV(new Vector2(uMin, vMax)); surface.AddVertex(a);
+        surface.SetUV(new Vector2(uMax, vMin)); surface.AddVertex(c);
+        surface.SetUV(new Vector2(uMin, vMin)); surface.AddVertex(d);
+    }
+
     // ---------------------------------------------------------
     // HIDE
     // ---------------------------------------------------------
@@ -245,6 +317,12 @@ public partial class BlockBreakOverlay : Node3D
 
         _mesh.Scale = Vector3.One;
         _mesh.Position = Vector3.Zero;
+        if (_usingShapeMesh)
+        {
+            _mesh.Mesh = _fullBlockMesh;
+            _usingShapeMesh = false;
+            _currentShapeSize = Vector3.One;
+        }
 
         _mesh.Rotation = Vector3.Zero;
     }
