@@ -523,35 +523,21 @@ Register(root);
         bambooShoot.TextureBottom = bambooShootTex;
         Register(bambooShoot);
 
-        // Bamboo uses the same centered custom block shapes as tree materials.
-        // Shoot -> 2x16x2 twig -> 4x16x4 bamboo -> 8x16x8 mature bamboo.
-        var bambooTwig = new BlockResource();
-        bambooTwig.BlockId = "bamboo_twig";
-        bambooTwig.DisplayName = "Bamboo Twig";
-        bambooTwig.IsSolid = true;
-        bambooTwig.CanChisel = false;
-        bambooTwig.IsFlammable = true;
-        bambooTwig.IsCustomShape = true;
-        bambooTwig.CustomShapeSize = new Vector3(2f / 16f, 1f, 2f / 16f);
-        bambooTwig.TextureTop = bambooTopTex;
-        bambooTwig.TextureSide = bambooTex;
-        bambooTwig.TextureBottom = bambooTopTex;
-        bambooTwig.Drops = new[] { "bamboo_stick" };
-        Register(bambooTwig);
-
-        var tinyBamboo = new BlockResource();
-        tinyBamboo.BlockId = "tiny_bamboo";
-        tinyBamboo.DisplayName = "Tiny Bamboo";
-        tinyBamboo.IsSolid = true;
-        tinyBamboo.CanChisel = false;
-        tinyBamboo.IsFlammable = true;
-        tinyBamboo.IsCustomShape = true;
-        tinyBamboo.CustomShapeSize = new Vector3(4f / 16f, 1f, 4f / 16f);
-        tinyBamboo.TextureTop = bambooTopTex;
-        tinyBamboo.TextureSide = bambooTex;
-        tinyBamboo.TextureBottom = bambooTopTex;
-        tinyBamboo.Drops = new[] { "bamboo" };
-        Register(tinyBamboo);
+        // Bamboo uses only the three matching item/block IDs:
+        // bamboo_stick = 2x16x2, bamboo = 4x16x4, big_bamboo = 8x16x8.
+        var bambooStick = new BlockResource();
+        bambooStick.BlockId = "bamboo_stick";
+        bambooStick.DisplayName = "Bamboo Stick";
+        bambooStick.IsSolid = true;
+        bambooStick.CanChisel = false;
+        bambooStick.IsFlammable = true;
+        bambooStick.IsCustomShape = true;
+        bambooStick.CustomShapeSize = new Vector3(2f / 16f, 1f, 2f / 16f);
+        bambooStick.TextureTop = bambooTopTex;
+        bambooStick.TextureSide = bambooTex;
+        bambooStick.TextureBottom = bambooTopTex;
+        bambooStick.Drops = new[] { "bamboo_stick" };
+        Register(bambooStick);
 
         var bamboo = new BlockResource();
         bamboo.BlockId = "bamboo";
@@ -560,12 +546,26 @@ Register(root);
         bamboo.CanChisel = false;
         bamboo.IsFlammable = true;
         bamboo.IsCustomShape = true;
-        bamboo.CustomShapeSize = new Vector3(8f / 16f, 1f, 8f / 16f);
+        bamboo.CustomShapeSize = new Vector3(4f / 16f, 1f, 4f / 16f);
         bamboo.TextureTop = bambooTopTex;
         bamboo.TextureSide = bambooTex;
         bamboo.TextureBottom = bambooTopTex;
-        bamboo.Drops = new[] { "big_bamboo" };
+        bamboo.Drops = new[] { "bamboo" };
         Register(bamboo);
+
+        var bigBamboo = new BlockResource();
+        bigBamboo.BlockId = "big_bamboo";
+        bigBamboo.DisplayName = "Big Bamboo";
+        bigBamboo.IsSolid = true;
+        bigBamboo.CanChisel = false;
+        bigBamboo.IsFlammable = true;
+        bigBamboo.IsCustomShape = true;
+        bigBamboo.CustomShapeSize = new Vector3(8f / 16f, 1f, 8f / 16f);
+        bigBamboo.TextureTop = bambooTopTex;
+        bigBamboo.TextureSide = bambooTex;
+        bigBamboo.TextureBottom = bambooTopTex;
+        bigBamboo.Drops = new[] { "big_bamboo" };
+        Register(bigBamboo);
 
 
         // ============================================================
