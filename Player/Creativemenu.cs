@@ -182,14 +182,11 @@ public partial class CreativeMenu : Panel
     {
         if (_iconCache.TryGetValue(item.ItemId, out var cached)) return cached;
 
-        Texture2D tex = item.Icon;
-
-        if (tex == null)
-        {
-            // Stick and bamboo item textures live in Items/stick/.
-            string stickPath = $"res://Assets/Textures/Items/stick/{item.ItemId}.png";
-            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
-        }
+        // Dedicated bamboo/stick textures take priority over ItemResource.Icon.
+        string stickPath = $"res://Assets/Textures/Items/stick/{item.ItemId}.png";
+        Texture2D tex = ResourceLoader.Exists(stickPath)
+            ? ResourceLoader.Load<Texture2D>(stickPath)
+            : item.Icon;
 
         if (tex == null)
         {
