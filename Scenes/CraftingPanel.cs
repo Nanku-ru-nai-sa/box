@@ -739,25 +739,101 @@ public partial class CraftingPanel : Control
         ev is InputEventMouseButton mb && mb.Pressed && mb.ButtonIndex == MouseButton.Left;
 
     private Dictionary<string, Texture2D> _iconCache = new();
+
     private Texture2D GetIcon(string itemId)
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
-        // Dedicated bamboo/stick textures take priority over generic item icons.
-        string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
-        Texture2D tex = ResourceLoader.Exists(stickPath)
-            ? ResourceLoader.Load<Texture2D>(stickPath)
-            : ItemRegistry.Instance?.GetItem(itemId)?.Icon;
 
-        string path = $"res://Assets/Textures/Items/{itemId}.png";
+        Texture2D tex = null;
+
+        // Prefer dedicated stick/bamboo art, then icons generated for
+        // dynamically-crafted tools by ItemRegistry.
+        string[] preferredPaths =
+        {
+            $"res://Assets/Textures/Items/stick/{itemId}.png",
+            $"res://Assets/Textures/Items/{itemId}.png",
+            $"res://Assets/Textures/Items/block item/{itemId}.png"
+        };
+
+        foreach (string path in preferredPaths)
+        {
+            if (!ResourceLoader.Exists(path)) continue;
+            tex = ResourceLoader.Load<Texture2D>(path);
+            if (tex != null) break;
+        }
+
         if (tex == null)
-            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+            tex = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
+
+        // Older basic recipes use names such as "stone_axe", while the
+        // shared chalk tool icons are stored by tool family.
+        if (tex == null)
+        {
+            string family = itemId;
+            if (family.StartsWith("stone_", StringComparison.OrdinalIgnoreCase))
+                family = family.Substring("stone_".Length);
+
+            if (family is "axe" or "pickaxe" or "shovel" or "sword" or "scythe" or "hammer" or "hoe")
+            {
+                string familyPath = $"res://Assets/Textures/Items/tool/chalk/{family}.png";
+                if (ResourceLoader.Exists(familyPath))
+                    tex = ResourceLoader.Load<Texture2D>(familyPath);
+            }
+        }
+
+        // Catch future item art stored in category subfolders without
+        // requiring every new folder to be hard-coded here.
+        if (tex == null)
+        {
+            string recursivePath = FindItemIconPath("res://Assets/Textures/Items/", itemId + ".png");
+            if (!string.IsNullOrEmpty(recursivePath))
+                tex = ResourceLoader.Load<Texture2D>(recursivePath);
+        }
+
         if (tex == null && itemId == "sapling")
         {
-            path = "res://Assets/Textures/Plants/sapling.png";
-            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+            const string saplingPath = "res://Assets/Textures/Plants/sapling.png";
+            if (ResourceLoader.Exists(saplingPath))
+                tex = ResourceLoader.Load<Texture2D>(saplingPath);
         }
+
         _iconCache[itemId] = tex;
         return tex;
+    }
+
+    private static string FindItemIconPath(string folderPath, string targetFileName)
+    {
+        using var dir = DirAccess.Open(folderPath);
+        if (dir == null) return "";
+
+        dir.ListDirBegin();
+        string fileName = dir.GetNext();
+
+        while (!string.IsNullOrEmpty(fileName))
+        {
+            if (dir.CurrentIsDir())
+            {
+                if (!fileName.StartsWith("."))
+                {
+                    string found = FindItemIconPath(folderPath + fileName + "/", targetFileName);
+                    if (!string.IsNullOrEmpty(found))
+                    {
+                        dir.ListDirEnd();
+                        return found;
+                    }
+                }
+            }
+            else if (string.Equals(fileName, targetFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                dir.ListDirEnd();
+                return folderPath + fileName;
+            }
+
+            fileName = dir.GetNext();
+        }
+
+        dir.ListDirEnd();
+        return "";
     }
 }
