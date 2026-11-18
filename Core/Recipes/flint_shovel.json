@@ -1,0 +1,14 @@
+{
+  "id": "flint_shovel",
+  "result": "tool_shovel_flint_stick",
+  "count": 1,
+  "shaped": true,
+  "pattern": [
+    "F ",
+    "S "
+  ],
+  "key": {
+    "F": "flint",
+    "S": "stick"
+  }
+}

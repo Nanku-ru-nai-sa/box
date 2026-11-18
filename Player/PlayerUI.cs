@@ -861,7 +861,9 @@ private void OnSlotMouseEntered(int slotIndex)
             return;
 
         _stationSlotIds[0] = "default";
-        SetStationSlot(0, "crafter", "Hand Crafting (2x2) — click to switch to learned recipes");
+        SetStationSlot(0, "crafter", _craftingPanel?.IsShowingLearnedRecipes == true
+            ? "Hand Crafting — click to return to crafting grid"
+            : "Hand Crafting — click to view learned recipes");
 
         for (int i = 1; i < 4; i++)
         {
@@ -896,7 +898,21 @@ private void OnSlotMouseEntered(int slotIndex)
     {
         _stationSlots[index].Visible = true;
         _stationSlots[index].TooltipText = tooltip;
-        SetPixelIcon(_stationSlotIcons[index], GetItemIcon(itemId));
+
+        if (index == 0 && _craftingPanel != null)
+        {
+            string iconPath = _craftingPanel.IsShowingLearnedRecipes
+                ? "res://Assets/Textures/UI/note_grid.png"
+                : "res://Assets/Textures/UI/note_list.png";
+            Texture2D icon = ResourceLoader.Exists(iconPath)
+                ? ResourceLoader.Load<Texture2D>(iconPath)
+                : GetItemIcon(itemId);
+            SetPixelIcon(_stationSlotIcons[index], icon);
+        }
+        else
+        {
+            SetPixelIcon(_stationSlotIcons[index], GetItemIcon(itemId));
+        }
     }
 
     private void HandleStationSlotClick(int index)
@@ -911,7 +927,12 @@ private void OnSlotMouseEntered(int slotIndex)
         if (stationId == "default")
         {
             if (_activeStation == "default")
+            {
                 _craftingPanel?.ToggleRecipeMemory();
+                SetStationSlot(0, "crafter", _craftingPanel?.IsShowingLearnedRecipes == true
+                    ? "Hand Crafting — click to return to crafting grid"
+                    : "Hand Crafting — click to view learned recipes");
+            }
             else
             {
                 SwitchStation("default");
@@ -952,6 +973,7 @@ private void OnSlotMouseEntered(int slotIndex)
             {
                 _craftingPanel.SetGridSize(2, false);
                 _craftingPanel.ShowCraftingGrid();
+                SetStationSlot(0, "crafter", "Hand Crafting — click to view learned recipes");
             }
             else if (stationId == "crafter")
             {

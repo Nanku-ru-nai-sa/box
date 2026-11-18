@@ -38,6 +38,37 @@ public partial class RecipeManager : Node
         Instance = this;
         RegisterAllRecipes();
         LoadLearned();
+        LearnBasicFlintToolRecipes();
+    }
+
+    // Basic flint tools are starter recipes, so show them in the Crafter's
+    // learned-recipe view immediately instead of requiring a first craft
+    // through the grid before they appear there.
+    private void LearnBasicFlintToolRecipes()
+    {
+        string[] starterRecipes =
+        {
+            "flint_pickaxe",
+            "flint_axe",
+            "flint_shovel",
+            "flint_sword",
+            "flint_scythe",
+            "flint_hammer"
+        };
+
+        bool changed = false;
+
+        foreach (string recipeId in starterRecipes)
+        {
+            bool recipeExists = _allRecipes.Exists(recipe => recipe.Id == recipeId);
+            if (recipeExists)
+                changed |= _learnedIds.Add(recipeId);
+            else
+                GD.PrintErr($"RecipeManager: starter flint recipe not found: {recipeId}");
+        }
+
+        if (changed)
+            SaveLearned();
     }
 
     // ── Recipe registry — loads every .json file in RecipeFolder ────────────────

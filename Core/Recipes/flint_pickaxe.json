@@ -1,0 +1,14 @@
+{
+  "id": "flint_pickaxe",
+  "result": "tool_pickaxe_flint_stick",
+  "count": 1,
+  "shaped": true,
+  "pattern": [
+    "FF",
+    "FS"
+  ],
+  "key": {
+    "F": "flint",
+    "S": "stick"
+  }
+}

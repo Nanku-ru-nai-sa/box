@@ -1,0 +1,14 @@
+{
+  "id": "flint_hammer",
+  "result": "tool_hammer_flint_stick",
+  "count": 1,
+  "shaped": true,
+  "pattern": [
+    "FS",
+    "FF"
+  ],
+  "key": {
+    "F": "flint",
+    "S": "stick"
+  }
+}

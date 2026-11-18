@@ -174,8 +174,8 @@ public partial class TreeGrowth
 
         List<(Vector3I BasePosition, int Stage)> treesToGrow =
             new List<(Vector3I BasePosition, int Stage)>();
-        List<(Vector3I Position, int Stage)> bambooToGrow =
-            new List<(Vector3I Position, int Stage)>();
+        List<Vector3I> bambooToGrow =
+            new List<Vector3I>();
 
         foreach (
             KeyValuePair<Vector3I, Chunk> pair
@@ -230,15 +230,7 @@ public partial class TreeGrowth
                         // Each shoot/form advances exactly one step per day.
                         // ------------------------------------------------
 
-                        int bambooStage = block.BlockId switch
-                        {
-                            "bamboo_shoot" => 0,
-                            "bamboo_twig" => 1,
-                            "tiny_bamboo" => 2,
-                            _ => -1
-                        };
-
-                        if (bambooStage >= 0)
+                        if (IsBambooPlant(block.BlockId))
                         {
                             Vector3I bambooPosition = new Vector3I(
                                 chunkPosition.X * Chunk.SIZE + x,
@@ -246,7 +238,18 @@ public partial class TreeGrowth
                                 chunkPosition.Z * Chunk.SIZE + z
                             );
 
-                            bambooToGrow.Add((bambooPosition, bambooStage));
+                            // Only process the bottom block of each stalk.
+                            // Upper blocks are grown from the base automatically.
+                            BlockState belowBamboo = _chunkManager.GetBlockAtWorld(
+                                bambooPosition + Vector3I.Down
+                            );
+
+                            if (block.BlockId == "bamboo_shoot" ||
+                                !IsBambooSegment(belowBamboo.BlockId))
+                            {
+                                bambooToGrow.Add(bambooPosition);
+                            }
+
                             continue;
                         }
 
@@ -375,21 +378,9 @@ public partial class TreeGrowth
 
         int bambooGrown = 0;
 
-        foreach ((Vector3I Position, int Stage) bambooData in bambooToGrow)
+        foreach (Vector3I bambooBasePosition in bambooToGrow)
         {
-            string expectedBlock = bambooData.Stage switch
-            {
-                0 => "bamboo_shoot",
-                1 => "bamboo_twig",
-                2 => "tiny_bamboo",
-                _ => ""
-            };
-
-            BlockState current = _chunkManager.GetBlockAtWorld(bambooData.Position);
-            if (current.BlockId != expectedBlock)
-                continue;
-
-            if (TryGrowBamboo(bambooData.Position, bambooData.Stage))
+            if (TryGrowBamboo(bambooBasePosition))
                 bambooGrown++;
         }
 
@@ -406,36 +397,113 @@ public partial class TreeGrowth
     // BAMBOO GROWTH
     // ============================================================
 
-    private bool TryGrowBamboo(Vector3I position, int currentStage)
+    private static bool IsBambooPlant(string blockId)
     {
-        if (currentStage < 0 || currentStage > 2)
+        return blockId == "bamboo_shoot" || IsBambooSegment(blockId);
+    }
+
+    private static bool IsBambooSegment(string blockId)
+    {
+        return blockId == "bamboo_twig" ||
+               blockId == "tiny_bamboo" ||
+               blockId == "bamboo";
+    }
+
+    private bool TryGrowBamboo(Vector3I basePosition)
+    {
+        BlockState baseBlock = _chunkManager.GetBlockAtWorld(basePosition);
+        if (!IsBambooPlant(baseBlock.BlockId))
             return false;
 
-        BlockState ground = _chunkManager.GetBlockAtWorld(position + Vector3I.Down);
+        BlockState ground = _chunkManager.GetBlockAtWorld(basePosition + Vector3I.Down);
         BlockResource groundResource = BlockRegistry.Instance?.GetBlock(ground.BlockId);
 
-        // Bamboo only grows when planted on a real solid surface and with
-        // open sky above it. This keeps it from growing inside caves/blocks.
+        // Bamboo needs solid ground and daylight, just like saplings.
         if (groundResource == null || !groundResource.IsSolid)
             return false;
 
-        if (!HasGrowthLight(position))
+        if (!HasGrowthLight(basePosition))
             return false;
 
-        string nextBlock = currentStage switch
+        // Pick a random mature height once, then save it on the base block
+        // so the stalk keeps the same height target across days and saves.
+        int targetHeight = GetBambooTargetHeight(baseBlock);
+        if (targetHeight < 3 || targetHeight > 7)
         {
-            0 => "bamboo_twig",
-            1 => "tiny_bamboo",
-            2 => "bamboo",
-            _ => ""
-        };
+            RandomNumberGenerator rng = new RandomNumberGenerator();
+            rng.Randomize();
 
-        if (string.IsNullOrEmpty(nextBlock))
+            targetHeight = (int)rng.RandiRange(3, 7);
+
+            // Each shoot randomly chooses one of the three bamboo sizes.
+            if (baseBlock.BlockId == "bamboo_shoot")
+            {
+                int sizeRoll = (int)rng.RandiRange(0, 2);
+                baseBlock.BlockId = sizeRoll switch
+                {
+                    0 => "bamboo_twig",
+                    1 => "tiny_bamboo",
+                    _ => "bamboo"
+                };
+            }
+
+            baseBlock.AddFeature("bamboo:height:" + targetHeight);
+            _chunkManager.SetBlockAtWorld(basePosition, baseBlock);
+        }
+
+        string segmentBlockId = baseBlock.BlockId;
+        if (!IsBambooSegment(segmentBlockId))
             return false;
 
-        SetTreeBlock(position, nextBlock);
-        GD.Print($"[TreeGrowth] Bamboo at {position} grew into {nextBlock}.");
+        // Count the existing vertical stalk, starting at the planted block.
+        int currentHeight = 0;
+        while (basePosition.Y + currentHeight < WorldMaxY)
+        {
+            BlockState segment = _chunkManager.GetBlockAtWorld(
+                basePosition + new Vector3I(0, currentHeight, 0)
+            );
+
+            if (!IsBambooSegment(segment.BlockId))
+                break;
+
+            currentHeight++;
+        }
+
+        if (currentHeight >= targetHeight)
+            return false;
+
+        Vector3I nextPosition = basePosition + new Vector3I(0, currentHeight, 0);
+        BlockState nextSpace = _chunkManager.GetBlockAtWorld(nextPosition);
+
+        if (!nextSpace.IsAir())
+            return false;
+
+        SetTreeBlock(nextPosition, segmentBlockId);
+        GD.Print(
+            $"[TreeGrowth] Bamboo at {basePosition} grew to " +
+            $"{currentHeight + 1}/{targetHeight} blocks ({segmentBlockId})."
+        );
+
         return true;
+    }
+
+    private static int GetBambooTargetHeight(BlockState baseBlock)
+    {
+        if (baseBlock.Features == null)
+            return 0;
+
+        foreach (string feature in baseBlock.Features)
+        {
+            const string prefix = "bamboo:height:";
+            if (feature != null &&
+                feature.StartsWith(prefix, StringComparison.Ordinal) &&
+                int.TryParse(feature.Substring(prefix.Length), out int height))
+            {
+                return height;
+            }
+        }
+
+        return 0;
     }
 
     // ============================================================

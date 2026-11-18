@@ -52,6 +52,8 @@ public partial class CraftingPanel : Control
     private Control       _learnedView;
     private GridContainer _learnedGrid;
 
+    public bool IsShowingLearnedRecipes => _learnedView != null && _learnedView.Visible;
+
     // Tooltip
     private Panel _tooltip;
     private Label _tooltipTitle;
@@ -741,8 +743,20 @@ public partial class CraftingPanel : Control
     {
         if (string.IsNullOrEmpty(itemId)) return null;
         if (_iconCache.TryGetValue(itemId, out var cached)) return cached;
+        Texture2D tex = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
+        // Bamboo and stick items are stored in the dedicated stick folder.
+        string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
+        if (tex == null)
+            tex = ResourceLoader.Exists(stickPath) ? ResourceLoader.Load<Texture2D>(stickPath) : null;
+
         string path = $"res://Assets/Textures/Items/{itemId}.png";
-        var tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (tex == null)
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        if (tex == null && itemId == "sapling")
+        {
+            path = "res://Assets/Textures/Plants/sapling.png";
+            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+        }
         _iconCache[itemId] = tex;
         return tex;
     }
