@@ -1,8 +1,7 @@
 {
   "block": "leaves",
   "drops": [
-    { "item": "stick", "chance": 0.10 },
-    { "item": "apple", "chance": 0.10 },
-    { "item": "sapling", "chance": 0.10 }
+    { "item": "apple", "chance": 0.05 },
+    { "item": "stick",  "chance": 0.10 }
   ]
 }

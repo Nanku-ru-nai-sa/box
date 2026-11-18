@@ -466,37 +466,6 @@ public partial class BlockDropManager : Node
 
 
     // ============================================================
-    // ROLL ALL DROPS INDEPENDENTLY
-    // Each option gets its own chance roll, so more than one
-    // reward can drop from the same block.
-    // ============================================================
-
-    public List<(string ItemId, int Count)> RollAllDrops(
-        string blockId,
-        RandomNumberGenerator rng)
-    {
-        var results = new List<(string ItemId, int Count)>();
-
-        if (!_rules.TryGetValue(blockId, out var rule))
-            return results;
-
-        foreach (var option in rule.Options)
-        {
-            if (rng.Randf() >= option.Chance)
-                continue;
-
-            int count = option.MinCount == option.MaxCount
-                ? option.MinCount
-                : rng.RandiRange(option.MinCount, option.MaxCount);
-
-            results.Add((option.ItemId, count));
-        }
-
-        return results;
-    }
-
-
-    // ============================================================
     // HAS CUSTOM DROP
     // ============================================================
 

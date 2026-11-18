@@ -591,7 +591,9 @@ else if (b.BlockId is "crate" or "barrel")
         if (shouldBreak)
         {
             var (drop, dropCount) =
-                GetDrop(b.BlockId);
+                b.BlockId == "leaves"
+                    ? ((string)null, 0)
+                    : GetDrop(b.BlockId);
 
             Vector3 dropWorldPos =
                 chunk.GlobalPosition +
