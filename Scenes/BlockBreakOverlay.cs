@@ -232,9 +232,12 @@ public partial class BlockBreakOverlay : Node3D
         var surface = new SurfaceTool();
         surface.Begin(Mesh.PrimitiveType.Triangles);
 
-        float hx = size.X * 0.5f;
-        float hy = size.Y * 0.5f;
-        float hz = size.Z * 0.5f;
+        // Lift the crack faces just outside the block surface to prevent
+        // z-fighting / tiny cross-stitch-looking pixel clashes.
+        const float surfaceOffset = 0.0015f;
+        float hx = size.X * 0.5f + surfaceOffset;
+        float hy = size.Y * 0.5f + surfaceOffset;
+        float hz = size.Z * 0.5f + surfaceOffset;
 
         float uX0 = (1f - size.X) * 0.5f;
         float uX1 = 1f - uX0;

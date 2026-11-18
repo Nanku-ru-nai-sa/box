@@ -116,6 +116,49 @@ public partial class Player : CharacterBody3D
     // BREAK BLOCK
     // =========================================================================
 
+    // Bamboo is a continuous stalk: removing one segment makes every
+    // bamboo segment directly above it fall as well.
+    private static bool IsBambooSegment(string blockId)
+    {
+        return blockId is "bamboo_stick" or "bamboo" or "big_bamboo";
+    }
+
+    private void BreakBambooAbove(Vector3I brokenWorldPosition, bool creative)
+    {
+        ChunkManager chunkManager = ChunkManager.Instance;
+        if (chunkManager == null)
+            return;
+
+        Vector3 dropPosition = new Vector3(
+            brokenWorldPosition.X + 0.5f,
+            brokenWorldPosition.Y + 0.5f,
+            brokenWorldPosition.Z + 0.5f
+        );
+
+        Vector3I abovePosition = brokenWorldPosition + Vector3I.Up;
+
+        for (int i = 0; i < 256; i++)
+        {
+            BlockState above = chunkManager.GetBlockAtWorld(abovePosition);
+            if (above.IsAir() || !IsBambooSegment(above.BlockId))
+                break;
+
+            RollBambooLeafBonus(above, dropPosition, creative);
+
+            var (dropId, dropCount) = GetDrop(above.BlockId);
+            if (!string.IsNullOrEmpty(dropId) && dropCount > 0)
+            {
+                if (creative)
+                    AddItemToInventory(dropId, dropCount);
+                else
+                    SpawnItemDrop(dropId, dropCount, dropPosition);
+            }
+
+            chunkManager.SetBlockAtWorld(abovePosition, BlockState.Air);
+            abovePosition += Vector3I.Up;
+        }
+    }
+
     private void TryBreakBlock()
     {
         if (!_rayCast.IsColliding())
@@ -514,6 +557,11 @@ Vector3I brokenWorldPosition = new Vector3I(
     Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
     Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
 
+if (IsBambooSegment(b.BlockId))
+{
+    BreakBambooAbove(brokenWorldPosition, true);
+}
+
 if (b.BlockId == "kiln")
 {
     DropKilnContents(brokenWorldPosition);
@@ -636,6 +684,11 @@ Vector3I brokenWorldPosition = new Vector3I(
     Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
     Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
     Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (IsBambooSegment(b.BlockId))
+{
+    BreakBambooAbove(brokenWorldPosition, false);
+}
 
 if (b.BlockId == "kiln")
 {
