@@ -60,7 +60,7 @@ public partial class EquipmentPanel : Control
     private void BuildPlayerPreview()
     {
         _previewContainer = new SubViewportContainer();
-        _previewContainer.Position = new Vector2(70f, 14f);
+        _previewContainer.Position = new Vector2(70f, 16f);
         _previewContainer.Size = new Vector2(131f, 239f);
         _previewContainer.Stretch = true;
         _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
@@ -68,6 +68,7 @@ public partial class EquipmentPanel : Control
 
         var viewport = new SubViewport();
         viewport.Size = new Vector2I(262, 478);
+        viewport.World3D = new World3D();
         viewport.TransparentBg = true;
         viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
         _previewContainer.AddChild(viewport);
@@ -127,27 +128,19 @@ public partial class EquipmentPanel : Control
         if (_previewPivot == null || !Visible || _previewContainer == null)
             return;
 
-        Vector2 mouse = GetLocalMousePosition();
-        Rect2 previewRect = new Rect2(
-            _previewContainer.Position,
-            _previewContainer.Size
-        );
+        // Use the main game viewport, not this small equipment panel, so the
+        // preview keeps following the cursor anywhere while the inventory is open.
+        Vector2 mouse = GetViewport().GetMousePosition();
+        Vector2 viewportSize = GetViewportRect().Size;
 
-        if (previewRect.HasPoint(mouse))
-        {
-            float normalizedX =
-                (mouse.X - previewRect.GetCenter().X) / (previewRect.Size.X * 0.5f);
-            float normalizedY =
-                (mouse.Y - previewRect.GetCenter().Y) / (previewRect.Size.Y * 0.5f);
+        float normalizedX =
+            (mouse.X - viewportSize.X * 0.5f) / (viewportSize.X * 0.5f);
+        float normalizedY =
+            (mouse.Y - viewportSize.Y * 0.5f) / (viewportSize.Y * 0.5f);
 
-            _previewTargetYaw = -Mathf.Clamp(normalizedX, -1f, 1f) * 0.95f;
-            _previewTargetPitch = Mathf.Clamp(normalizedY, -1f, 1f) * 0.18f;
-        }
-        else
-        {
-            _previewTargetYaw = 0f;
-            _previewTargetPitch = 0f;
-        }
+        // Positive X/Y now follow the cursor direction rather than opposing it.
+        _previewTargetYaw = Mathf.Clamp(normalizedX, -1f, 1f) * 0.95f;
+        _previewTargetPitch = -Mathf.Clamp(normalizedY, -1f, 1f) * 0.18f;
 
         float weight = 1f - Mathf.Exp(-(float)delta * 12f);
         Vector3 rotation = _previewPivot.Rotation;

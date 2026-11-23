@@ -1723,6 +1723,15 @@ public bool IsMounted =>
 {
     float dt = (float)delta;
 
+    // Keep interaction reach anchored to the player, not the zoomed camera.
+    // Direction still follows the camera so aiming remains intuitive.
+    if (_rayCast != null && _playerCamera?.GetCamera() is Camera3D interactionCamera)
+    {
+        _rayCast.GlobalPosition = GlobalPosition + Vector3.Up * 0.6f;
+        _rayCast.GlobalRotation = interactionCamera.GlobalRotation;
+        _rayCast.ForceRaycastUpdate();
+    }
+
     UpdateBlockOutline();
 
     if (_isBreaking)
