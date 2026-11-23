@@ -27,6 +27,8 @@ public partial class Player : CharacterBody3D
     private Vector3 _rightBicepRestRotation;
     private Vector3 _leftHandRestRotation;
     private Vector3 _rightHandRestRotation;
+    private readonly List<(Node3D Node, Vector3 Rest)> _leftLegParts = new();
+    private readonly List<(Node3D Node, Vector3 Rest)> _rightLegParts = new();
     private RayCast3D _rayCast;
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
@@ -329,6 +331,32 @@ public bool IsMounted =>
         if (_rightHand != null)
             _rightHandRestRotation = _rightHand.Rotation;
 
+        // Collect the separate leg meshes so they can swing together.
+        // The exported model has upper and lower pieces for each leg.
+        foreach (Node node in _playerModelParts.FindChildren("*", "Node3D", true, false))
+        {
+            if (node is not Node3D part)
+                continue;
+
+            string partName = part.Name.ToString().ToLowerInvariant();
+
+            if (partName.Contains("left") &&
+                (partName.Contains("thigh") || partName.Contains("leg")))
+            {
+                _leftLegParts.Add((part, part.Rotation));
+            }
+            else if (partName.Contains("right") &&
+                     (partName.Contains("thigh") || partName.Contains("leg")))
+            {
+                _rightLegParts.Add((part, part.Rotation));
+            }
+        }
+
+        // The imported model is authored with its feet at local Y=0,
+        // while the player's capsule is centred on the CharacterBody.
+        // Move the model down by half the capsule height to align both.
+        _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
+
         SetThirdPersonView(false);
     }
 
@@ -382,37 +410,129 @@ public bool IsMounted =>
 
     private void UpdateFirstPersonArms(float delta)
     {
-        if (_thirdPersonView ||
-            _leftBicep == null ||
-            _rightBicep == null)
+        if (_playerModelParts == null)
             return;
 
         Vector2 horizontalVelocity =
             new Vector2(Velocity.X, Velocity.Z);
 
-        bool moving = horizontalVelocity.Length() > 0.15f && IsOnFloor();
+        bool moving =
+            horizontalVelocity.Length() > 0.15f &&
+            IsOnFloor();
 
-        _armAnimationTime += delta * (moving ? 8f : 2f);
-
-        float swingAmount = moving ? 0.13f : 0.025f;
-        float swing = Mathf.Sin(_armAnimationTime) * swingAmount;
-
-        _leftBicep.Rotation =
-            _leftBicepRestRotation + new Vector3(swing, 0f, 0f);
-        _rightBicep.Rotation =
-            _rightBicepRestRotation + new Vector3(-swing, 0f, 0f);
-
-        if (_leftHand != null)
+        if (moving)
         {
-            _leftHand.Rotation =
-                _leftHandRestRotation + new Vector3(swing * 0.35f, 0f, 0f);
-        }
+            float speedFactor =
+                Mathf.Clamp(horizontalVelocity.Length() / WalkSpeed, 0.5f, 2f);
 
-        if (_rightHand != null)
-        {
-            _rightHand.Rotation =
-                _rightHandRestRotation + new Vector3(-swing * 0.35f, 0f, 0f);
+            _armAnimationTime += delta * speedFactor * 7f;
+
+            // Match the alternating limb swing used by MobAnimation.
+            float swing =
+                Mathf.Sin(_armAnimationTime) * 0.45f;
+
+            ApplyLimbSwing(_leftLegParts, swing);
+            ApplyLimbSwing(_rightLegParts, -swing);
+
+            // Arms swing opposite to the legs, just like a natural walk.
+            SetLimbRotation(
+                _leftBicep,
+                _leftBicepRestRotation,
+                -swing
+            );
+            SetLimbRotation(
+                _rightBicep,
+                _rightBicepRestRotation,
+                swing
+            );
+
+            if (_leftHand != null)
+                SetLimbRotation(_leftHand, _leftHandRestRotation, -swing * 0.35f);
+
+            if (_rightHand != null)
+                SetLimbRotation(_rightHand, _rightHandRestRotation, swing * 0.35f);
         }
+        else
+        {
+            // Ease all limbs back to their authored standing pose.
+            ResetLimbParts(_leftLegParts, delta);
+            ResetLimbParts(_rightLegParts, delta);
+
+            ResetLimb(_leftBicep, _leftBicepRestRotation, delta);
+            ResetLimb(_rightBicep, _rightBicepRestRotation, delta);
+            ResetLimb(_leftHand, _leftHandRestRotation, delta);
+            ResetLimb(_rightHand, _rightHandRestRotation, delta);
+        }
+    }
+
+    private void ApplyLimbSwing(
+        List<(Node3D Node, Vector3 Rest)> parts,
+        float swing)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            part.Node.Rotation =
+                part.Rest + new Vector3(swing, 0f, 0f);
+        }
+    }
+
+    private void ResetLimbParts(
+        List<(Node3D Node, Vector3 Rest)> parts,
+        float delta)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            Vector3 rotation = part.Node.Rotation;
+            rotation.X = Mathf.LerpAngle(
+                rotation.X,
+                part.Rest.X,
+                delta * 8f
+            );
+            rotation.Y = Mathf.LerpAngle(
+                rotation.Y,
+                part.Rest.Y,
+                delta * 8f
+            );
+            rotation.Z = Mathf.LerpAngle(
+                rotation.Z,
+                part.Rest.Z,
+                delta * 8f
+            );
+            part.Node.Rotation = rotation;
+        }
+    }
+
+    private void SetLimbRotation(
+        Node3D limb,
+        Vector3 rest,
+        float swing)
+    {
+        if (limb == null || !IsInstanceValid(limb))
+            return;
+
+        limb.Rotation =
+            rest + new Vector3(swing, 0f, 0f);
+    }
+
+    private void ResetLimb(
+        Node3D limb,
+        Vector3 rest,
+        float delta)
+    {
+        if (limb == null || !IsInstanceValid(limb))
+            return;
+
+        Vector3 rotation = limb.Rotation;
+        rotation.X = Mathf.LerpAngle(rotation.X, rest.X, delta * 8f);
+        rotation.Y = Mathf.LerpAngle(rotation.Y, rest.Y, delta * 8f);
+        rotation.Z = Mathf.LerpAngle(rotation.Z, rest.Z, delta * 8f);
+        limb.Rotation = rotation;
     }
 
     // =========================================================================
