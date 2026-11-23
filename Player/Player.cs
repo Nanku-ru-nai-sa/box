@@ -17,6 +17,7 @@ public partial class Player : CharacterBody3D
     private Node3D _playerModelRoot;
     private Node3D _playerModelParts;
     private Node3D _bonesModel;
+    private Node3D _playerHeadPivot;
     private Node3D _leftBicep;
     private Node3D _rightBicep;
     private Node3D _leftHand;
@@ -359,6 +360,8 @@ public bool IsMounted =>
                 rightLowerLegMesh = part;
         }
 
+        BuildPlayerHeadPivot();
+
         // Build a parent/child joint hierarchy so lower limbs follow the
         // upper limbs while still bending independently at elbows and knees.
         Node3D leftShoulder = null;
@@ -407,6 +410,36 @@ public bool IsMounted =>
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
 
         SetCameraMode(0);
+    }
+
+    private void BuildPlayerHeadPivot()
+    {
+        Node3D headNode = _playerModelParts.FindChild("head", true, false) as Node3D;
+        if (headNode == null)
+            return;
+
+        Vector3 headCenter = Vector3.Zero;
+        if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
+            headCenter = headMesh.GetAabb().GetCenter();
+
+        // Pivot at the head centre while preserving the imported mesh pose.
+        Vector3 headCenterInModel = _playerModelParts.ToLocal(headNode.ToGlobal(headCenter));
+        _playerHeadPivot = new Node3D { Name = "PlayerHeadPivot" };
+        _playerModelParts.AddChild(_playerHeadPivot);
+        _playerHeadPivot.Position = headCenterInModel;
+        headNode.Reparent(_playerHeadPivot, true);
+    }
+
+    private void UpdatePlayerHeadLook()
+    {
+        if (_playerHeadPivot == null || !IsInstanceValid(_playerHeadPivot) || _playerCamera == null)
+            return;
+
+        // PlayerCamera pitch already follows vertical mouse movement. Keep this
+        // active in first-person too, even while the head mesh is hidden.
+        Vector3 headRotation = _playerHeadPivot.Rotation;
+        headRotation.X = _playerCamera.GetPitch();
+        _playerHeadPivot.Rotation = headRotation;
     }
 
     private Node3D CreateLimbPivot(
@@ -1617,6 +1650,7 @@ public bool IsMounted =>
     public override void _Process(double delta)
 {
     UpdateFirstPersonArms((float)delta);
+    UpdatePlayerHeadLook();
 
     if (_feedbackTimer > 0f)
     {
