@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://bj78p0dqf6imn" path="res://Player/Player.cs" id="1_4ntmi"]
 [ext_resource type="Script" uid="uid://c4ersv2a4gm7d" path="res://Player/PlayerCamera.cs" id="2_btcbx"]
+[ext_resource type="PackedScene" uid="uid://cqqtt3dkgru4r" path="res://Assets/Models/Player/player.gltf" id="3_player_model"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_hvfyp"]
 radius = 0.4
@@ -17,6 +18,8 @@ height = 1.8
 
 [node name="player" type="CharacterBody3D" unique_id=189951435]
 script = ExtResource("1_4ntmi")
+
+[node name="PlayerModel" parent="." instance=ExtResource("3_player_model")]
 
 [node name="PlayerCamera" type="Node3D" parent="." unique_id=1669677860]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)

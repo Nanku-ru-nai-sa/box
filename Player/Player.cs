@@ -14,6 +14,19 @@ public partial class Player : CharacterBody3D
     private float _gravity = 20f;
     private PlayerStats _stats;
     private PlayerCamera _playerCamera;
+    private Node3D _playerModelRoot;
+    private Node3D _playerModelParts;
+    private Node3D _bonesModel;
+    private Node3D _leftBicep;
+    private Node3D _rightBicep;
+    private Node3D _leftHand;
+    private Node3D _rightHand;
+    private bool _thirdPersonView = false;
+    private float _armAnimationTime = 0f;
+    private Vector3 _leftBicepRestRotation;
+    private Vector3 _rightBicepRestRotation;
+    private Vector3 _leftHandRestRotation;
+    private Vector3 _rightHandRestRotation;
     private RayCast3D _rayCast;
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
@@ -163,6 +176,8 @@ public bool IsMounted =>
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
 
+        SetupPlayerModel();
+
         AddToGroup("player");
 
         _inventory = new Inventory();
@@ -269,6 +284,135 @@ public bool IsMounted =>
             GD.PrintErr("GameModeManager not found — add to Autoload.");
 
         GD.Print("Player ready.");
+    }
+
+    // =========================================================================
+    // PLAYER MODEL AND CAMERA MODES
+    // =========================================================================
+
+    private void SetupPlayerModel()
+    {
+        _playerModelRoot = GetNodeOrNull<Node3D>("PlayerModel");
+
+        if (_playerModelRoot == null)
+        {
+            GD.PrintErr("Player model scene is missing.");
+            return;
+        }
+
+        // The exported model contains a visible player mesh group and a
+        // separate bone-display group. Only the player mesh is rendered.
+        _playerModelParts =
+            _playerModelRoot.FindChild("player", true, false) as Node3D;
+
+        _bonesModel =
+            _playerModelRoot.FindChild("bones", true, false) as Node3D;
+
+        _leftBicep =
+            _playerModelRoot.FindChild("left bicep", true, false) as Node3D;
+        _rightBicep =
+            _playerModelRoot.FindChild("right bicep", true, false) as Node3D;
+        _leftHand =
+            _playerModelRoot.FindChild("left hand", true, false) as Node3D;
+        _rightHand =
+            _playerModelRoot.FindChild("right hand", true, false) as Node3D;
+
+        if (_bonesModel != null)
+            SetModelMeshesVisible(_bonesModel, false);
+
+        if (_leftBicep != null)
+            _leftBicepRestRotation = _leftBicep.Rotation;
+        if (_rightBicep != null)
+            _rightBicepRestRotation = _rightBicep.Rotation;
+        if (_leftHand != null)
+            _leftHandRestRotation = _leftHand.Rotation;
+        if (_rightHand != null)
+            _rightHandRestRotation = _rightHand.Rotation;
+
+        SetThirdPersonView(false);
+    }
+
+    private void SetThirdPersonView(bool enabled)
+    {
+        _thirdPersonView = enabled;
+
+        if (_playerModelParts != null)
+        {
+            SetModelMeshesVisible(_playerModelParts, enabled);
+
+            if (!enabled)
+            {
+                SetModelPartVisible(_leftBicep, true);
+                SetModelPartVisible(_rightBicep, true);
+                SetModelPartVisible(_leftHand, true);
+                SetModelPartVisible(_rightHand, true);
+            }
+        }
+
+        if (_bonesModel != null)
+            SetModelMeshesVisible(_bonesModel, false);
+
+        Camera3D camera = _playerCamera?.GetCamera();
+        if (camera != null)
+        {
+            // Keep the camera aimed in the same direction so block targeting
+            // and the raycast continue to work in either view.
+            camera.Position = enabled
+                ? new Vector3(0f, 0f, 4.5f)
+                : Vector3.Zero;
+        }
+    }
+
+    private void SetModelMeshesVisible(Node parent, bool visible)
+    {
+        foreach (Node child in parent.GetChildren())
+        {
+            if (child is GeometryInstance3D visual)
+                visual.Visible = visible;
+
+            SetModelMeshesVisible(child, visible);
+        }
+    }
+
+    private void SetModelPartVisible(Node3D part, bool visible)
+    {
+        if (part is GeometryInstance3D visual)
+            visual.Visible = visible;
+    }
+
+    private void UpdateFirstPersonArms(float delta)
+    {
+        if (_thirdPersonView ||
+            _leftBicep == null ||
+            _rightBicep == null)
+            return;
+
+        Vector2 horizontalVelocity =
+            new Vector2(Velocity.X, Velocity.Z);
+
+        bool moving = horizontalVelocity.Length() > 0.15f && IsOnFloor();
+
+        _armAnimationTime += delta * (moving ? 8f : 2f);
+
+        float swingAmount = moving ? 0.13f : 0.025f;
+        float swing = Mathf.Sin(_armAnimationTime) * swingAmount;
+
+        _leftBicep.Rotation =
+            _leftBicepRestRotation + new Vector3(swing, 0f, 0f);
+        _rightBicep.Rotation =
+            _rightBicepRestRotation + new Vector3(-swing, 0f, 0f);
+
+        if (_leftHand != null)
+        {
+            _leftHand.Rotation =
+                _leftHandRestRotation + new Vector3(swing * 0.35f, 0f, 0f);
+        }
+
+        if (_rightHand != null)
+        {
+            _rightHand.Rotation =
+                _rightHandRestRotation + new Vector3(-swing * 0.35f, 0f, 0f);
+        }
     }
 
     // =========================================================================
@@ -1261,6 +1405,8 @@ public bool IsMounted =>
 
     public override void _Process(double delta)
 {
+    UpdateFirstPersonArms((float)delta);
+
     if (_feedbackTimer > 0f)
     {
         _feedbackTimer -= (float)delta;
@@ -2287,6 +2433,24 @@ if (key.Keycode == Key.Escape)
 
             if (_statsHudLayer != null)
                 _statsHudLayer.Visible = _hudVisible && !_inventoryOpen;
+        }
+
+        // =====================================================
+        // PLAYER CAMERA MODE (F6)
+        // =====================================================
+
+        if (key.Keycode == Key.F6 &&
+            !_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
+        {
+            SetThirdPersonView(!_thirdPersonView);
+            ShowFeedback(
+                _thirdPersonView
+                    ? "Third-person view"
+                    : "First-person view"
+            );
+            return;
         }
 
         // =====================================================
