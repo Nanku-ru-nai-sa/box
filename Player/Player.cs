@@ -548,11 +548,11 @@ public bool IsMounted =>
             // Knees bend during the backward part of each leg's stride.
             ApplyLimbSwing(
                 _leftLowerLegParts,
-                Mathf.Max(0f, -leftLegSwing) * 0.8f
+                -Mathf.Max(0f, -leftLegSwing) * 0.8f
             );
             ApplyLimbSwing(
                 _rightLowerLegParts,
-                Mathf.Max(0f, -rightLegSwing) * 0.8f
+                -Mathf.Max(0f, -rightLegSwing) * 0.8f
             );
 
             // Upper arms counter-swing against the legs.

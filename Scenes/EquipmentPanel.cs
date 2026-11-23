@@ -28,6 +28,7 @@ public partial class EquipmentPanel : Control
 
     private SubViewportContainer _previewContainer;
     private Node3D _previewPivot;
+    private Node3D _previewHeadPivot;
     private float _previewTargetYaw;
     private float _previewTargetPitch;
 
@@ -71,6 +72,19 @@ public partial class EquipmentPanel : Control
         viewport.World3D = new World3D();
         viewport.TransparentBg = true;
         viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+
+        // A private preview world has no ambient lighting by default. Keep
+        // the background transparent, but add soft white ambient light so
+        // the model's original textures and colors remain visible.
+        var previewEnvironment = new Environment();
+        previewEnvironment.BackgroundMode = Environment.BGModeEnum.Canvas;
+        previewEnvironment.AmbientLightSource = Environment.AmbientSourceEnum.Color;
+        previewEnvironment.AmbientLightColor = Colors.White;
+        previewEnvironment.AmbientLightEnergy = 0.85f;
+
+        var worldEnvironment = new WorldEnvironment();
+        worldEnvironment.Environment = previewEnvironment;
+        viewport.AddChild(worldEnvironment);
         _previewContainer.AddChild(viewport);
 
         _previewPivot = new Node3D();
@@ -97,7 +111,10 @@ public partial class EquipmentPanel : Control
             bones.Visible = false;
 
         if (playerParts != null)
+        {
             SetPreviewMeshesVisible(playerParts, true);
+            BuildHeadPreviewPivot(model, playerParts);
+        }
 
         var camera = new Camera3D();
         camera.Fov = 35f;
@@ -110,6 +127,25 @@ public partial class EquipmentPanel : Control
         light.RotationDegrees = new Vector3(-25f, -25f, 0f);
         light.LightEnergy = 1.5f;
         viewport.AddChild(light);
+    }
+
+    private void BuildHeadPreviewPivot(Node3D model, Node3D playerParts)
+    {
+        Node3D headNode = playerParts.FindChild("head", true, false) as Node3D;
+        if (headNode == null)
+            return;
+
+        Vector3 headCenter = Vector3.Zero;
+        if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
+            headCenter = headMesh.GetAabb().GetCenter();
+
+        // Put the pivot at the centre of the head, then preserve the imported
+        // mesh transform while parenting it beneath that pivot.
+        Vector3 headCenterInModel = model.ToLocal(headNode.ToGlobal(headCenter));
+        _previewHeadPivot = new Node3D { Name = "PreviewHeadPivot" };
+        model.AddChild(_previewHeadPivot);
+        _previewHeadPivot.Position = headCenterInModel;
+        headNode.Reparent(_previewHeadPivot, true);
     }
 
     private void SetPreviewMeshesVisible(Node parent, bool visible)
@@ -139,14 +175,22 @@ public partial class EquipmentPanel : Control
             (mouse.Y - viewportSize.Y * 0.5f) / (viewportSize.Y * 0.5f);
 
         // Positive X/Y now follow the cursor direction rather than opposing it.
-        _previewTargetYaw = Mathf.Clamp(normalizedX, -1f, 1f) * 0.95f;
-        _previewTargetPitch = -Mathf.Clamp(normalizedY, -1f, 1f) * 0.18f;
+        // Keep the body movement subtle; Minecraft-style menu movement is
+        // mostly the head tracking the cursor vertically.
+        _previewTargetYaw = Mathf.Clamp(normalizedX, -1f, 1f) * 0.28f;
+        _previewTargetPitch = Mathf.Clamp(normalizedY, -1f, 1f) * 0.24f;
 
         float weight = 1f - Mathf.Exp(-(float)delta * 12f);
-        Vector3 rotation = _previewPivot.Rotation;
-        rotation.X = Mathf.LerpAngle(rotation.X, _previewTargetPitch, weight);
-        rotation.Y = Mathf.LerpAngle(rotation.Y, _previewTargetYaw, weight);
-        _previewPivot.Rotation = rotation;
+        Vector3 bodyRotation = _previewPivot.Rotation;
+        bodyRotation.Y = Mathf.LerpAngle(bodyRotation.Y, _previewTargetYaw, weight);
+        _previewPivot.Rotation = bodyRotation;
+
+        if (_previewHeadPivot != null && IsInstanceValid(_previewHeadPivot))
+        {
+            Vector3 headRotation = _previewHeadPivot.Rotation;
+            headRotation.X = Mathf.LerpAngle(headRotation.X, _previewTargetPitch, weight);
+            _previewHeadPivot.Rotation = headRotation;
+        }
     }
 
     private void BuildBackground()
