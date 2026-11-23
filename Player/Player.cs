@@ -343,9 +343,9 @@ public bool IsMounted =>
 
             string partName = part.Name.ToString().ToLowerInvariant();
 
-            if (partName == "left thigh")
+            if (partName.Contains("left") && partName.Contains("thigh"))
                 leftUpperLegMeshes.Add(part);
-            else if (partName == "right thigh")
+            else if (partName.Contains("right") && partName.Contains("thigh"))
                 rightUpperLegMeshes.Add(part);
             else if (partName == "lower left leg")
                 leftLowerLegMesh = part;
