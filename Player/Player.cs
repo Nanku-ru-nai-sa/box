@@ -418,16 +418,33 @@ public bool IsMounted =>
         if (headNode == null)
             return;
 
+        // Eyes and pupils are separate imported meshes, so attach all five
+        // pieces to the same pivot to keep the face together while looking.
+        Node3D[] faceParts =
+        {
+            headNode,
+            _playerModelParts.FindChild("left eye", true, false) as Node3D,
+            _playerModelParts.FindChild("left pupil", true, false) as Node3D,
+            _playerModelParts.FindChild("right eye", true, false) as Node3D,
+            _playerModelParts.FindChild("right pupil", true, false) as Node3D
+        };
+
         Vector3 headCenter = Vector3.Zero;
         if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
             headCenter = headMesh.GetAabb().GetCenter();
 
-        // Pivot at the head centre while preserving the imported mesh pose.
+        // Place the pivot at the head centre, then preserve each imported
+        // mesh's world transform as it is parented beneath the pivot.
         Vector3 headCenterInModel = _playerModelParts.ToLocal(headNode.ToGlobal(headCenter));
         _playerHeadPivot = new Node3D { Name = "PlayerHeadPivot" };
         _playerModelParts.AddChild(_playerHeadPivot);
         _playerHeadPivot.Position = headCenterInModel;
-        headNode.Reparent(_playerHeadPivot, true);
+
+        foreach (Node3D facePart in faceParts)
+        {
+            if (facePart != null && IsInstanceValid(facePart))
+                facePart.Reparent(_playerHeadPivot, true);
+        }
     }
 
     private void UpdatePlayerHeadLook()
@@ -482,16 +499,9 @@ public bool IsMounted =>
 
         if (_playerModelParts != null)
         {
-            bool showFullModel = _cameraMode != 0;
-            SetModelMeshesVisible(_playerModelParts, showFullModel);
-
-            if (!showFullModel)
-            {
-                SetModelPartVisible(_leftBicep, true);
-                SetModelPartVisible(_rightBicep, true);
-                SetModelPartVisible(_leftHand, true);
-                SetModelPartVisible(_rightHand, true);
-            }
+            // Keep the complete model visible in every camera mode for now.
+            // This also lets us verify head tracking in first-person.
+            SetModelMeshesVisible(_playerModelParts, true);
         }
 
         if (_bonesModel != null)

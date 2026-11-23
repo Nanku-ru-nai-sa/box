@@ -177,7 +177,7 @@ public partial class EquipmentPanel : Control
         // Positive X/Y now follow the cursor direction rather than opposing it.
         // Keep the body movement subtle; Minecraft-style menu movement is
         // mostly the head tracking the cursor vertically.
-        _previewTargetYaw = -Mathf.Clamp(normalizedX, -1f, 1f) * 0.28f;
+        _previewTargetYaw = Mathf.Clamp(normalizedX, -1f, 1f) * 0.28f;
         _previewTargetPitch = -Mathf.Clamp(normalizedY, -1f, 1f) * 0.24f;
 
         float weight = 1f - Mathf.Exp(-(float)delta * 12f);
