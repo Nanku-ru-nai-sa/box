@@ -9,6 +9,7 @@ public partial class DebugMenu : CanvasLayer
     private Button _advanceDayButton;
     private Button _advanceHourButton;
     private Button _seasonLockButton;
+    private Button _chunkBordersButton;
     private Button _closeButton;
     private Input.MouseModeEnum _previousMouseMode = Input.MouseModeEnum.Captured;
 
@@ -172,10 +173,10 @@ public partial class DebugMenu : CanvasLayer
         _panel = new Panel();
 
         _panel.Position =
-            new Vector2(20, 20);
+            new Vector2(20, 5);
 
         _panel.Size =
-            new Vector2(375, 1060);
+            new Vector2(375, 1070);
         _panel.ProcessMode = ProcessModeEnum.Always;
         _panel.MouseFilter = Control.MouseFilterEnum.Stop;
 
@@ -231,11 +232,12 @@ public partial class DebugMenu : CanvasLayer
 
         _panel.AddChild(_label);
 
-        _pauseTimeButton = CreateTestButton("Pause Time", 765, OnPauseTimePressed);
-        _advanceDayButton = CreateTestButton("Advance One Day", 820, AdvanceDay);
-        _advanceHourButton = CreateTestButton("Advance One Hour", 875, AdvanceHour);
-        _seasonLockButton = CreateTestButton("Toggle Season Lock", 930, ToggleSeasonLock);
-        _closeButton = CreateTestButton("Close Debug Menu", 985, () => SetMenuVisible(false));
+        _pauseTimeButton = CreateTestButton("Pause Time", 740, OnPauseTimePressed);
+        _advanceDayButton = CreateTestButton("Advance One Day", 795, AdvanceDay);
+        _advanceHourButton = CreateTestButton("Advance One Hour", 850, AdvanceHour);
+        _seasonLockButton = CreateTestButton("Toggle Season Lock", 905, ToggleSeasonLock);
+        _chunkBordersButton = CreateTestButton("Chunk Borders: OFF", 960, ToggleChunkBorders);
+        _closeButton = CreateTestButton("Close Debug Menu", 1015, () => SetMenuVisible(false));
     }
 
     private Button CreateTestButton(string text, float y, Action pressed)
@@ -267,6 +269,16 @@ public partial class DebugMenu : CanvasLayer
                 ? Input.MouseModeEnum.Captured
                 : _previousMouseMode;
         }
+    }
+
+    private void ToggleChunkBorders()
+    {
+        Player player = GetTree().GetFirstNodeInGroup("player") as Player;
+        if (player == null)
+            return;
+
+        player.SetChunkBordersFromDebugMenu(!player.AreChunkBordersVisible);
+        UpdateDisplay();
     }
 
     private void OnPauseTimePressed()
@@ -427,6 +439,15 @@ public partial class DebugMenu : CanvasLayer
 
         if (_seasonLockButton != null)
             _seasonLockButton.Text = seasonManager.SeasonLocked ? "Unlock Season" : "Lock Season";
+
+        if (_chunkBordersButton != null)
+        {
+            Player player = GetTree().GetFirstNodeInGroup("player") as Player;
+            _chunkBordersButton.Text =
+                player != null && player.AreChunkBordersVisible
+                    ? "Chunk Borders: ON"
+                    : "Chunk Borders: OFF";
+        }
     }
 
     // ============================================================

@@ -21,7 +21,13 @@ public partial class Player : CharacterBody3D
     private Node3D _rightBicep;
     private Node3D _leftHand;
     private Node3D _rightHand;
+    // 0 = first-person, 1 = third-person, 2 = front-facing third-person.
+    private int _cameraMode = 0;
     private bool _thirdPersonView = false;
+    private float _cameraZoomDistance = 4.5f;
+    private const float CameraZoomMin = 1.5f;
+    private const float CameraZoomMax = 8.0f;
+    private const float CameraZoomStep = 0.5f;
     private float _armAnimationTime = 0f;
     private readonly List<(Node3D Node, Vector3 RestRotation)> _leftArmParts = new();
     private readonly List<(Node3D Node, Vector3 RestRotation)> _rightArmParts = new();
@@ -400,7 +406,7 @@ public bool IsMounted =>
         // while the player's capsule is centred on the CharacterBody.
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
 
-        SetThirdPersonView(false);
+        SetCameraMode(0);
     }
 
     private Node3D CreateLimbPivot(
@@ -436,15 +442,17 @@ public bool IsMounted =>
         return pivot;
     }
 
-    private void SetThirdPersonView(bool enabled)
+    private void SetCameraMode(int mode)
     {
-        _thirdPersonView = enabled;
+        _cameraMode = ((mode % 3) + 3) % 3;
+        _thirdPersonView = _cameraMode != 0;
 
         if (_playerModelParts != null)
         {
-            SetModelMeshesVisible(_playerModelParts, enabled);
+            bool showFullModel = _cameraMode != 0;
+            SetModelMeshesVisible(_playerModelParts, showFullModel);
 
-            if (!enabled)
+            if (!showFullModel)
             {
                 SetModelPartVisible(_leftBicep, true);
                 SetModelPartVisible(_rightBicep, true);
@@ -456,14 +464,36 @@ public bool IsMounted =>
         if (_bonesModel != null)
             _bonesModel.Visible = false;
 
+        UpdateCameraModeTransform();
+    }
+
+    private void UpdateCameraModeTransform()
+    {
         Camera3D camera = _playerCamera?.GetCamera();
-        if (camera != null)
+        if (camera == null)
+            return;
+
+        if (_cameraMode == 0)
         {
-            // Keep the camera aimed in the same direction so block targeting
-            // and the raycast continue to work in either view.
-            camera.Position = enabled
-                ? new Vector3(0f, 0f, 4.5f)
-                : Vector3.Zero;
+            camera.Position = Vector3.Zero;
+            camera.Rotation = Vector3.Zero;
+        }
+        else
+        {
+            float direction = _cameraMode == 2 ? -1f : 1f;
+            camera.Position = new Vector3(
+                0f,
+                0f,
+                direction * _cameraZoomDistance
+            );
+
+            // The front camera sits in front of the character and looks back
+            // toward them; the rear camera keeps the normal forward view.
+            camera.Rotation = new Vector3(
+                0f,
+                _cameraMode == 2 ? Mathf.Pi : 0f,
+                0f
+            );
         }
     }
 
@@ -2314,6 +2344,31 @@ public override void _UnhandledInput(InputEvent @event)
 
     if (@event is InputEventMouseButton mb)
     {
+        // Hold Ctrl and use the wheel to zoom while in either third-person view.
+        if (mb.Pressed &&
+            (mb.ButtonIndex == MouseButton.WheelUp ||
+             mb.ButtonIndex == MouseButton.WheelDown) &&
+            _cameraMode != 0 &&
+            Input.IsKeyPressed(Key.Ctrl) &&
+            !_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
+        {
+            _cameraZoomDistance +=
+                mb.ButtonIndex == MouseButton.WheelUp
+                    ? -CameraZoomStep
+                    : CameraZoomStep;
+
+            _cameraZoomDistance = Mathf.Clamp(
+                _cameraZoomDistance,
+                CameraZoomMin,
+                CameraZoomMax
+            );
+
+            UpdateCameraModeTransform();
+            return;
+        }
+
         // Middle mouse: pick block.
         if (mb.ButtonIndex == MouseButton.Middle && mb.Pressed)
         {
@@ -2617,20 +2672,24 @@ if (key.Keycode == Key.Escape)
         }
 
         // =====================================================
-        // PLAYER CAMERA MODE (F6)
+        // PLAYER CAMERA MODE (F3)
         // =====================================================
 
-        if (key.Keycode == Key.F6 &&
+        if (key.Keycode == Key.F3 &&
             !_inventoryOpen &&
             !_chatOpen &&
             !_creativeMenuOpen)
         {
-            SetThirdPersonView(!_thirdPersonView);
-            ShowFeedback(
-                _thirdPersonView
-                    ? "Third-person view"
-                    : "First-person view"
-            );
+            SetCameraMode((_cameraMode + 1) % 3);
+
+            string cameraModeName = _cameraMode switch
+            {
+                0 => "First-person view",
+                1 => "Third-person view",
+                _ => "Front-facing view"
+            };
+
+            ShowFeedback(cameraModeName);
             return;
         }
 
@@ -2647,16 +2706,6 @@ if (key.Keycode == Key.Escape)
 
             img.SavePng(p);
             GD.Print($"Screenshot saved: {p}");
-        }
-
-        // =====================================================
-        // CHUNK BORDERS
-        // =====================================================
-
-        if (key.Keycode == Key.F3)
-        {
-            _showChunkBorders = !_showChunkBorders;
-            ToggleChunkBorders();
         }
 
         // =====================================================
@@ -2883,6 +2932,14 @@ if (key.Keycode == Key.Escape)
     // =========================================================================
     // CHUNK BORDERS
     // =========================================================================
+
+    public bool AreChunkBordersVisible => _showChunkBorders;
+
+    public void SetChunkBordersFromDebugMenu(bool visible)
+    {
+        _showChunkBorders = visible;
+        ToggleChunkBorders();
+    }
 
     private void ToggleChunkBorders()
     {

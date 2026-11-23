@@ -26,6 +26,11 @@ public partial class EquipmentPanel : Control
     private Label _staminaLabel;
     private Label _manaLabel;
 
+    private SubViewportContainer _previewContainer;
+    private Node3D _previewPivot;
+    private float _previewTargetYaw;
+    private float _previewTargetPitch;
+
     // Called by Player before this node enters the tree (same pattern as
     // CraftingPanel.Init) — stores the reference; _Ready() reads it once
     // building the stats section, and events keep it live afterward.
@@ -48,7 +53,107 @@ public partial class EquipmentPanel : Control
         BuildExternalTitle();
         BuildColumn(GearLabels,    0, GearSlots);
         BuildColumn(ApparelLabels, 1, ApparelSlots);
+        BuildPlayerPreview();
         BuildStatsSection();
+    }
+
+    private void BuildPlayerPreview()
+    {
+        _previewContainer = new SubViewportContainer();
+        _previewContainer.Position = new Vector2(70f, 14f);
+        _previewContainer.Size = new Vector2(131f, 239f);
+        _previewContainer.Stretch = true;
+        _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
+        AddChild(_previewContainer);
+
+        var viewport = new SubViewport();
+        viewport.Size = new Vector2I(262, 478);
+        viewport.TransparentBg = true;
+        viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+        _previewContainer.AddChild(viewport);
+
+        _previewPivot = new Node3D();
+        viewport.AddChild(_previewPivot);
+
+        PackedScene playerScene = GD.Load<PackedScene>(
+            "res://Assets/Models/Player/player.gltf"
+        );
+
+        if (playerScene == null)
+        {
+            GD.PrintErr("[EquipmentPanel] Could not load player preview model.");
+            return;
+        }
+
+        Node3D model = playerScene.Instantiate<Node3D>();
+        _previewPivot.AddChild(model);
+        model.Position = new Vector3(0f, -0.9f, 0f);
+
+        Node3D playerParts = model.FindChild("player", true, false) as Node3D;
+        Node3D bones = model.FindChild("bones", true, false) as Node3D;
+
+        if (bones != null)
+            bones.Visible = false;
+
+        if (playerParts != null)
+            SetPreviewMeshesVisible(playerParts, true);
+
+        var camera = new Camera3D();
+        camera.Fov = 35f;
+        camera.Position = new Vector3(0f, 0.05f, -3.5f);
+        viewport.AddChild(camera);
+        camera.LookAt(Vector3.Zero, Vector3.Up);
+        camera.Current = true;
+
+        var light = new DirectionalLight3D();
+        light.RotationDegrees = new Vector3(-25f, -25f, 0f);
+        light.LightEnergy = 1.5f;
+        viewport.AddChild(light);
+    }
+
+    private void SetPreviewMeshesVisible(Node parent, bool visible)
+    {
+        foreach (Node child in parent.GetChildren())
+        {
+            if (child is GeometryInstance3D visual)
+                visual.Visible = visible;
+
+            SetPreviewMeshesVisible(child, visible);
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_previewPivot == null || !Visible || _previewContainer == null)
+            return;
+
+        Vector2 mouse = GetLocalMousePosition();
+        Rect2 previewRect = new Rect2(
+            _previewContainer.Position,
+            _previewContainer.Size
+        );
+
+        if (previewRect.HasPoint(mouse))
+        {
+            float normalizedX =
+                (mouse.X - previewRect.GetCenter().X) / (previewRect.Size.X * 0.5f);
+            float normalizedY =
+                (mouse.Y - previewRect.GetCenter().Y) / (previewRect.Size.Y * 0.5f);
+
+            _previewTargetYaw = -Mathf.Clamp(normalizedX, -1f, 1f) * 0.95f;
+            _previewTargetPitch = Mathf.Clamp(normalizedY, -1f, 1f) * 0.18f;
+        }
+        else
+        {
+            _previewTargetYaw = 0f;
+            _previewTargetPitch = 0f;
+        }
+
+        float weight = 1f - Mathf.Exp(-(float)delta * 12f);
+        Vector3 rotation = _previewPivot.Rotation;
+        rotation.X = Mathf.LerpAngle(rotation.X, _previewTargetPitch, weight);
+        rotation.Y = Mathf.LerpAngle(rotation.Y, _previewTargetYaw, weight);
+        _previewPivot.Rotation = rotation;
     }
 
     private void BuildBackground()
@@ -137,11 +242,9 @@ public partial class EquipmentPanel : Control
 
     private void BuildColumn(string[] labels, int columnIndex, Panel[] target)
     {
-        float columnGap = 13f;
-        float columnsWidth = SlotSz * 2f + columnGap;
-        float startX =
-            (PanelW - columnsWidth) / 2f +
-            columnIndex * (SlotSz + columnGap);
+        float startX = columnIndex == 0
+            ? 8f
+            : PanelW - SlotSz - 8f;
         float startY = 14f;
 
         for (int i = 0; i < labels.Length; i++)
