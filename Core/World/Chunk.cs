@@ -3,6 +3,8 @@ using System.Collections.Generic;
 
 public partial class Chunk : Node3D
 {
+    private static Texture2D _bambooLeavesTexture;
+
     public const int SIZE = 16;
     public const int HEIGHT = 16;
 
@@ -801,6 +803,27 @@ public partial class Chunk : Node3D
                             y,
                             z
                         );
+
+                        // Bamboo leaves are a crossed plant-style texture
+                        // drawn over the narrow bamboo stalk in the same cell.
+                        if (block.HasFeature("bamboo:leaves"))
+                        {
+                            _bambooLeavesTexture ??= ResourceLoader.Load<Texture2D>(
+                                "res://Assets/Textures/Plants/bamboo_leaves.png"
+                            );
+
+                            if (_bambooLeavesTexture != null)
+                            {
+                                AddCrossTextureFaces(
+                                    cutoutSurfaces,
+                                    _bambooLeavesTexture,
+                                    x,
+                                    y,
+                                    z,
+                                    1f
+                                );
+                            }
+                        }
                     }
                     else if (block.IsFullBlock())
                     {
@@ -1355,12 +1378,19 @@ private void AddQuadCropped(
         int y,
         int z)
     {
-        float plantHeight = Mathf.Max(1f, resource.CrossHeight);
-        float topY = y + plantHeight;
+        Texture2D tex = resource.TextureSide ?? resource.TextureTop;
+        AddCrossTextureFaces(surfaces, tex, x, y, z, resource.CrossHeight);
+    }
 
-        Texture2D tex =
-            resource.TextureSide ??
-            resource.TextureTop;
+    private void AddCrossTextureFaces(
+        Dictionary<Texture2D, SurfaceTool> surfaces,
+        Texture2D tex,
+        int x,
+        int y,
+        int z,
+        float plantHeight)
+    {
+        float topY = y + Mathf.Max(1f, plantHeight);
 
         if (tex == null)
             return;

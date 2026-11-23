@@ -553,6 +553,13 @@ public partial class ChunkManager : Node3D
             foreach (var mod in mods)
             {
                 string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
+                var savedFeatures = new Godot.Collections.Array();
+                if (mod.Value.Features != null)
+                {
+                    foreach (string feature in mod.Value.Features)
+                        savedFeatures.Add(feature);
+                }
+
                 var blockData = new Godot.Collections.Dictionary
                 {
                     ["id"] = mod.Value.BlockId,
@@ -560,7 +567,8 @@ public partial class ChunkManager : Node3D
                     ["rotation"] = (int)mod.Value.Rotation,
                     ["liquid_level"] = (int)mod.Value.LiquidLevel,
                     ["liquid_falling"] = mod.Value.LiquidFalling,
-                    ["liquid_source"] = mod.Value.LiquidSource
+                    ["liquid_source"] = mod.Value.LiquidSource,
+                    ["features"] = savedFeatures
                 };
                 saveData[key] = blockData;
             }
@@ -764,6 +772,18 @@ public Vector2? LoadPlayerLook()
                 bool hasLiquidLevel = blockData.ContainsKey("liquid_level");
                 bool hasLiquidSource = blockData.ContainsKey("liquid_source");
 
+                string[] features = System.Array.Empty<string>();
+                if (blockData.ContainsKey("features"))
+                {
+                    var savedFeatures = blockData["features"].AsGodotArray();
+                    var featureList = new List<string>();
+
+                    foreach (Variant feature in savedFeatures)
+                        featureList.Add((string)feature);
+
+                    features = featureList.ToArray();
+                }
+
                 state = new BlockState
                 {
                     BlockId = savedBlockId,
@@ -775,7 +795,8 @@ public Vector2? LoadPlayerLook()
                     LiquidFalling = blockData.ContainsKey("liquid_falling") && (bool)blockData["liquid_falling"],
                     LiquidSource = hasLiquidSource
                         ? (bool)blockData["liquid_source"]
-                        : savedBlockId == "water"
+                        : savedBlockId == "water",
+                    Features = features
                 };
             }
 

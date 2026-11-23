@@ -67,8 +67,97 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
+    // LEAF AND BAMBOO BONUS DROPS
+    // =========================================================================
+
+    private void GiveOrSpawnBonusDrop(
+        string itemId,
+        int count,
+        Vector3 dropPosition,
+        bool toInventory)
+    {
+        if (string.IsNullOrEmpty(itemId) || count <= 0)
+            return;
+
+        if (toInventory)
+            AddItemToInventory(itemId, count);
+        else
+            SpawnItemDrop(itemId, count, dropPosition);
+    }
+
+    private void RollLeafDrops(Vector3 dropPosition, bool toInventory)
+    {
+        var manager = BlockDropManager.Instance;
+        if (manager == null)
+        {
+            GD.PrintErr("[Player] BlockDropManager unavailable for leaf drops.");
+            return;
+        }
+
+        foreach (var drop in manager.RollAllDrops("leaves", _dropRng))
+            GiveOrSpawnBonusDrop(drop.ItemId, drop.Count, dropPosition, toInventory);
+    }
+
+    private void RollBambooLeafBonus(
+        BlockState block,
+        Vector3 dropPosition,
+        bool toInventory)
+    {
+        if (block.Features == null ||
+            !block.HasFeature("bamboo:leaves"))
+            return;
+
+        if (_dropRng.Randf() < 0.5f)
+            GiveOrSpawnBonusDrop("bamboo_shoot", 1, dropPosition, toInventory);
+    }
+
+
+    // =========================================================================
     // BREAK BLOCK
     // =========================================================================
+
+    // Bamboo is a continuous stalk: removing one segment makes every
+    // bamboo segment directly above it fall as well.
+    private static bool IsBambooSegment(string blockId)
+    {
+        return blockId is "bamboo_stick" or "bamboo" or "big_bamboo";
+    }
+
+    private void BreakBambooAbove(Vector3I brokenWorldPosition, bool creative)
+    {
+        ChunkManager chunkManager = ChunkManager.Instance;
+        if (chunkManager == null)
+            return;
+
+        Vector3 dropPosition = new Vector3(
+            brokenWorldPosition.X + 0.5f,
+            brokenWorldPosition.Y + 0.5f,
+            brokenWorldPosition.Z + 0.5f
+        );
+
+        Vector3I abovePosition = brokenWorldPosition + Vector3I.Up;
+
+        for (int i = 0; i < 256; i++)
+        {
+            BlockState above = chunkManager.GetBlockAtWorld(abovePosition);
+            if (above.IsAir() || !IsBambooSegment(above.BlockId))
+                break;
+
+            RollBambooLeafBonus(above, dropPosition, creative);
+
+            var (dropId, dropCount) = GetDrop(above.BlockId);
+            if (!string.IsNullOrEmpty(dropId) && dropCount > 0)
+            {
+                if (creative)
+                    AddItemToInventory(dropId, dropCount);
+                else
+                    SpawnItemDrop(dropId, dropCount, dropPosition);
+            }
+
+            chunkManager.SetBlockAtWorld(abovePosition, BlockState.Air);
+            abovePosition += Vector3I.Up;
+        }
+    }
 
     private void TryBreakBlock()
     {
@@ -428,17 +517,28 @@ public partial class Player : CharacterBody3D
 
         if (gm != null && gm.IsCreate)
         {
-            var (dropIdC, dropCountC) =
-                GetDrop(b.BlockId);
+            Vector3 creativeDropPosition =
+                chunk.GlobalPosition +
+                new Vector3(bx + 0.5f, by + 0.5f, bz + 0.5f);
 
-            if (dropIdC is not
-                ("rose" or "dandelion" or "clover"))
+            if (b.BlockId == "leaves")
             {
-                AddItemToInventory(
-                    dropIdC,
-                    dropCountC
-                );
+                // Leaves never drop themselves; each reward rolls independently.
+                RollLeafDrops(creativeDropPosition, true);
             }
+            else
+            {
+                var (dropIdC, dropCountC) = GetDrop(b.BlockId);
+
+                if (!string.IsNullOrEmpty(dropIdC) &&
+                    dropCountC > 0 &&
+                    dropIdC is not ("rose" or "dandelion" or "clover"))
+                {
+                    AddItemToInventory(dropIdC, dropCountC);
+                }
+            }
+
+            RollBambooLeafBonus(b, creativeDropPosition, true);
 
             var overlayC =
     OverlayRegistry.Instance?
@@ -456,6 +556,11 @@ Vector3I brokenWorldPosition = new Vector3I(
     Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
     Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
     Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (IsBambooSegment(b.BlockId))
+{
+    BreakBambooAbove(brokenWorldPosition, true);
+}
 
 if (b.BlockId == "kiln")
 {
@@ -522,7 +627,8 @@ else if (b.BlockId is "crate" or "barrel")
             _breakOverlay?.UpdateBreak(
                 blockWorldPos,
                 _breakHitCount,
-                _breakMiningPower
+                _breakMiningPower,
+                BlockRegistry.Instance?.GetBlock(b.BlockId)
             )
             ??
             (
@@ -534,25 +640,33 @@ else if (b.BlockId is "crate" or "barrel")
         if (shouldBreak)
         {
             var (drop, dropCount) =
-                GetDrop(b.BlockId);
+                b.BlockId == "leaves"
+                    ? ((string)null, 0)
+                    : GetDrop(b.BlockId);
 
-            if (drop is not
-                ("rose" or "dandelion" or "clover"))
-            {
-                Vector3 dropWorldPos =
-                    chunk.GlobalPosition +
-                    new Vector3(
-                        bx + 0.5f,
-                        by + 0.5f,
-                        bz + 0.5f
-                    );
-
-                SpawnItemDrop(
-                    drop,
-                    dropCount,
-                    dropWorldPos
+            Vector3 dropWorldPos =
+                chunk.GlobalPosition +
+                new Vector3(
+                    bx + 0.5f,
+                    by + 0.5f,
+                    bz + 0.5f
                 );
 
+            if (b.BlockId == "leaves")
+            {
+                // Leaves never drop themselves; each reward rolls independently.
+                RollLeafDrops(dropWorldPos, false);
+            }
+            else if (!string.IsNullOrEmpty(drop) &&
+                     dropCount > 0 &&
+                     drop is not ("rose" or "dandelion" or "clover"))
+            {
+                SpawnItemDrop(drop, dropCount, dropWorldPos);
+            }
+
+            RollBambooLeafBonus(b, dropWorldPos, false);
+
+            {
                 var overlay =
     OverlayRegistry.Instance?
         .GetOverlayFromBlockState(b);
@@ -570,6 +684,11 @@ Vector3I brokenWorldPosition = new Vector3I(
     Mathf.FloorToInt(chunk.GlobalPosition.X) + bx,
     Mathf.FloorToInt(chunk.GlobalPosition.Y) + by,
     Mathf.FloorToInt(chunk.GlobalPosition.Z) + bz);
+
+if (IsBambooSegment(b.BlockId))
+{
+    BreakBambooAbove(brokenWorldPosition, false);
+}
 
 if (b.BlockId == "kiln")
 {

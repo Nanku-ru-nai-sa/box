@@ -91,7 +91,8 @@ private static void ScanItemFolder(string folderPath)
 
             // The old chalk/hoe.png texture is retained only as a UI fallback;
             // do not expose a duplicate "hoe" item in Creative.
-            if (!string.Equals(id, "hoe", StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(id, "hoe", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(id, "small_bamboo", StringComparison.OrdinalIgnoreCase))
                 _allItemIds.Add(id);
         }
 
