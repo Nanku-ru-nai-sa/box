@@ -353,35 +353,48 @@ public bool IsMounted =>
                 rightLowerLegMesh = part;
         }
 
-        // Build real rotation pivots at the shoulders, elbows, hips and knees.
-        // Reparent(..., true) preserves each mesh's current world position.
-        if (_leftBicep != null)
-            CreateLimbPivot("LeftShoulderPivot", new Vector3(-0.25f, 1.5f, 0f),
-                _leftArmParts, _leftBicep);
-        if (_rightBicep != null)
-            CreateLimbPivot("RightShoulderPivot", new Vector3(0.25f, 1.5f, 0f),
-                _rightArmParts, _rightBicep);
+        // Build a parent/child joint hierarchy so lower limbs follow the
+        // upper limbs while still bending independently at elbows and knees.
+        Node3D leftShoulder = null;
+        Node3D rightShoulder = null;
+        Node3D leftHip = null;
+        Node3D rightHip = null;
 
-        if (_leftHand != null)
-            CreateLimbPivot("LeftElbowPivot", new Vector3(-0.34375f, 1.125f, 0f),
-                _leftForearmParts, _leftHand);
-        if (_rightHand != null)
-            CreateLimbPivot("RightElbowPivot", new Vector3(0.34375f, 1.125f, 0f),
-                _rightForearmParts, _rightHand);
+        if (_leftBicep != null)
+            leftShoulder = CreateLimbPivot(
+                "LeftShoulderPivot", new Vector3(-0.25f, 1.5f, 0f),
+                _leftArmParts, null, _leftBicep);
+        if (_rightBicep != null)
+            rightShoulder = CreateLimbPivot(
+                "RightShoulderPivot", new Vector3(0.25f, 1.5f, 0f),
+                _rightArmParts, null, _rightBicep);
+
+        if (_leftHand != null && leftShoulder != null)
+            CreateLimbPivot(
+                "LeftElbowPivot", new Vector3(-0.34375f, 1.125f, 0f),
+                _leftForearmParts, leftShoulder, _leftHand);
+        if (_rightHand != null && rightShoulder != null)
+            CreateLimbPivot(
+                "RightElbowPivot", new Vector3(0.34375f, 1.125f, 0f),
+                _rightForearmParts, rightShoulder, _rightHand);
 
         if (leftUpperLegMeshes.Count > 0)
-            CreateLimbPivot("LeftHipPivot", new Vector3(-0.125f, 0.75f, 0f),
-                _leftLegParts, leftUpperLegMeshes.ToArray());
+            leftHip = CreateLimbPivot(
+                "LeftHipPivot", new Vector3(-0.125f, 0.75f, 0f),
+                _leftLegParts, null, leftUpperLegMeshes.ToArray());
         if (rightUpperLegMeshes.Count > 0)
-            CreateLimbPivot("RightHipPivot", new Vector3(0.125f, 0.75f, 0f),
-                _rightLegParts, rightUpperLegMeshes.ToArray());
+            rightHip = CreateLimbPivot(
+                "RightHipPivot", new Vector3(0.125f, 0.75f, 0f),
+                _rightLegParts, null, rightUpperLegMeshes.ToArray());
 
-        if (leftLowerLegMesh != null)
-            CreateLimbPivot("LeftKneePivot", new Vector3(-0.125f, 0.375f, 0f),
-                _leftLowerLegParts, leftLowerLegMesh);
-        if (rightLowerLegMesh != null)
-            CreateLimbPivot("RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
-                _rightLowerLegParts, rightLowerLegMesh);
+        if (leftLowerLegMesh != null && leftHip != null)
+            CreateLimbPivot(
+                "LeftKneePivot", new Vector3(-0.125f, 0.375f, 0f),
+                _leftLowerLegParts, leftHip, leftLowerLegMesh);
+        if (rightLowerLegMesh != null && rightHip != null)
+            CreateLimbPivot(
+                "RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
+                _rightLowerLegParts, rightHip, rightLowerLegMesh);
 
         // The imported model is authored with its feet at local Y=0,
         // while the player's capsule is centred on the CharacterBody.
@@ -390,10 +403,11 @@ public bool IsMounted =>
         SetThirdPersonView(false);
     }
 
-    private void CreateLimbPivot(
+    private Node3D CreateLimbPivot(
         string pivotName,
         Vector3 jointPosition,
         List<(Node3D Node, Vector3 RestRotation)> animationParts,
+        Node3D parentPivot,
         params Node3D[] meshes)
     {
         Node3D pivot = new Node3D
@@ -401,8 +415,14 @@ public bool IsMounted =>
             Name = pivotName
         };
 
-        _playerModelParts.AddChild(pivot);
-        pivot.Position = jointPosition;
+        Node3D pivotParent = parentPivot ?? _playerModelParts;
+        pivotParent.AddChild(pivot);
+
+        // jointPosition is authored in player-model local coordinates.
+        // Convert it into the selected parent's local space so nested joints
+        // still sit exactly at the elbow or knee in the untouched rest pose.
+        Vector3 jointWorldPosition = _playerModelParts.ToGlobal(jointPosition);
+        pivot.Position = pivotParent.ToLocal(jointWorldPosition);
 
         foreach (Node3D mesh in meshes)
         {
@@ -413,6 +433,7 @@ public bool IsMounted =>
         }
 
         animationParts.Add((pivot, pivot.Rotation));
+        return pivot;
     }
 
     private void SetThirdPersonView(bool enabled)
