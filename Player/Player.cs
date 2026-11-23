@@ -27,8 +27,8 @@ public partial class Player : CharacterBody3D
     private Vector3 _rightBicepRestRotation;
     private Vector3 _leftHandRestRotation;
     private Vector3 _rightHandRestRotation;
-    private readonly List<(Node3D Node, Vector3 Rest)> _leftLegParts = new();
-    private readonly List<(Node3D Node, Vector3 Rest)> _rightLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightLegParts = new();
     private RayCast3D _rayCast;
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
@@ -466,7 +466,7 @@ public bool IsMounted =>
     }
 
     private void ApplyLimbSwing(
-        List<(Node3D Node, Vector3 Rest)> parts,
+        List<(Node3D Node, Vector3 RestRotation)> parts,
         float swing)
     {
         foreach (var part in parts)
@@ -475,12 +475,12 @@ public bool IsMounted =>
                 continue;
 
             part.Node.Rotation =
-                part.Rest + new Vector3(swing, 0f, 0f);
+                part.RestRotation + new Vector3(swing, 0f, 0f);
         }
     }
 
     private void ResetLimbParts(
-        List<(Node3D Node, Vector3 Rest)> parts,
+        List<(Node3D Node, Vector3 RestRotation)> parts,
         float delta)
     {
         foreach (var part in parts)
@@ -491,17 +491,17 @@ public bool IsMounted =>
             Vector3 rotation = part.Node.Rotation;
             rotation.X = Mathf.LerpAngle(
                 rotation.X,
-                part.Rest.X,
+                part.RestRotation.X,
                 delta * 8f
             );
             rotation.Y = Mathf.LerpAngle(
                 rotation.Y,
-                part.Rest.Y,
+                part.RestRotation.Y,
                 delta * 8f
             );
             rotation.Z = Mathf.LerpAngle(
                 rotation.Z,
-                part.Rest.Z,
+                part.RestRotation.Z,
                 delta * 8f
             );
             part.Node.Rotation = rotation;
