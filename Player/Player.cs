@@ -23,12 +23,14 @@ public partial class Player : CharacterBody3D
     private Node3D _rightHand;
     private bool _thirdPersonView = false;
     private float _armAnimationTime = 0f;
-    private Vector3 _leftBicepRestRotation;
-    private Vector3 _rightBicepRestRotation;
-    private Vector3 _leftHandRestRotation;
-    private Vector3 _rightHandRestRotation;
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftArmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightArmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftForearmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightForearmParts = new();
     private readonly List<(Node3D Node, Vector3 RestRotation)> _leftLegParts = new();
     private readonly List<(Node3D Node, Vector3 RestRotation)> _rightLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftLowerLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightLowerLegParts = new();
     private RayCast3D _rayCast;
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
@@ -302,37 +304,38 @@ public bool IsMounted =>
             return;
         }
 
-        // The exported model contains a visible player mesh group and a
-        // separate bone-display group. Only the player mesh is rendered.
         _playerModelParts =
             _playerModelRoot.FindChild("player", true, false) as Node3D;
 
         _bonesModel =
             _playerModelRoot.FindChild("bones", true, false) as Node3D;
 
+        if (_playerModelParts == null)
+        {
+            GD.PrintErr("Player model is missing its player mesh group.");
+            return;
+        }
+
+        // Keep references to the visible arm meshes for first-person view.
         _leftBicep =
-            _playerModelRoot.FindChild("left bicep", true, false) as Node3D;
+            _playerModelParts.FindChild("left bicep", true, false) as Node3D;
         _rightBicep =
-            _playerModelRoot.FindChild("right bicep", true, false) as Node3D;
+            _playerModelParts.FindChild("right bicep", true, false) as Node3D;
         _leftHand =
-            _playerModelRoot.FindChild("left hand", true, false) as Node3D;
+            _playerModelParts.FindChild("left hand", true, false) as Node3D;
         _rightHand =
-            _playerModelRoot.FindChild("right hand", true, false) as Node3D;
+            _playerModelParts.FindChild("right hand", true, false) as Node3D;
 
+        // The skeleton is a separate display group. Hide the whole group so
+        // none of its bone meshes can accidentally become visible.
         if (_bonesModel != null)
-            SetModelMeshesVisible(_bonesModel, false);
+            _bonesModel.Visible = false;
 
-        if (_leftBicep != null)
-            _leftBicepRestRotation = _leftBicep.Rotation;
-        if (_rightBicep != null)
-            _rightBicepRestRotation = _rightBicep.Rotation;
-        if (_leftHand != null)
-            _leftHandRestRotation = _leftHand.Rotation;
-        if (_rightHand != null)
-            _rightHandRestRotation = _rightHand.Rotation;
+        List<Node3D> leftUpperLegMeshes = new();
+        List<Node3D> rightUpperLegMeshes = new();
+        Node3D leftLowerLegMesh = null;
+        Node3D rightLowerLegMesh = null;
 
-        // Collect the separate leg meshes so they can swing together.
-        // The exported model has upper and lower pieces for each leg.
         foreach (Node node in _playerModelParts.FindChildren("*", "Node3D", true, false))
         {
             if (node is not Node3D part)
@@ -340,24 +343,76 @@ public bool IsMounted =>
 
             string partName = part.Name.ToString().ToLowerInvariant();
 
-            if (partName.Contains("left") &&
-                (partName.Contains("thigh") || partName.Contains("leg")))
-            {
-                _leftLegParts.Add((part, part.Rotation));
-            }
-            else if (partName.Contains("right") &&
-                     (partName.Contains("thigh") || partName.Contains("leg")))
-            {
-                _rightLegParts.Add((part, part.Rotation));
-            }
+            if (partName == "left thigh")
+                leftUpperLegMeshes.Add(part);
+            else if (partName == "right thigh")
+                rightUpperLegMeshes.Add(part);
+            else if (partName == "lower left leg")
+                leftLowerLegMesh = part;
+            else if (partName == "lower right leg")
+                rightLowerLegMesh = part;
         }
+
+        // Build real rotation pivots at the shoulders, elbows, hips and knees.
+        // Reparent(..., true) preserves each mesh's current world position.
+        if (_leftBicep != null)
+            CreateLimbPivot("LeftShoulderPivot", new Vector3(-0.25f, 1.5f, 0f),
+                _leftArmParts, _leftBicep);
+        if (_rightBicep != null)
+            CreateLimbPivot("RightShoulderPivot", new Vector3(0.25f, 1.5f, 0f),
+                _rightArmParts, _rightBicep);
+
+        if (_leftHand != null)
+            CreateLimbPivot("LeftElbowPivot", new Vector3(-0.34375f, 1.125f, 0f),
+                _leftForearmParts, _leftHand);
+        if (_rightHand != null)
+            CreateLimbPivot("RightElbowPivot", new Vector3(0.34375f, 1.125f, 0f),
+                _rightForearmParts, _rightHand);
+
+        if (leftUpperLegMeshes.Count > 0)
+            CreateLimbPivot("LeftHipPivot", new Vector3(-0.125f, 0.75f, 0f),
+                _leftLegParts, leftUpperLegMeshes.ToArray());
+        if (rightUpperLegMeshes.Count > 0)
+            CreateLimbPivot("RightHipPivot", new Vector3(0.125f, 0.75f, 0f),
+                _rightLegParts, rightUpperLegMeshes.ToArray());
+
+        if (leftLowerLegMesh != null)
+            CreateLimbPivot("LeftKneePivot", new Vector3(-0.125f, 0.375f, 0f),
+                _leftLowerLegParts, leftLowerLegMesh);
+        if (rightLowerLegMesh != null)
+            CreateLimbPivot("RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
+                _rightLowerLegParts, rightLowerLegMesh);
 
         // The imported model is authored with its feet at local Y=0,
         // while the player's capsule is centred on the CharacterBody.
-        // Move the model down by half the capsule height to align both.
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
 
         SetThirdPersonView(false);
+    }
+
+    private void CreateLimbPivot(
+        string pivotName,
+        Vector3 jointPosition,
+        List<(Node3D Node, Vector3 RestRotation)> animationParts,
+        params Node3D[] meshes)
+    {
+        Node3D pivot = new Node3D
+        {
+            Name = pivotName
+        };
+
+        _playerModelParts.AddChild(pivot);
+        pivot.Position = jointPosition;
+
+        foreach (Node3D mesh in meshes)
+        {
+            if (mesh == null || !IsInstanceValid(mesh))
+                continue;
+
+            mesh.Reparent(pivot, true);
+        }
+
+        animationParts.Add((pivot, pivot.Rotation));
     }
 
     private void SetThirdPersonView(bool enabled)
@@ -378,7 +433,7 @@ public bool IsMounted =>
         }
 
         if (_bonesModel != null)
-            SetModelMeshesVisible(_bonesModel, false);
+            _bonesModel.Visible = false;
 
         Camera3D camera = _playerCamera?.GetCamera();
         if (camera != null)
@@ -427,41 +482,53 @@ public bool IsMounted =>
 
             _armAnimationTime += delta * speedFactor * 7f;
 
-            // Match the alternating limb swing used by MobAnimation.
             float swing =
                 Mathf.Sin(_armAnimationTime) * 0.45f;
 
-            ApplyLimbSwing(_leftLegParts, swing);
-            ApplyLimbSwing(_rightLegParts, -swing);
+            float leftLegSwing = swing;
+            float rightLegSwing = -swing;
+            float leftArmSwing = -swing;
+            float rightArmSwing = swing;
 
-            // Arms swing opposite to the legs, just like a natural walk.
-            SetLimbRotation(
-                _leftBicep,
-                _leftBicepRestRotation,
-                -swing
+            // Upper legs swing like the existing mob walk animation.
+            ApplyLimbSwing(_leftLegParts, leftLegSwing);
+            ApplyLimbSwing(_rightLegParts, rightLegSwing);
+
+            // Knees bend during the backward part of each leg's stride.
+            ApplyLimbSwing(
+                _leftLowerLegParts,
+                Mathf.Max(0f, -leftLegSwing) * 0.8f
             );
-            SetLimbRotation(
-                _rightBicep,
-                _rightBicepRestRotation,
-                swing
+            ApplyLimbSwing(
+                _rightLowerLegParts,
+                Mathf.Max(0f, -rightLegSwing) * 0.8f
             );
 
-            if (_leftHand != null)
-                SetLimbRotation(_leftHand, _leftHandRestRotation, -swing * 0.35f);
+            // Upper arms counter-swing against the legs.
+            ApplyLimbSwing(_leftArmParts, leftArmSwing);
+            ApplyLimbSwing(_rightArmParts, rightArmSwing);
 
-            if (_rightHand != null)
-                SetLimbRotation(_rightHand, _rightHandRestRotation, swing * 0.35f);
+            // Elbows flex slightly as the arms swing forward.
+            ApplyLimbSwing(
+                _leftForearmParts,
+                Mathf.Max(0f, leftArmSwing) * 0.3f
+            );
+            ApplyLimbSwing(
+                _rightForearmParts,
+                Mathf.Max(0f, rightArmSwing) * 0.3f
+            );
         }
         else
         {
-            // Ease all limbs back to their authored standing pose.
+            // Ease every joint back to its authored standing pose.
             ResetLimbParts(_leftLegParts, delta);
             ResetLimbParts(_rightLegParts, delta);
-
-            ResetLimb(_leftBicep, _leftBicepRestRotation, delta);
-            ResetLimb(_rightBicep, _rightBicepRestRotation, delta);
-            ResetLimb(_leftHand, _leftHandRestRotation, delta);
-            ResetLimb(_rightHand, _rightHandRestRotation, delta);
+            ResetLimbParts(_leftLowerLegParts, delta);
+            ResetLimbParts(_rightLowerLegParts, delta);
+            ResetLimbParts(_leftArmParts, delta);
+            ResetLimbParts(_rightArmParts, delta);
+            ResetLimbParts(_leftForearmParts, delta);
+            ResetLimbParts(_rightForearmParts, delta);
         }
     }
 
@@ -506,33 +573,6 @@ public bool IsMounted =>
             );
             part.Node.Rotation = rotation;
         }
-    }
-
-    private void SetLimbRotation(
-        Node3D limb,
-        Vector3 rest,
-        float swing)
-    {
-        if (limb == null || !IsInstanceValid(limb))
-            return;
-
-        limb.Rotation =
-            rest + new Vector3(swing, 0f, 0f);
-    }
-
-    private void ResetLimb(
-        Node3D limb,
-        Vector3 rest,
-        float delta)
-    {
-        if (limb == null || !IsInstanceValid(limb))
-            return;
-
-        Vector3 rotation = limb.Rotation;
-        rotation.X = Mathf.LerpAngle(rotation.X, rest.X, delta * 8f);
-        rotation.Y = Mathf.LerpAngle(rotation.Y, rest.Y, delta * 8f);
-        rotation.Z = Mathf.LerpAngle(rotation.Z, rest.Z, delta * 8f);
-        limb.Rotation = rotation;
     }
 
     // =========================================================================
