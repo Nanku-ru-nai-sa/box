@@ -77,8 +77,8 @@ public partial class EquipmentPanel : Control
         // the background transparent, but add soft white ambient light so
         // the model's original textures and colors remain visible.
         var previewEnvironment = new Environment();
-        previewEnvironment.BackgroundMode = Environment.BGModeEnum.Canvas;
-        previewEnvironment.AmbientLightSource = Environment.AmbientSourceEnum.Color;
+        previewEnvironment.BackgroundMode = Environment.BGMode.Canvas;
+        previewEnvironment.AmbientLightSource = Environment.AmbientSource.Color;
         previewEnvironment.AmbientLightColor = Colors.White;
         previewEnvironment.AmbientLightEnergy = 0.85f;
 
