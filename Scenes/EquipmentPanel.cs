@@ -61,7 +61,7 @@ public partial class EquipmentPanel : Control
     private void BuildPlayerPreview()
     {
         _previewContainer = new SubViewportContainer();
-        _previewContainer.Position = new Vector2(70f, 16f);
+        _previewContainer.Position = new Vector2(70f, 20f);
         _previewContainer.Size = new Vector2(131f, 239f);
         _previewContainer.Stretch = true;
         _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
@@ -135,17 +135,33 @@ public partial class EquipmentPanel : Control
         if (headNode == null)
             return;
 
+        // Keep every facial piece on the same pivot so the inventory preview
+        // head turns as one model instead of leaving the eyes and pupils behind.
+        Node3D[] faceParts =
+        {
+            headNode,
+            playerParts.FindChild("left eye", true, false) as Node3D,
+            playerParts.FindChild("left pupil", true, false) as Node3D,
+            playerParts.FindChild("right eye", true, false) as Node3D,
+            playerParts.FindChild("right pupil", true, false) as Node3D
+        };
+
         Vector3 headCenter = Vector3.Zero;
         if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
             headCenter = headMesh.GetAabb().GetCenter();
 
-        // Put the pivot at the centre of the head, then preserve the imported
-        // mesh transform while parenting it beneath that pivot.
+        // Place the shared pivot at the head centre and preserve each imported
+        // mesh's world transform as it is reparented beneath the pivot.
         Vector3 headCenterInModel = model.ToLocal(headNode.ToGlobal(headCenter));
         _previewHeadPivot = new Node3D { Name = "PreviewHeadPivot" };
         model.AddChild(_previewHeadPivot);
         _previewHeadPivot.Position = headCenterInModel;
-        headNode.Reparent(_previewHeadPivot, true);
+
+        foreach (Node3D facePart in faceParts)
+        {
+            if (facePart != null && IsInstanceValid(facePart))
+                facePart.Reparent(_previewHeadPivot, true);
+        }
     }
 
     private void SetPreviewMeshesVisible(Node parent, bool visible)
