@@ -127,8 +127,10 @@ public partial class EquipmentPanel : Control
         // top of the head was clipped by the SubViewportContainer's bounds.
         // Pull the camera back and widen the FOV to leave visible space above
         // the head (and below the feet) without changing the UI panel layout.
-        camera.Fov = 42f;
-        camera.Position = new Vector3(0f, 0.05f, -4.1f);
+        // Keep the preview closer to its original size while
+        // leaving a little extra vertical room above the player's head.
+        camera.Fov = 38f;
+        camera.Position = new Vector3(0f, 0.12f, -3.75f);
         viewport.AddChild(camera);
         camera.LookAt(Vector3.Zero, Vector3.Up);
         camera.Current = true;
