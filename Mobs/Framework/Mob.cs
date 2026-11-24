@@ -1513,6 +1513,11 @@ private void RollAppearance()
                 MoveSpeed *= crawlerSpeedMultiplier;
                 _animation.SetMoveSpeed(MoveSpeed);
 
+                // Drop the whole body closer to the ground so the undead
+                // reads as a crawler instead of a standing model leaning over.
+                _mobModel.Position += new Vector3(0f, -0.30f, 0f);
+                _animation.Update(0f, Vector3.Zero);
+
                 GD.Print(
                     $"{LogPrefix} {Name}: " +
                     (_animation.IsFastCrawler ? "Fast crawler" : "Crawler") +

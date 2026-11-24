@@ -940,25 +940,39 @@ public class MobAnimation
 
         float swing = walking ? Mathf.Sin(_walkAnimationTime) * 0.48f : 0f;
 
-        // Arms stay reaching forward, with a small uneven swing.
-        float armReach = IsCrawler ? 1.05f : 0.72f;
+        // Crawlers pull themselves forward with their arms while their
+        // remaining legs trail flat behind them.
+        float armReach = IsCrawler ? 1.30f : 0.72f;
         SetHumanoidSwing(_humanoidLeftArm, armReach - swing * 0.12f);
         SetHumanoidSwing(_humanoidRightArm, armReach + 0.10f + swing * 0.10f);
-        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.48f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
-        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.48f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
+        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.62f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.62f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
 
-        // Opposite legs move together in a slow, heavy, uneven gait.
-        SetHumanoidSwing(_humanoidLeftLeg, !IsCrawler && walking ? swing : 0f);
-        SetHumanoidSwing(_humanoidRightLeg, !IsCrawler && walking ? -swing : 0f);
-        SetHumanoidSwing(_humanoidLeftLowerLeg,
-            !IsCrawler && walking ? -Mathf.Max(0f, -swing) * 0.62f : 0f);
-        SetHumanoidSwing(_humanoidRightLowerLeg,
-            !IsCrawler && walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
+        if (IsCrawler)
+        {
+            // Negative X rotation points the legs backward (+Z), keeping
+            // them stretched out behind the crawling torso.
+            float dragSway = walking ? swing * 0.10f : 0f;
+            SetHumanoidSwing(_humanoidLeftLeg, -1.25f + dragSway);
+            SetHumanoidSwing(_humanoidRightLeg, -1.25f - dragSway);
+            SetHumanoidSwing(_humanoidLeftLowerLeg, 0.28f);
+            SetHumanoidSwing(_humanoidRightLowerLeg, 0.28f);
+        }
+        else
+        {
+            // Normal undead use a slow, heavy, uneven walking gait.
+            SetHumanoidSwing(_humanoidLeftLeg, walking ? swing : 0f);
+            SetHumanoidSwing(_humanoidRightLeg, walking ? -swing : 0f);
+            SetHumanoidSwing(_humanoidLeftLowerLeg,
+                walking ? -Mathf.Max(0f, -swing) * 0.62f : 0f);
+            SetHumanoidSwing(_humanoidRightLowerLeg,
+                walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
+        }
 
         if (_humanoidBodyPivot != null)
         {
             float bodySway = walking ? Mathf.Sin(_walkAnimationTime) * 0.025f : 0f;
-            float bodyLean = IsCrawler ? -0.85f : -0.10f;
+            float bodyLean = IsCrawler ? -1.20f : -0.10f;
             _humanoidBodyPivot.Rotation =
                 _humanoidBodyRestRotation +
                 new Vector3(bodyLean, 0f, bodySway);
@@ -972,7 +986,7 @@ public class MobAnimation
 
             _humanoidHeadPivot.Rotation =
                 _humanoidHeadRestRotation +
-                new Vector3(-0.20f + headWobble, 0f, walking ? swing * 0.035f : 0f);
+                new Vector3((IsCrawler ? -0.55f : -0.20f) + headWobble, 0f, walking ? swing * 0.035f : 0f);
         }
     }
 

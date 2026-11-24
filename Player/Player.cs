@@ -513,6 +513,12 @@ public bool IsMounted =>
         if (_bonesModel != null)
             _bonesModel.Visible = false;
 
+        // In first-person, never render the player's own head or face.
+        // The camera sits just in front of the head, so extreme pitch
+        // angles could otherwise reveal the face from above or below.
+        if (_playerHeadPivot != null && IsInstanceValid(_playerHeadPivot))
+            _playerHeadPivot.Visible = _cameraMode != 0;
+
         UpdateCameraModeTransform();
     }
 

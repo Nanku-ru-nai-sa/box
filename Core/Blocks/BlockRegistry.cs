@@ -18,6 +18,7 @@ public partial class BlockRegistry : Node
     {
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
+        var torchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/torch.png");
         var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soil.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
@@ -176,6 +177,27 @@ public partial class BlockRegistry : Node
         twig.TextureSide = logSideTex;
         twig.TextureBottom = logTopTex;
         Register(twig);
+
+        // Torch: a centered 2x12x2 pixel post, standing on the block floor.
+        // It is non-solid but selectable, and emits warm point light.
+        var torch = new BlockResource();
+        torch.BlockId = "torch";
+        torch.DisplayName = "Torch";
+        torch.IsSolid = false;
+        torch.CanChisel = false;
+        torch.IsTransparent = true;
+        torch.CanHaveFeatures = false;
+        torch.GrassCanGrow = false;
+        torch.Hardness = 0.2f;
+        torch.IsFlammable = true;
+        torch.IsCustomShape = true;
+        torch.CustomShapeSize = new Vector3(2f / 16f, 12f / 16f, 2f / 16f);
+        torch.TextureTop = torchTex;
+        torch.TextureSide = torchTex;
+        torch.TextureBottom = torchTex;
+        torch.LightLevel = 14;
+        torch.Drops = new[] { "torch" };
+        Register(torch);
 
         // Tiny Log - 4x16x4 pixels
         var tinyLog = new BlockResource();

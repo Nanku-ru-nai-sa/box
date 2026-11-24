@@ -13,6 +13,7 @@ public partial class Chunk : Node3D
     private MeshInstance3D _meshInstance;
     private MeshInstance3D _transparentMeshInstance;
     private StaticBody3D _collisionBody;
+    private readonly List<OmniLight3D> _blockLights = new();
 
     // Plants are non-solid, but still need an invisible raycast target.
     private StaticBody3D _plantTargetBody;
@@ -804,6 +805,19 @@ public partial class Chunk : Node3D
                             z
                         );
 
+                        // Non-solid custom shapes (such as torches) still
+                        // need a selectable target, without blocking movement.
+                        if (!resource.IsSolid)
+                        {
+                            AddPlantTargetCube(
+                                plantTargetSurface,
+                                x,
+                                y,
+                                z
+                            );
+                            hasPlantTargets = true;
+                        }
+
                         // Bamboo leaves are a crossed plant-style texture
                         // drawn over the narrow bamboo stalk in the same cell.
                         if (block.HasFeature("bamboo:leaves"))
@@ -1002,7 +1016,58 @@ if (overlay != null)
             plantTargetMesh
         );
 
+        RebuildBlockLights();
+
         IsGenerated = true;
+    }
+
+    // Recreate dynamic point lights from blocks in this chunk.
+    // LightLevel is also stored on BlockResource so future voxel-light
+    // propagation can use the same source strength.
+    private void RebuildBlockLights()
+    {
+        foreach (OmniLight3D oldLight in _blockLights)
+        {
+            if (oldLight == null || !GodotObject.IsInstanceValid(oldLight))
+                continue;
+
+            RemoveChild(oldLight);
+            oldLight.QueueFree();
+        }
+
+        _blockLights.Clear();
+
+        for (int x = 0; x < SIZE; x++)
+        {
+            for (int y = 0; y < HEIGHT; y++)
+            {
+                for (int z = 0; z < SIZE; z++)
+                {
+                    BlockState block = _blocks[x, y, z];
+                    if (block.IsAir())
+                        continue;
+
+                    BlockResource resource =
+                        BlockRegistry.Instance?.GetBlock(block.BlockId);
+
+                    if (resource == null || resource.LightLevel <= 0)
+                        continue;
+
+                    var light = new OmniLight3D
+                    {
+                        Name = $"BlockLight_{x}_{y}_{z}",
+                        LightColor = new Color(1.0f, 0.72f, 0.42f),
+                        LightEnergy = 1.35f,
+                        OmniRange = Mathf.Clamp(resource.LightLevel * 0.65f, 2.0f, 12.0f),
+                        ShadowEnabled = false
+                    };
+
+                    AddChild(light);
+                    light.Position = new Vector3(x + 0.5f, y + 0.55f, z + 0.5f);
+                    _blockLights.Add(light);
+                }
+            }
+        }
     }
 
     // ============================================================
