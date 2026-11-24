@@ -192,8 +192,8 @@ public partial class BlockRegistry : Node
         twig.TextureBottom = logTopTex;
         Register(twig);
 
-        // Torch: a centered 2x12x2 pixel post, standing on the block floor.
-        // It is non-solid but selectable, and emits warm point light.
+        // Torch: matches the new Blockbench model's 2x12x2 geometry
+        // and its exact 16x16 texture UV rectangles.
         var torch = new BlockResource();
         torch.BlockId = "torch";
         torch.DisplayName = "Torch";
@@ -207,6 +207,12 @@ public partial class BlockRegistry : Node
         torch.IsCustomShape = true;
         torch.CustomShapeSize = new Vector3(2f / 16f, 12f / 16f, 2f / 16f);
         torch.CustomShapeUseFullSideTexture = false;
+        torch.CustomShapeUseExplicitUVs = true;
+        // Blockbench torch.json: side [6,4] to [8,16],
+        // top [6,4] to [8,6], bottom [6,14] to [8,16].
+        torch.CustomShapeSideUV = new Vector4(6f / 16f, 4f / 16f, 8f / 16f, 1f);
+        torch.CustomShapeTopUV = new Vector4(6f / 16f, 4f / 16f, 8f / 16f, 6f / 16f);
+        torch.CustomShapeBottomUV = new Vector4(6f / 16f, 14f / 16f, 8f / 16f, 1f);
         torch.TextureTop = torchTex;
         torch.TextureSide = torchTex;
         torch.TextureBottom = torchTex;

@@ -1178,6 +1178,21 @@ private void AddCustomShapeFaces(
     float sideVMin = 0.0f;
     float sideVMax = height;
 
+    if (resource.CustomShapeUseExplicitUVs)
+    {
+        sideUMin = resource.CustomShapeSideUV.X;
+        sideUMax = resource.CustomShapeSideUV.Z;
+        sideVMin = resource.CustomShapeSideUV.Y;
+        sideVMax = resource.CustomShapeSideUV.W;
+    }
+
+    Vector4 topUV = resource.CustomShapeUseExplicitUVs
+        ? resource.CustomShapeTopUV
+        : new Vector4(uMin, vMin, uMax, vMax);
+    Vector4 bottomUV = resource.CustomShapeUseExplicitUVs
+        ? resource.CustomShapeBottomUV
+        : new Vector4(uMin, vMin, uMax, vMax);
+
 
     // ============================================================
     // TOP
@@ -1201,10 +1216,10 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.Top
             ),
-            uMin,
-            uMax,
-            vMin,
-            vMax
+            topUV.X,
+            topUV.Z,
+            topUV.Y,
+            topUV.W
         );
     }
 
@@ -1231,10 +1246,10 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.Bottom
             ),
-            uMin,
-            uMax,
-            vMin,
-            vMax
+            bottomUV.X,
+            bottomUV.Z,
+            bottomUV.Y,
+            bottomUV.W
         );
     }
 

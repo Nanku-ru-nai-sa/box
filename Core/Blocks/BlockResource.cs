@@ -68,4 +68,11 @@ public partial class BlockResource : Resource
     // When enabled, custom-shape side faces use the entire side texture
     // instead of cropping its center to match the narrow model width.
     [Export] public bool CustomShapeUseFullSideTexture { get; set; } = false;
+
+    // Optional explicit Blockbench-style UV rectangles (pixel coordinates
+    // normalized to a 16x16 texture): x/y = top-left, z/w = bottom-right.
+    [Export] public bool CustomShapeUseExplicitUVs { get; set; } = false;
+    [Export] public Vector4 CustomShapeSideUV { get; set; } = new Vector4(0f, 0f, 1f, 1f);
+    [Export] public Vector4 CustomShapeTopUV { get; set; } = new Vector4(0f, 0f, 1f, 1f);
+    [Export] public Vector4 CustomShapeBottomUV { get; set; } = new Vector4(0f, 0f, 1f, 1f);
 }
