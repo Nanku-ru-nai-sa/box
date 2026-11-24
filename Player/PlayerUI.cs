@@ -1038,7 +1038,7 @@ private void OnSlotMouseEntered(int slotIndex)
     private void BuildEquipmentPanel()
     {
         _equipmentLayer = new CanvasLayer();
-        _equipmentLayer.Layer = 11;
+        _equipmentLayer.Layer = 19;
 
         GetTree().Root.CallDeferred(
             "add_child",
