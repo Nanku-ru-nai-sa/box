@@ -168,9 +168,15 @@ public class MobAnimation
             _backRightLeg == null ||
             _backLeftLeg == null)
         {
-            GD.PrintErr(
-                "[MobAnimation] Could not find all four leg nodes."
-            );
+            bool hasHumanoidModel =
+                _mobModel?.FindChild("player", true, false) != null;
+
+            if (!hasHumanoidModel)
+            {
+                GD.PrintErr(
+                    "[MobAnimation] Could not find all four animal leg nodes."
+                );
+            }
         }
     }
 
