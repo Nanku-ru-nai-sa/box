@@ -18,6 +18,8 @@ public partial class Player : CharacterBody3D
     private Node3D _playerModelParts;
     private Node3D _bonesModel;
     private Node3D _playerHeadPivot;
+    private float _playerHeadHalfDepth = 0.25f;
+    private Vector3 _defaultPlayerCameraPosition = new Vector3(0f, 0.6f, 0f);
     private Node3D _leftBicep;
     private Node3D _rightBicep;
     private Node3D _leftHand;
@@ -182,6 +184,7 @@ public bool IsMounted =>
         InitializeDeathSystem();
 
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
+        _defaultPlayerCameraPosition = _playerCamera?.Position ?? new Vector3(0f, 0.6f, 0f);
         _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
         _rayCast.AddException(this);
         _dropRng.Randomize();
@@ -431,7 +434,10 @@ public bool IsMounted =>
 
         Vector3 headCenter = Vector3.Zero;
         if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
+        {
             headCenter = headMesh.GetAabb().GetCenter();
+            _playerHeadHalfDepth = headMesh.GetAabb().Size.Z * 0.5f;
+        }
 
         // Place the pivot at the head centre, then preserve each imported
         // mesh's world transform as it is parented beneath the pivot.
@@ -518,11 +524,29 @@ public bool IsMounted =>
 
         if (_cameraMode == 0)
         {
+            // Put the camera just in front of the head, rather than at the
+            // character body's origin. This keeps first-person view out of
+            // the head and torso while preserving the camera's mouse pitch.
+            if (_playerHeadPivot != null && _playerModelRoot != null)
+            {
+                Vector3 faceFront = _playerHeadPivot.GlobalPosition +
+                    _playerModelRoot.GlobalBasis *
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+
+                _playerCamera.Position = ToLocal(faceFront);
+            }
+            else
+            {
+                _playerCamera.Position = _defaultPlayerCameraPosition;
+            }
+
             camera.Position = Vector3.Zero;
             camera.Rotation = Vector3.Zero;
         }
         else
         {
+            _playerCamera.Position = _defaultPlayerCameraPosition;
+
             float direction = _cameraMode == 2 ? -1f : 1f;
             camera.Position = new Vector3(
                 0f,
