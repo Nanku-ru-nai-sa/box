@@ -396,6 +396,14 @@ private float _stepTargetY = 0f;
 
     public MobDefinition Definition => _definition;
 
+    private string LogPrefix =>
+        $"[{(!string.IsNullOrWhiteSpace(_definition?.displayName)
+            ? _definition.displayName
+            : (!string.IsNullOrWhiteSpace(_definition?.id)
+                ? _definition.id
+                : "Mob"))}]";
+
+
     public float Health => _health;
 
     public bool IsHappy =>
@@ -487,7 +495,7 @@ private float _stepTargetY = 0f;
             );
 
         GD.Print(
-            $"[Mob] {Name} initialized. " +
+            $"{LogPrefix} {Name} initialized. " +
             $"Definition={DefinitionPath} " +
             $"Behavior={BehaviorType} " +
             $"Gender={_gender}"
@@ -538,7 +546,7 @@ private void RollAppearance()
         SavedBigOverride.HasValue)
     {
         GD.Print(
-            $"[Mob] {Name}: Restored Appearance " +
+            $"{LogPrefix} {Name}: Restored Appearance " +
             $"Shiny={_isShiny} " +
             $"Big={_isBig} " +
             $"Scale={_mobScaleMultiplier}"
@@ -581,7 +589,7 @@ private void RollAppearance()
     }
 
     GD.Print(
-        $"[Mob] {Name}: Appearance " +
+        $"{LogPrefix} {Name}: Appearance " +
         $"Shiny={_isShiny} " +
         $"Big={_isBig} " +
         $"Scale={_mobScaleMultiplier}"
@@ -596,7 +604,7 @@ private void RollAppearance()
         if (_mobModel == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Cannot build collision because model is null."
+                $"{LogPrefix} {Name}: Cannot build collision because model is null."
             );
 
             return;
@@ -679,7 +687,7 @@ private void RollAppearance()
         if (!foundMesh)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: No mesh found for automatic collision."
+                $"{LogPrefix} {Name}: No mesh found for automatic collision."
             );
 
             return;
@@ -735,7 +743,7 @@ private void RollAppearance()
         _collisionBuilt = true;
 
         GD.Print(
-            $"[Mob] {Name}: Automatic collision created. " +
+            $"{LogPrefix} {Name}: Automatic collision created. " +
             $"Size={_adultCollisionSize} " +
             $"Position={_adultCollisionPosition}"
         );
@@ -803,7 +811,7 @@ private void RollAppearance()
         if (_definition == null)
         {
             GD.PrintErr(
-                $"[Mob] Could not load definition: {DefinitionPath}"
+                $"{LogPrefix} Could not load definition: {DefinitionPath}"
             );
 
             return;
@@ -983,7 +991,7 @@ private void RollAppearance()
         }
 
         GD.Print(
-            $"[Mob] Loaded definition: {_definition.displayName}"
+            $"{LogPrefix} Loaded definition: {_definition.displayName}"
         );
     }
 
@@ -1030,7 +1038,7 @@ private void RollAppearance()
             }
 
             GD.Print(
-                $"[Mob] {Name} is going to sleep."
+                $"{LogPrefix} {Name} is going to sleep."
             );
         }
         else
@@ -1053,7 +1061,7 @@ private void RollAppearance()
             }
 
             GD.Print(
-                $"[Mob] {Name} woke up."
+                $"{LogPrefix} {Name} woke up."
             );
         }
     }
@@ -1163,7 +1171,7 @@ private void RollAppearance()
             _gender = ForcedGender.Value;
 
             GD.Print(
-                $"[Mob] {_definition?.displayName ?? Name} " +
+                $"{LogPrefix} {_definition?.displayName ?? Name} " +
                 $"spawned as forced {_gender}"
             );
 
@@ -1213,7 +1221,7 @@ private void RollAppearance()
             _gender = MobGender.Female;
 
         GD.Print(
-            $"[Mob] {_definition.displayName} spawned as {_gender}"
+            $"{LogPrefix} {_definition.displayName} spawned as {_gender}"
         );
     }
 
@@ -1283,7 +1291,7 @@ private void RollAppearance()
         }
 
         GD.PrintErr(
-            $"[Mob] {Name}: Shiny was rolled, " +
+            $"{LogPrefix} {Name}: Shiny was rolled, " +
             $"but shiny.png was not found at {shinyPath}"
         );
     }
@@ -1362,7 +1370,7 @@ private void RollAppearance()
         if (texture == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load mob texture: {texturePath}"
+                $"{LogPrefix} {Name}: Could not load mob texture: {texturePath}"
             );
         }
 
@@ -1458,7 +1466,7 @@ private void RollAppearance()
         if (scene == null)
         {
             GD.PrintErr(
-                $"[Mob] Could not load mob model: {modelPath}"
+                $"{LogPrefix} Could not load mob model: {modelPath}"
             );
 
             return;
@@ -1514,14 +1522,14 @@ private void RollAppearance()
         }
 
         GD.Print(
-            $"[Mob] {Name}: Loaded adult model {modelPath}"
+            $"{LogPrefix} {Name}: Loaded adult model {modelPath}"
         );
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
         {
             GD.Print(
-                $"[Mob] {Name}: Applied texture {texturePath}"
+                $"{LogPrefix} {Name}: Applied texture {texturePath}"
             );
         }
     }
@@ -1540,7 +1548,7 @@ private void RollAppearance()
             modelPath))
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Model path is empty."
+                $"{LogPrefix} {Name}: Model path is empty."
             );
 
             return false;
@@ -1554,7 +1562,7 @@ private void RollAppearance()
         if (scene == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load model: {modelPath}"
+                $"{LogPrefix} {Name}: Could not load model: {modelPath}"
             );
 
             return false;
@@ -1625,7 +1633,7 @@ private void RollAppearance()
         UpdateHealthBarPosition();
 
         GD.Print(
-            $"[Mob] {Name}: Switched model to {modelPath}"
+            $"{LogPrefix} {Name}: Switched model to {modelPath}"
         );
 
         return true;
@@ -2875,7 +2883,7 @@ return true;
         }
 
         GD.Print(
-            $"[Mob] {Name} was sheared. " +
+            $"{LogPrefix} {Name} was sheared. " +
             $"Fur={FurItem} Amount={FurShearAmount}"
         );
 
@@ -2952,7 +2960,7 @@ return true;
         if (!wasAlreadyHostile)
         {
             GD.Print(
-                $"[Mob] {Name} became HOSTILE."
+                $"{LogPrefix} {Name} became HOSTILE."
             );
         }
     }
@@ -3044,6 +3052,14 @@ return true;
             if (!IsInstanceValid(candidate))
                 continue;
 
+            // Dead players are not valid hostile targets until they respawn.
+            if (candidate is Player player &&
+                player.GetStats() != null &&
+                player.GetStats().IsDead)
+            {
+                continue;
+            }
+
             Vector3 playerOffset =
                 candidate.GlobalPosition - GlobalPosition;
             playerOffset.Y = 0f;
@@ -3099,7 +3115,10 @@ return true;
 
         if (closest == null &&
             _player != null &&
-            IsInstanceValid(_player))
+            IsInstanceValid(_player) &&
+            !(_player is Player fallbackPlayer &&
+              fallbackPlayer.GetStats() != null &&
+              fallbackPlayer.GetStats().IsDead))
         {
             closest =
                 _player;
@@ -3194,7 +3213,7 @@ return true;
         if (seasonManager == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: SeasonManager not found. " +
+                $"{LogPrefix} {Name}: SeasonManager not found. " +
                 "Seasonal breeding is blocked."
             );
 
@@ -3267,7 +3286,7 @@ return true;
             cooldown;
 
         GD.Print(
-            $"[Mob] {Name} and {partner.Name} are breeding!"
+            $"{LogPrefix} {Name} and {partner.Name} are breeding!"
         );
 
         SpawnBabies(partner);
@@ -3315,7 +3334,7 @@ return true;
         if (string.IsNullOrEmpty(scenePath))
         {
             GD.PrintErr(
-                $"[Mob] {Name}: SceneFilePath is empty."
+                $"{LogPrefix} {Name}: SceneFilePath is empty."
             );
 
             return;
@@ -3329,7 +3348,7 @@ return true;
         if (mobScene == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load mob scene: {scenePath}"
+                $"{LogPrefix} {Name}: Could not load mob scene: {scenePath}"
             );
 
             return;
@@ -3351,7 +3370,7 @@ return true;
             if (baby == null)
             {
                 GD.PrintErr(
-                    "[Mob] Failed to create baby mob."
+                    LogPrefix + " Failed to create baby mob."
                 );
 
                 continue;
@@ -3391,7 +3410,7 @@ return true;
             baby.MakeBaby();
 
             GD.Print(
-                $"[Mob] Baby {baby.Name} was born. " +
+                $"{LogPrefix} Baby {baby.Name} was born. " +
                 $"Definition={baby.DefinitionPath} " +
                 $"Growth={baby._babyGrowthTimer:F1}s"
             );
@@ -3471,7 +3490,7 @@ return true;
                 _usingCustomBabyModel = true;
 
                 GD.Print(
-                    $"[Mob] {Name}: Using custom baby model."
+                    $"{LogPrefix} {Name}: Using custom baby model."
                 );
             }
             else
@@ -3513,7 +3532,7 @@ return true;
         }
 
         GD.Print(
-            $"[Mob] {Name} is a baby. " +
+            $"{LogPrefix} {Name} is a baby. " +
             $"Growth time: {_babyGrowthTimer:F1} seconds."
         );
     }
@@ -3574,7 +3593,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} has grown into an adult."
+            $"{LogPrefix} {Name} has grown into an adult."
         );
     }
 
@@ -3892,7 +3911,7 @@ return true;
             );
 
             GD.Print(
-                $"[Mob] {Name} hits {targetMob.Name} " +
+                $"{LogPrefix} {Name} hits {targetMob.Name} " +
                 $"for {AttackDamage} damage."
             );
 
@@ -3901,12 +3920,18 @@ return true;
 
         if (target is Player player)
         {
+            PlayerStats playerStats = player.GetStats();
+
+            // Do not damage or report attacks against a dead player.
+            if (playerStats != null && playerStats.IsDead)
+                return;
+
             player.TakeDamage(
                 AttackDamage
             );
 
             GD.Print(
-                $"[Mob] {Name} attacks the player " +
+                $"{LogPrefix} {Name} attacks the player " +
                 $"for {AttackDamage} damage."
             );
 
@@ -3916,7 +3941,7 @@ return true;
         if (IsPlayerNode(target))
         {
             GD.Print(
-                $"[Mob] {Name} found a player target, " +
+                $"{LogPrefix} {Name} found a player target, " +
                 $"but the target is not a Player instance."
             );
         }
@@ -4143,7 +4168,7 @@ return true;
         HasSaddle = true;
 
         GD.Print(
-            $"[Mob] {Name} was saddled."
+            $"{LogPrefix} {Name} was saddled."
         );
 
         return true;
@@ -4161,7 +4186,7 @@ return true;
         HasSaddle = false;
 
         GD.Print(
-            $"[Mob] {Name} saddle removed."
+            $"{LogPrefix} {Name} saddle removed."
         );
 
         return true;
@@ -4207,7 +4232,7 @@ return true;
             Vector3.Zero;
 
         GD.Print(
-            $"[Mob] {Name} is now being ridden by {player.Name}."
+            $"{LogPrefix} {Name} is now being ridden by {player.Name}."
         );
 
         return true;
@@ -4252,7 +4277,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} was dismounted by {rider.Name}."
+            $"{LogPrefix} {Name} was dismounted by {rider.Name}."
         );
     }
 
@@ -4447,7 +4472,7 @@ return true;
             _breedingReady = true;
 
             GD.Print(
-                $"[Mob] {Name} is ready to breed."
+                $"{LogPrefix} {Name} is ready to breed."
             );
         }
 
@@ -4626,7 +4651,7 @@ return true;
         if (parent == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Cannot spawn drops because parent is null."
+                $"{LogPrefix} {Name}: Cannot spawn drops because parent is null."
             );
 
             return;
@@ -4702,7 +4727,7 @@ return true;
             );
 
             GD.Print(
-                $"[Mob] {Name} dropped fur: " +
+                $"{LogPrefix} {Name} dropped fur: " +
                 $"{FurItem} x{FurDeathAmount}"
             );
         }
@@ -4773,7 +4798,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} dropped " +
+            $"{LogPrefix} {Name} dropped " +
             $"{count}x {itemId}"
         );
     }

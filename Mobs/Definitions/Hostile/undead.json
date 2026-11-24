@@ -1,5 +1,5 @@
 {
-  "id": "zombie",
+  "id": "undead",
   "displayName": "Undead",
   "model": "res://Assets/Models/Player/player.gltf",
   "showSkeleton": true,
