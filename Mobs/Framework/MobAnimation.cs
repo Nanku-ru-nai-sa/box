@@ -830,7 +830,10 @@ public class MobAnimation
         bool loseRightArm = rng.Randf() < 0.09f;
         bool loseLeftLeg = rng.Randf() < 0.07f;
         bool loseRightLeg = rng.Randf() < 0.07f;
-        bool loseHead = rng.Randf() < 0.035f;
+        // Give the head more visible variety: normal, skull-only, or
+        // completely missing (including the skull).
+        bool loseEntireHead = rng.Randf() < 0.10f;
+        bool skullOnlyHead = !loseEntireHead && rng.Randf() < 0.28f;
         bool loseTorsoFlesh = rng.Randf() < 0.12f;
 
         bool leftArmFlesh = !loseLeftArm && rng.Randf() >= 0.24f;
@@ -869,12 +872,13 @@ public class MobAnimation
         SetVisible(ribs, rng.Randf() >= 0.18f);
 
         Node3D head = FindHumanoidPart("head");
-        SetVisible(head, !loseHead);
-        SetVisible(FindHumanoidPart("left eye"), !loseHead);
-        SetVisible(FindHumanoidPart("left pupil"), !loseHead);
-        SetVisible(FindHumanoidPart("right eye"), !loseHead);
-        SetVisible(FindHumanoidPart("right pupil"), !loseHead);
-        SetVisible(skull, rng.Randf() >= 0.12f);
+        bool showFleshHead = !loseEntireHead && !skullOnlyHead;
+        SetVisible(head, showFleshHead);
+        SetVisible(FindHumanoidPart("left eye"), showFleshHead);
+        SetVisible(FindHumanoidPart("left pupil"), showFleshHead);
+        SetVisible(FindHumanoidPart("right eye"), showFleshHead);
+        SetVisible(FindHumanoidPart("right pupil"), showFleshHead);
+        SetVisible(skull, !loseEntireHead && (skullOnlyHead || rng.Randf() >= 0.20f));
 
         GD.Print("[MobAnimation] Rolled random undead damage.");
     }

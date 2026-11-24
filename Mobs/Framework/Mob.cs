@@ -1915,6 +1915,13 @@ private void RollAppearance()
 
         UpdateHitFeedback(dt);
 
+        if (_player is Player stompPlayer &&
+            IsInstanceValid(stompPlayer) &&
+            TryGetStompedByPlayer(stompPlayer))
+        {
+            return;
+        }
+
         Vector3 velocity =
             Velocity;
 
@@ -2940,7 +2947,7 @@ return true;
                     closestTarget.GlobalPosition
                 );
 
-            if (distance <= AttackRange)
+            if (IsWithinAttackReach(closestTarget))
             {
                 _state =
                     State.Attack;
@@ -3656,7 +3663,7 @@ return true;
                         closestTarget.GlobalPosition
                     );
 
-                if (distance <= AttackRange)
+                if (IsWithinAttackReach(closestTarget))
                 {
                     if (_state != State.Attack)
                         _attackTimer = 0f;
@@ -3731,7 +3738,7 @@ return true;
                             _hostileTarget.GlobalPosition
                         );
 
-                    if (distance <= AttackRange)
+                    if (IsWithinAttackReach(_hostileTarget))
                     {
                         if (_state != State.Attack)
                             _attackTimer = 0f;
@@ -3831,7 +3838,7 @@ return true;
                                 attackTarget.GlobalPosition
                             );
 
-                        if (distance > AttackRange)
+                        if (!IsWithinAttackReach(attackTarget))
                         {
                             _state = State.Chase;
                             return;
@@ -3860,6 +3867,17 @@ return true;
         float dx = a.X - b.X;
         float dz = a.Z - b.Z;
         return Mathf.Sqrt(dx * dx + dz * dz);
+    }
+
+    private bool IsWithinAttackReach(Node3D target)
+    {
+        if (target == null || !GodotObject.IsInstanceValid(target))
+            return false;
+
+        const float verticalReach = 1.25f;
+
+        return GetFlatDistance(GlobalPosition, target.GlobalPosition) <= AttackRange &&
+               Mathf.Abs(target.GlobalPosition.Y - GlobalPosition.Y) <= verticalReach;
     }
 
     private void SetMovementTarget(
@@ -4567,6 +4585,58 @@ return true;
         }
     }
 
+
+    private bool TryGetStompedByPlayer(Player player)
+    {
+        if (_definition == null ||
+            !string.Equals(_definition.id, "rat", StringComparison.OrdinalIgnoreCase) ||
+            _health <= 0f ||
+            !player.IsOnFloor())
+        {
+            return false;
+        }
+
+        CollisionShape3D playerShape =
+            player.GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+
+        if (playerShape == null ||
+            playerShape.Shape == null)
+        {
+            return false;
+        }
+
+        float playerHalfHeight = 0.9f;
+        if (playerShape.Shape is CapsuleShape3D capsule)
+            playerHalfHeight = capsule.Height * 0.5f;
+        else if (playerShape.Shape is BoxShape3D box)
+            playerHalfHeight = box.Size.Y * 0.5f;
+
+        float playerFeetY =
+            playerShape.GlobalPosition.Y - playerHalfHeight;
+
+        float ratTopY =
+            GlobalPosition.Y +
+            _adultCollisionPosition.Y +
+            (_adultCollisionSize.Y * 0.5f);
+
+        float footToRatTop = playerFeetY - ratTopY;
+
+        // The player must be standing on, or just barely above, the rat.
+        if (footToRatTop < -0.12f || footToRatTop > 0.22f)
+            return false;
+
+        Vector2 playerFlat = new Vector2(player.GlobalPosition.X, player.GlobalPosition.Z);
+        Vector2 ratFlat = new Vector2(GlobalPosition.X, GlobalPosition.Z);
+        float stompRadius =
+            Mathf.Max(_adultCollisionSize.X, _adultCollisionSize.Z) * 0.5f + 0.28f;
+
+        if (playerFlat.DistanceTo(ratFlat) > stompRadius)
+            return false;
+
+        GD.Print($"{LogPrefix} {Name} was stomped flat!");
+        TakeDamage(_health, player.GlobalPosition, player);
+        return true;
+    }
 
     // =========================================================
     // FIND CLOSEST PLAYER
