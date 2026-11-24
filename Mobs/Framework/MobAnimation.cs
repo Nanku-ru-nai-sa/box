@@ -784,6 +784,20 @@ public class MobAnimation
         Node3D rightLowerLeg = FindHumanoidPart("lower right leg");
         Node3D body = FindHumanoidPart("body");
 
+        var leftThighMeshes = new List<Node3D>();
+        var rightThighMeshes = new List<Node3D>();
+        foreach (Node node in _humanoidModel.FindChildren("*", "Node3D", true, false))
+        {
+            if (node is not Node3D part)
+                continue;
+
+            string partName = part.Name.ToString().ToLowerInvariant();
+            if (partName.Contains("thigh") && partName.Contains("left"))
+                leftThighMeshes.Add(part);
+            else if (partName.Contains("thigh") && partName.Contains("right"))
+                rightThighMeshes.Add(part);
+        }
+
         Node3D leftArmBone = FindBonePart("left arm bone");
         Node3D rightArmBone = FindBonePart("right arm bone");
         Node3D leftHandBone = FindBonePart("left hand bone");
@@ -808,6 +822,11 @@ public class MobAnimation
         SetVisible(leftHand, !loseLeftArm && rng.Randf() >= 0.28f);
         SetVisible(rightUpper, !loseRightArm && rng.Randf() >= 0.24f);
         SetVisible(rightHand, !loseRightArm && rng.Randf() >= 0.28f);
+
+        foreach (Node3D thigh in leftThighMeshes)
+            SetVisible(thigh, !loseLeftLeg && rng.Randf() >= 0.16f);
+        foreach (Node3D thigh in rightThighMeshes)
+            SetVisible(thigh, !loseRightLeg && rng.Randf() >= 0.16f);
 
         SetVisible(leftLowerLeg, !loseLeftLeg && rng.Randf() >= 0.20f);
         SetVisible(rightLowerLeg, !loseRightLeg && rng.Randf() >= 0.20f);
