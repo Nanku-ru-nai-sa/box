@@ -3,6 +3,7 @@
   "displayName": "Undead",
   "model": "res://Assets/Models/Player/player.gltf",
   "showSkeleton": true,
+  "randomUndeadDamage": true,
   "stats": {
     "maxHealth": 20.0,
     "moveSpeed": 1.8,
