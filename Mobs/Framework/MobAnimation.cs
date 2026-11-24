@@ -1015,8 +1015,11 @@ public class MobAnimation
 
                 if (toTarget.LengthSquared() > 0.0001f)
                 {
+                    // Measure from the model's stable facing basis rather
+                    // than the already-animated head pivot, avoiding feedback
+                    // that would make the head drift or over-rotate.
                     Vector3 localDirection =
-                        _humanoidHeadPivot.GlobalTransform.Basis.Inverse() *
+                        _humanoidModel.GlobalTransform.Basis.Inverse() *
                         toTarget.Normalized();
 
                     float horizontalLength =
@@ -1032,7 +1035,7 @@ public class MobAnimation
                         -localDirection.Z
                     );
 
-                    lookPitch = Mathf.Clamp(lookPitch, -0.85f, 1.15f);
+                    lookPitch = Mathf.Clamp(lookPitch, -0.85f, 1.55f);
                     lookYaw = Mathf.Clamp(lookYaw, -0.75f, 0.75f);
                 }
             }
