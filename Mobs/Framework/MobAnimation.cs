@@ -649,6 +649,21 @@ public class MobAnimation
         Node3D leftLowerLegBone = FindBonePart("lower left leg bone");
         Node3D rightLowerLegBone = FindBonePart("lower right leg bone");
 
+        Node3D boneLayer =
+            _mobModel?.FindChild("bones", true, false) as Node3D;
+        bool showBones = boneLayer != null && boneLayer.Visible;
+
+        foreach (Node3D bonePart in new[]
+        {
+            leftArmBone, rightArmBone, leftHandBone, rightHandBone,
+            leftLegBone, rightLegBone, leftLowerLegBone, rightLowerLegBone,
+            FindBonePart("skull"), FindBonePart("ribs")
+        })
+        {
+            if (bonePart != null)
+                bonePart.Visible = showBones;
+        }
+
         var leftThighs = new List<Node3D>();
         var rightThighs = new List<Node3D>();
 
@@ -818,29 +833,37 @@ public class MobAnimation
         bool loseHead = rng.Randf() < 0.035f;
         bool loseTorsoFlesh = rng.Randf() < 0.12f;
 
-        SetVisible(leftUpper, !loseLeftArm && rng.Randf() >= 0.24f);
-        SetVisible(leftHand, !loseLeftArm && rng.Randf() >= 0.28f);
-        SetVisible(rightUpper, !loseRightArm && rng.Randf() >= 0.24f);
-        SetVisible(rightHand, !loseRightArm && rng.Randf() >= 0.28f);
+        bool leftArmFlesh = !loseLeftArm && rng.Randf() >= 0.24f;
+        bool rightArmFlesh = !loseRightArm && rng.Randf() >= 0.24f;
+        SetVisible(leftUpper, leftArmFlesh);
+        SetVisible(leftHand, leftArmFlesh && rng.Randf() >= 0.28f);
+        SetVisible(rightUpper, rightArmFlesh);
+        SetVisible(rightHand, rightArmFlesh && rng.Randf() >= 0.28f);
 
+        bool leftLegFlesh = !loseLeftLeg && rng.Randf() >= 0.16f;
+        bool rightLegFlesh = !loseRightLeg && rng.Randf() >= 0.16f;
         foreach (Node3D thigh in leftThighMeshes)
-            SetVisible(thigh, !loseLeftLeg && rng.Randf() >= 0.16f);
+            SetVisible(thigh, leftLegFlesh);
         foreach (Node3D thigh in rightThighMeshes)
-            SetVisible(thigh, !loseRightLeg && rng.Randf() >= 0.16f);
+            SetVisible(thigh, rightLegFlesh);
+        SetVisible(leftLowerLeg, leftLegFlesh && rng.Randf() >= 0.20f);
+        SetVisible(rightLowerLeg, rightLegFlesh && rng.Randf() >= 0.20f);
 
-        SetVisible(leftLowerLeg, !loseLeftLeg && rng.Randf() >= 0.20f);
-        SetVisible(rightLowerLeg, !loseRightLeg && rng.Randf() >= 0.20f);
+        // Bone hands and lower legs remain attached only when their
+        // corresponding upper bone section exists.
+        bool leftArmBoneVisible = !loseLeftArm && rng.Randf() >= 0.18f;
+        bool rightArmBoneVisible = !loseRightArm && rng.Randf() >= 0.18f;
+        bool leftLegBoneVisible = !loseLeftLeg && rng.Randf() >= 0.18f;
+        bool rightLegBoneVisible = !loseRightLeg && rng.Randf() >= 0.18f;
 
-        // Each bone can independently be absent. This permits exposed
-        // skeletal arms/legs, partially skeletal limbs, or no limb at all.
-        SetVisible(leftArmBone, !loseLeftArm && rng.Randf() >= 0.18f);
-        SetVisible(leftHandBone, !loseLeftArm && rng.Randf() >= 0.22f);
-        SetVisible(rightArmBone, !loseRightArm && rng.Randf() >= 0.18f);
-        SetVisible(rightHandBone, !loseRightArm && rng.Randf() >= 0.22f);
-        SetVisible(leftLegBone, !loseLeftLeg && rng.Randf() >= 0.18f);
-        SetVisible(leftLowerLegBone, !loseLeftLeg && rng.Randf() >= 0.22f);
-        SetVisible(rightLegBone, !loseRightLeg && rng.Randf() >= 0.18f);
-        SetVisible(rightLowerLegBone, !loseRightLeg && rng.Randf() >= 0.22f);
+        SetVisible(leftArmBone, leftArmBoneVisible);
+        SetVisible(leftHandBone, leftArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightArmBone, rightArmBoneVisible);
+        SetVisible(rightHandBone, rightArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(leftLegBone, leftLegBoneVisible);
+        SetVisible(leftLowerLegBone, leftLegBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightLegBone, rightLegBoneVisible);
+        SetVisible(rightLowerLegBone, rightLegBoneVisible && rng.Randf() >= 0.22f);
 
         SetVisible(body, !loseTorsoFlesh);
         SetVisible(ribs, rng.Randf() >= 0.18f);
