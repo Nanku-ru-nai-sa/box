@@ -61,7 +61,7 @@ public partial class EquipmentPanel : Control
     private void BuildPlayerPreview()
     {
         _previewContainer = new SubViewportContainer();
-        _previewContainer.Position = new Vector2(70f, 20f);
+        _previewContainer.Position = new Vector2(70f, 24f);
         _previewContainer.Size = new Vector2(131f, 239f);
         _previewContainer.Stretch = true;
         _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
