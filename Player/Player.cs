@@ -1791,19 +1791,31 @@ public bool IsMounted =>
 {
     float dt = (float)delta;
 
-    // Start the interaction ray at the actual camera so it lines up with
-    // the crosshair. Its endpoint remains five units from the player, so
-    // zooming the third-person camera does not change interaction reach.
+    // The RayCast3D is a child of the active camera, so keep its local
+    // direction exactly on the camera's -Z axis (the screen-centre crosshair).
+    // Limit its endpoint to the five-unit interaction sphere around the player
+    // so third-person zoom does not increase the player's reach.
     if (_rayCast != null && _playerCamera?.GetCamera() is Camera3D interactionCamera)
     {
-        _rayCast.GlobalPosition = interactionCamera.GlobalPosition;
-        _rayCast.GlobalRotation = interactionCamera.GlobalRotation;
-
         Vector3 interactionOrigin = GlobalPosition + Vector3.Up * 0.6f;
+        Vector3 cameraOffset = interactionCamera.GlobalPosition - interactionOrigin;
         Vector3 aimDirection = -interactionCamera.GlobalTransform.Basis.Z;
-        Vector3 interactionEnd = interactionOrigin + aimDirection * 5f;
 
-        _rayCast.TargetPosition = _rayCast.ToLocal(interactionEnd);
+        float projection = cameraOffset.Dot(aimDirection);
+        float discriminant = projection * projection + 25f - cameraOffset.LengthSquared();
+
+        if (discriminant > 0f)
+        {
+            float rayLength = -projection + Mathf.Sqrt(discriminant);
+            _rayCast.TargetPosition = new Vector3(0f, 0f, -rayLength);
+        }
+        else
+        {
+            // The camera's centre ray does not pass through the player's
+            // interaction range, so it must not hit something out of reach.
+            _rayCast.TargetPosition = Vector3.Zero;
+        }
+
         _rayCast.ForceRaycastUpdate();
     }
 
