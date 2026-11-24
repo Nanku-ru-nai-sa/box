@@ -640,6 +640,15 @@ public class MobAnimation
         Node3D leftLowerLeg = FindHumanoidPart("lower left leg");
         Node3D rightLowerLeg = FindHumanoidPart("lower right leg");
 
+        Node3D leftArmBone = FindBonePart("left arm bone");
+        Node3D rightArmBone = FindBonePart("right arm bone");
+        Node3D leftHandBone = FindBonePart("left hand bone");
+        Node3D rightHandBone = FindBonePart("right hand bone");
+        Node3D leftLegBone = FindBonePart("left leg bone");
+        Node3D rightLegBone = FindBonePart("right leg bone");
+        Node3D leftLowerLegBone = FindBonePart("lower left leg bone");
+        Node3D rightLowerLegBone = FindBonePart("lower right leg bone");
+
         var leftThighs = new List<Node3D>();
         var rightThighs = new List<Node3D>();
 
@@ -667,14 +676,17 @@ public class MobAnimation
         }
 
         CreateHumanoidPivot("MobLeftShoulder", new Vector3(-0.25f, 1.5f, 0f),
-            _humanoidLeftArm, null, leftBicep);
+            _humanoidLeftArm, null, leftBicep, leftArmBone);
         CreateHumanoidPivot("MobRightShoulder", new Vector3(0.25f, 1.5f, 0f),
-            _humanoidRightArm, null, rightBicep);
+            _humanoidRightArm, null, rightBicep, rightArmBone);
 
         CreateHumanoidPivot("MobLeftElbow", new Vector3(-0.34375f, 1.125f, 0f),
-            _humanoidLeftForearm, _humanoidLeftArm[0].Node, leftHand);
+            _humanoidLeftForearm, _humanoidLeftArm[0].Node, leftHand, leftHandBone);
         CreateHumanoidPivot("MobRightElbow", new Vector3(0.34375f, 1.125f, 0f),
-            _humanoidRightForearm, _humanoidRightArm[0].Node, rightHand);
+            _humanoidRightForearm, _humanoidRightArm[0].Node, rightHand, rightHandBone);
+
+        leftThighs.Add(leftLegBone);
+        rightThighs.Add(rightLegBone);
 
         CreateHumanoidPivot("MobLeftHip", new Vector3(-0.125f, 0.75f, 0f),
             _humanoidLeftLeg, null, leftThighs.ToArray());
@@ -682,9 +694,9 @@ public class MobAnimation
             _humanoidRightLeg, null, rightThighs.ToArray());
 
         CreateHumanoidPivot("MobLeftKnee", new Vector3(-0.125f, 0.375f, 0f),
-            _humanoidLeftLowerLeg, _humanoidLeftLeg[0].Node, leftLowerLeg);
+            _humanoidLeftLowerLeg, _humanoidLeftLeg[0].Node, leftLowerLeg, leftLowerLegBone);
         CreateHumanoidPivot("MobRightKnee", new Vector3(0.125f, 0.375f, 0f),
-            _humanoidRightLowerLeg, _humanoidRightLeg[0].Node, rightLowerLeg);
+            _humanoidRightLowerLeg, _humanoidRightLeg[0].Node, rightLowerLeg, rightLowerLegBone);
 
         // Give the torso a small forward hunch around its actual centre.
         Node3D body = FindHumanoidPart("body");
@@ -697,6 +709,9 @@ public class MobAnimation
             _humanoidModel.AddChild(_humanoidBodyPivot);
             _humanoidBodyPivot.Position = bodyCenter;
             body.Reparent(_humanoidBodyPivot, true);
+            Node3D ribs = FindBonePart("ribs");
+            if (ribs != null)
+                ribs.Reparent(_humanoidBodyPivot, true);
             _humanoidBodyRestRotation = _humanoidBodyPivot.Rotation;
         }
 
@@ -731,6 +746,10 @@ public class MobAnimation
                     facePart.Reparent(_humanoidHeadPivot, true);
             }
 
+            Node3D skull = FindBonePart("skull");
+            if (skull != null)
+                skull.Reparent(_humanoidHeadPivot, true);
+
             _humanoidHeadRestRotation = _humanoidHeadPivot.Rotation;
         }
 
@@ -740,6 +759,89 @@ public class MobAnimation
     private Node3D FindHumanoidPart(string partName)
     {
         return _humanoidModel?.FindChild(partName, true, false) as Node3D;
+    }
+
+    private Node3D FindBonePart(string partName)
+    {
+        Node3D bones =
+            _mobModel?.FindChild("bones", true, false) as Node3D;
+
+        return bones?.FindChild(partName, true, false) as Node3D;
+    }
+
+    // Randomly removes flesh and/or the corresponding bones for one
+    // undead instance. Bone meshes remain children of the same animated
+    // pivots as the flesh, so every surviving piece stays attached.
+    public void ApplyUndeadDamage(RandomNumberGenerator rng)
+    {
+        if (_humanoidModel == null || rng == null)
+            return;
+
+        Node3D leftUpper = FindHumanoidPart("left bicep");
+        Node3D rightUpper = FindHumanoidPart("right bicep");
+        Node3D leftHand = FindHumanoidPart("left hand");
+        Node3D rightHand = FindHumanoidPart("right hand");
+        Node3D leftLowerLeg = FindHumanoidPart("lower left leg");
+        Node3D rightLowerLeg = FindHumanoidPart("lower right leg");
+        Node3D body = FindHumanoidPart("body");
+
+        Node3D leftArmBone = FindBonePart("left arm bone");
+        Node3D rightArmBone = FindBonePart("right arm bone");
+        Node3D leftHandBone = FindBonePart("left hand bone");
+        Node3D rightHandBone = FindBonePart("right hand bone");
+        Node3D leftLegBone = FindBonePart("left leg bone");
+        Node3D rightLegBone = FindBonePart("right leg bone");
+        Node3D leftLowerLegBone = FindBonePart("lower left leg bone");
+        Node3D rightLowerLegBone = FindBonePart("lower right leg bone");
+        Node3D skull = FindBonePart("skull");
+        Node3D ribs = FindBonePart("ribs");
+
+        // Small independent wounds, with a lower chance of losing an
+        // entire limb. Missing an upper limb section also removes its hand.
+        bool loseLeftArm = rng.Randf() < 0.09f;
+        bool loseRightArm = rng.Randf() < 0.09f;
+        bool loseLeftLeg = rng.Randf() < 0.07f;
+        bool loseRightLeg = rng.Randf() < 0.07f;
+        bool loseHead = rng.Randf() < 0.035f;
+        bool loseTorsoFlesh = rng.Randf() < 0.12f;
+
+        SetVisible(leftUpper, !loseLeftArm && rng.Randf() >= 0.24f);
+        SetVisible(leftHand, !loseLeftArm && rng.Randf() >= 0.28f);
+        SetVisible(rightUpper, !loseRightArm && rng.Randf() >= 0.24f);
+        SetVisible(rightHand, !loseRightArm && rng.Randf() >= 0.28f);
+
+        SetVisible(leftLowerLeg, !loseLeftLeg && rng.Randf() >= 0.20f);
+        SetVisible(rightLowerLeg, !loseRightLeg && rng.Randf() >= 0.20f);
+
+        // Each bone can independently be absent. This permits exposed
+        // skeletal arms/legs, partially skeletal limbs, or no limb at all.
+        SetVisible(leftArmBone, !loseLeftArm && rng.Randf() >= 0.18f);
+        SetVisible(leftHandBone, !loseLeftArm && rng.Randf() >= 0.22f);
+        SetVisible(rightArmBone, !loseRightArm && rng.Randf() >= 0.18f);
+        SetVisible(rightHandBone, !loseRightArm && rng.Randf() >= 0.22f);
+        SetVisible(leftLegBone, !loseLeftLeg && rng.Randf() >= 0.18f);
+        SetVisible(leftLowerLegBone, !loseLeftLeg && rng.Randf() >= 0.22f);
+        SetVisible(rightLegBone, !loseRightLeg && rng.Randf() >= 0.18f);
+        SetVisible(rightLowerLegBone, !loseRightLeg && rng.Randf() >= 0.22f);
+
+        SetVisible(body, !loseTorsoFlesh);
+        SetVisible(ribs, rng.Randf() >= 0.18f);
+
+        Node3D head = FindHumanoidPart("head");
+        SetVisible(head, !loseHead);
+        SetVisible(FindHumanoidPart("left eye"), !loseHead);
+        SetVisible(FindHumanoidPart("left pupil"), !loseHead);
+        SetVisible(FindHumanoidPart("right eye"), !loseHead);
+        SetVisible(FindHumanoidPart("right pupil"), !loseHead);
+        SetVisible(skull, rng.Randf() >= 0.12f);
+
+        GD.Print("[MobAnimation] Rolled random undead damage.");
+    }
+
+    private void SetVisible(Node3D part, bool visible)
+    {
+        if (part != null && GodotObject.IsInstanceValid(part))
+            part.Visible = visible;
     }
 
     private void CreateHumanoidPivot(
