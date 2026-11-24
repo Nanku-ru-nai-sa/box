@@ -1164,6 +1164,11 @@ private void AddCustomShapeFaces(
     float vMax =
         1.0f - cropV;
 
+    float sideUMin =
+        resource.CustomShapeUseFullSideTexture ? 0.0f : uMin;
+    float sideUMax =
+        resource.CustomShapeUseFullSideTexture ? 1.0f : uMax;
+
 
     // ============================================================
     // TOP
@@ -1264,8 +1269,8 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.North
             ),
-            uMin,
-            uMax,
+            sideUMin,
+            sideUMax,
             0.0f,
             1.0f
         );
@@ -1284,8 +1289,8 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.South
             ),
-            uMin,
-            uMax,
+            sideUMin,
+            sideUMax,
             0.0f,
             1.0f
         );
@@ -1304,8 +1309,8 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.West
             ),
-            uMin,
-            uMax,
+            sideUMin,
+            sideUMax,
             0.0f,
             1.0f
         );
@@ -1324,8 +1329,8 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.East
             ),
-            uMin,
-            uMax,
+            sideUMin,
+            sideUMax,
             0.0f,
             1.0f
         );

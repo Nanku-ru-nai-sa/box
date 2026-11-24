@@ -64,4 +64,8 @@ public partial class BlockResource : Resource
     [Export] public bool IsCustomShape { get; set; } = false;
 
     [Export] public Vector3 CustomShapeSize { get; set; } = Vector3.One;
+
+    // When enabled, custom-shape side faces use the entire side texture
+    // instead of cropping its center to match the narrow model width.
+    [Export] public bool CustomShapeUseFullSideTexture { get; set; } = false;
 }
