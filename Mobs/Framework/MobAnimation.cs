@@ -31,6 +31,7 @@ public class MobAnimation
     // Optional humanoid rig used by the player model and undead.
     private Node3D _humanoidModel;
     private Vector3 _humanoidModelRestRotation;
+    private Node3D _lookTarget;
     private Node3D _humanoidHeadPivot;
     private Vector3 _humanoidHeadRestRotation;
     private Node3D _humanoidBodyPivot;
@@ -377,6 +378,13 @@ public class MobAnimation
     // =========================================================
     // UPDATE
     // =========================================================
+
+    public void SetLookTarget(Node3D target)
+    {
+        _lookTarget = target != null && GodotObject.IsInstanceValid(target)
+            ? target
+            : null;
+    }
 
     public void Update(
         float dt,
@@ -950,13 +958,15 @@ public class MobAnimation
         // body while the limbs retain only subtle crawling movement.
         _humanoidModel.Rotation =
             _humanoidModelRestRotation +
-            new Vector3(IsCrawler ? -1.20f : 0f, 0f, 0f);
+            new Vector3(IsCrawler ? -1.38f : 0f, 0f, 0f);
 
-        float armReach = IsCrawler ? 0.48f : 0.72f;
-        SetHumanoidSwing(_humanoidLeftArm, armReach - swing * (IsCrawler ? 0.04f : 0.12f));
-        SetHumanoidSwing(_humanoidRightArm, armReach + (IsCrawler ? 0.04f : 0.10f) + swing * 0.10f);
-        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.18f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
-        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.18f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
+        // Crawlers reach and pull with the same broad arm movement as
+        // upright walkers; their legs simply trail behind their body.
+        float armReach = 0.72f;
+        SetHumanoidSwing(_humanoidLeftArm, armReach - swing * 0.12f);
+        SetHumanoidSwing(_humanoidRightArm, armReach + 0.10f + swing * 0.10f);
+        SetHumanoidSwing(_humanoidLeftForearm, 0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, 0.28f + Mathf.Max(0f, -swing) * 0.18f);
 
         if (IsCrawler)
         {
@@ -995,9 +1005,51 @@ public class MobAnimation
                 ? Mathf.Sin(_walkAnimationTime * 0.5f) * 0.035f
                 : 0f;
 
-            _humanoidHeadPivot.Rotation =
+            float lookPitch = IsCrawler ? 1.38f : -0.20f;
+            float lookYaw = 0f;
+
+            if (_lookTarget != null && GodotObject.IsInstanceValid(_lookTarget))
+            {
+                Vector3 toTarget =
+                    _lookTarget.GlobalPosition - _humanoidHeadPivot.GlobalPosition;
+
+                if (toTarget.LengthSquared() > 0.0001f)
+                {
+                    Vector3 localDirection =
+                        _humanoidHeadPivot.GlobalTransform.Basis.Inverse() *
+                        toTarget.Normalized();
+
+                    float horizontalLength =
+                        new Vector2(localDirection.X, localDirection.Z).Length();
+
+                    lookPitch = Mathf.Atan2(
+                        localDirection.Y,
+                        Mathf.Max(0.001f, horizontalLength)
+                    );
+
+                    lookYaw = Mathf.Atan2(
+                        -localDirection.X,
+                        -localDirection.Z
+                    );
+
+                    lookPitch = Mathf.Clamp(lookPitch, -0.85f, 1.15f);
+                    lookYaw = Mathf.Clamp(lookYaw, -0.75f, 0.75f);
+                }
+            }
+
+            Vector3 targetHeadRotation =
                 _humanoidHeadRestRotation +
-                new Vector3((IsCrawler ? -0.08f : -0.20f) + headWobble, 0f, walking ? swing * 0.035f : 0f);
+                new Vector3(
+                    lookPitch + headWobble,
+                    lookYaw,
+                    walking ? swing * 0.035f : 0f
+                );
+
+            _humanoidHeadPivot.Rotation =
+                _humanoidHeadPivot.Rotation.Lerp(
+                    targetHeadRotation,
+                    1f - Mathf.Exp(-8f * Mathf.Max(dt, 0f))
+                );
         }
     }
 

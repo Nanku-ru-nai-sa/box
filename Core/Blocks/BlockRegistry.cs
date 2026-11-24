@@ -206,7 +206,7 @@ public partial class BlockRegistry : Node
         torch.IsFlammable = true;
         torch.IsCustomShape = true;
         torch.CustomShapeSize = new Vector3(2f / 16f, 12f / 16f, 2f / 16f);
-        torch.CustomShapeUseFullSideTexture = true;
+        torch.CustomShapeUseFullSideTexture = false;
         torch.TextureTop = torchTex;
         torch.TextureSide = torchTex;
         torch.TextureBottom = torchTex;

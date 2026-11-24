@@ -2037,6 +2037,12 @@ private void RollAppearance()
 
             if (_animation != null)
             {
+                Node3D lookTarget =
+                    _hostileTarget != null && IsInstanceValid(_hostileTarget)
+                        ? _hostileTarget
+                        : _player;
+
+                _animation.SetLookTarget(lookTarget);
                 _animation.Update(
                     dt,
                     velocity
@@ -2122,6 +2128,12 @@ private void RollAppearance()
 
         if (_animation != null)
         {
+            Node3D lookTarget =
+                _hostileTarget != null && IsInstanceValid(_hostileTarget)
+                    ? _hostileTarget
+                    : _player;
+
+            _animation.SetLookTarget(lookTarget);
             _animation.Update(
                 dt,
                 velocity
