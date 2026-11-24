@@ -2212,6 +2212,21 @@ private void RollAppearance()
 
         if (IsMovementBlocked(direction))
         {
+            // A player is a physical body. When the undead reaches
+            // contact distance, stop pushing sideways around them and
+            // hold position facing them so the attack state can connect.
+            if (_state == State.Chase &&
+                _hostileTarget != null &&
+                IsInstanceValid(_hostileTarget) &&
+                GetFlatDistance(GlobalPosition, _hostileTarget.GlobalPosition)
+                    <= AttackRange + 0.35f)
+            {
+                velocity.X = 0f;
+                velocity.Z = 0f;
+                FaceDirection(direction, dt);
+                return;
+            }
+
             // Try walking up one normal block.
             if (TryStepUp(direction))
             {
@@ -3029,10 +3044,12 @@ return true;
             if (!IsInstanceValid(candidate))
                 continue;
 
+            Vector3 playerOffset =
+                candidate.GlobalPosition - GlobalPosition;
+            playerOffset.Y = 0f;
+
             float distanceSquared =
-                GlobalPosition.DistanceSquaredTo(
-                    candidate.GlobalPosition
-                );
+                playerOffset.LengthSquared();
 
             if (distanceSquared <
                 closestDistanceSquared)
@@ -3063,10 +3080,12 @@ return true;
                 if (otherMob.IsBeefalo())
                     continue;
 
+                Vector3 mobOffset =
+                    otherMob.GlobalPosition - GlobalPosition;
+                mobOffset.Y = 0f;
+
                 float distanceSquared =
-                    GlobalPosition.DistanceSquaredTo(
-                        otherMob.GlobalPosition
-                    );
+                    mobOffset.LengthSquared();
 
                 if (distanceSquared <
                     closestDistanceSquared)
@@ -3613,18 +3632,18 @@ return true;
                     closestTarget;
 
                 float distance =
-                    GlobalPosition.DistanceTo(
+                    GetFlatDistance(
+                        GlobalPosition,
                         closestTarget.GlobalPosition
                     );
 
                 if (distance <= AttackRange)
                 {
-                    _state =
-                        State.Attack;
+                    if (_state != State.Attack)
+                        _attackTimer = 0f;
 
-                    _hasMovementTarget =
-                        false;
-
+                    _state = State.Attack;
+                    _hasMovementTarget = false;
                     return;
                 }
 
@@ -3688,27 +3707,35 @@ return true;
                     IsInstanceValid(_hostileTarget))
                 {
                     float distance =
-                        GlobalPosition.DistanceTo(
+                        GetFlatDistance(
+                            GlobalPosition,
                             _hostileTarget.GlobalPosition
                         );
 
                     if (distance <= AttackRange)
                     {
-                        _state =
-                            State.Attack;
+                        if (_state != State.Attack)
+                            _attackTimer = 0f;
 
-                        _hasMovementTarget =
-                            false;
-
+                        _state = State.Attack;
+                        _hasMovementTarget = false;
                         return;
                     }
 
-                    if (distance <=
-                        DetectionRange)
+                    if (distance <= DetectionRange)
                     {
-                        SetMovementTarget(
-                            _hostileTarget.GlobalPosition
-                        );
+                        Vector3 toTarget =
+                            _hostileTarget.GlobalPosition - GlobalPosition;
+                        toTarget.Y = 0f;
+
+                        if (toTarget.LengthSquared() > 0.0001f)
+                        {
+                            Vector3 approachPoint =
+                                _hostileTarget.GlobalPosition -
+                                toTarget.Normalized() * Mathf.Min(1.0f, AttackRange * 0.75f);
+
+                            SetMovementTarget(approachPoint);
+                        }
                     }
                     else
                     {
@@ -3757,39 +3784,41 @@ return true;
 
             case State.Attack:
 
+                if (_hostileTarget != null &&
+                    IsInstanceValid(_hostileTarget))
+                {
+                    Vector3 faceTarget =
+                        _hostileTarget.GlobalPosition - GlobalPosition;
+                    faceTarget.Y = 0f;
+                    FaceDirection(faceTarget, dt);
+                }
+
                 _attackTimer -= dt;
 
                 if (_attackTimer <= 0f)
                 {
-                    _attackTimer =
-                        AttackInterval;
+                    _attackTimer = AttackInterval;
 
-                    Node3D attackTarget =
-                        FindClosestValidTarget();
+                    Node3D attackTarget = FindClosestValidTarget();
 
                     if (attackTarget != null &&
                         IsInstanceValid(attackTarget))
                     {
-                        _hostileTarget =
-                            attackTarget;
+                        _hostileTarget = attackTarget;
 
                         float distance =
-                            GlobalPosition.DistanceTo(
+                            GetFlatDistance(
+                                GlobalPosition,
                                 attackTarget.GlobalPosition
                             );
 
-                        if (distance >
-                            AttackRange)
+                        if (distance > AttackRange)
                         {
-                            _state =
-                                State.Chase;
-
+                            _state = State.Chase;
                             return;
                         }
 
-                        DealAttackDamage(
-                            attackTarget
-                        );
+                        DealAttackDamage(attackTarget);
                     }
                     else
                     {
@@ -3806,6 +3835,13 @@ return true;
     // =========================================================
     // SET MOVEMENT TARGET
     // =========================================================
+
+    private float GetFlatDistance(Vector3 a, Vector3 b)
+    {
+        float dx = a.X - b.X;
+        float dz = a.Z - b.Z;
+        return Mathf.Sqrt(dx * dx + dz * dz);
+    }
 
     private void SetMovementTarget(
         Vector3 target)
