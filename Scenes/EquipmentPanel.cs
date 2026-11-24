@@ -65,10 +65,11 @@ public partial class EquipmentPanel : Control
         _previewContainer.Size = new Vector2(131f, 239f);
         _previewContainer.Stretch = true;
         _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
-        // Keep the 3D preview above the equipment panel's border/background,
-        // so the top edge cannot draw over the player's head.
-        _previewContainer.ZIndex = 10;
-        _previewContainer.ZAsRelative = true;
+        // Draw the player preview at the front of the equipment UI.
+        // The equipment CanvasLayer sits below the cursor-item layer, so
+        // held items and the operating-system mouse cursor remain on top.
+        _previewContainer.ZIndex = RenderingServer.CanvasItemZMax;
+        _previewContainer.ZAsRelative = false;
         AddChild(_previewContainer);
 
         var viewport = new SubViewport();
