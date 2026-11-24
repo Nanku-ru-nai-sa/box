@@ -2942,11 +2942,6 @@ return true;
             _hostileTarget =
                 closestTarget;
 
-            float distance =
-                GlobalPosition.DistanceTo(
-                    closestTarget.GlobalPosition
-                );
-
             if (IsWithinAttackReach(closestTarget))
             {
                 _state =
@@ -3831,12 +3826,6 @@ return true;
                         IsInstanceValid(attackTarget))
                     {
                         _hostileTarget = attackTarget;
-
-                        float distance =
-                            GetFlatDistance(
-                                GlobalPosition,
-                                attackTarget.GlobalPosition
-                            );
 
                         if (!IsWithinAttackReach(attackTarget))
                         {
