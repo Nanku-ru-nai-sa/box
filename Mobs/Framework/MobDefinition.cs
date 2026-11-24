@@ -9,6 +9,9 @@ public class MobDefinition
     // Default adult model.
     public string model = "";
 
+    // Show the optional skeleton layer included in humanoid models.
+    public bool showSkeleton = false;
+
     public MobStats stats = new MobStats();
     public MobBehavior behavior = new MobBehavior();
     public MobSleepSettings sleep = new MobSleepSettings();
