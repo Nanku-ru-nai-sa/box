@@ -30,6 +30,7 @@ public class MobAnimation
 
     // Optional humanoid rig used by the player model and undead.
     private Node3D _humanoidModel;
+    private Vector3 _humanoidModelRestRotation;
     private Node3D _humanoidHeadPivot;
     private Vector3 _humanoidHeadRestRotation;
     private Node3D _humanoidBodyPivot;
@@ -641,6 +642,10 @@ public class MobAnimation
         if (_humanoidModel == null)
             return;
 
+        // Preserve the imported model orientation. Crawlers rotate the
+        // complete rig from this root so every body part lies down together.
+        _humanoidModelRestRotation = _humanoidModel.Rotation;
+
         Node3D leftBicep = FindHumanoidPart("left bicep");
         Node3D rightBicep = FindHumanoidPart("right bicep");
         Node3D leftHand = FindHumanoidPart("left hand");
@@ -940,23 +945,27 @@ public class MobAnimation
 
         float swing = walking ? Mathf.Sin(_walkAnimationTime) * 0.48f : 0f;
 
-        // Crawlers pull themselves forward with their arms while their
-        // remaining legs trail flat behind them.
-        float armReach = IsCrawler ? 1.30f : 0.72f;
-        SetHumanoidSwing(_humanoidLeftArm, armReach - swing * 0.12f);
-        SetHumanoidSwing(_humanoidRightArm, armReach + 0.10f + swing * 0.10f);
-        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.62f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
-        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.62f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
+        // Crawlers rotate the complete humanoid root, not just the torso.
+        // This keeps the head, arms, torso and surviving legs aligned as one
+        // body while the limbs retain only subtle crawling movement.
+        _humanoidModel.Rotation =
+            _humanoidModelRestRotation +
+            new Vector3(IsCrawler ? -1.20f : 0f, 0f, 0f);
+
+        float armReach = IsCrawler ? 0.48f : 0.72f;
+        SetHumanoidSwing(_humanoidLeftArm, armReach - swing * (IsCrawler ? 0.04f : 0.12f));
+        SetHumanoidSwing(_humanoidRightArm, armReach + (IsCrawler ? 0.04f : 0.10f) + swing * 0.10f);
+        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.18f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.18f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
 
         if (IsCrawler)
         {
-            // Negative X rotation points the legs backward (+Z), keeping
-            // them stretched out behind the crawling torso.
-            float dragSway = walking ? swing * 0.10f : 0f;
-            SetHumanoidSwing(_humanoidLeftLeg, -1.25f + dragSway);
-            SetHumanoidSwing(_humanoidRightLeg, -1.25f - dragSway);
-            SetHumanoidSwing(_humanoidLeftLowerLeg, 0.28f);
-            SetHumanoidSwing(_humanoidRightLowerLeg, 0.28f);
+            // The whole model is already lying down, so keep the legs nearly
+            // straight in local space instead of twisting them independently.
+            SetHumanoidSwing(_humanoidLeftLeg, 0f);
+            SetHumanoidSwing(_humanoidRightLeg, 0f);
+            SetHumanoidSwing(_humanoidLeftLowerLeg, 0.04f);
+            SetHumanoidSwing(_humanoidRightLowerLeg, 0.04f);
         }
         else
         {
@@ -971,8 +980,10 @@ public class MobAnimation
 
         if (_humanoidBodyPivot != null)
         {
-            float bodySway = walking ? Mathf.Sin(_walkAnimationTime) * 0.025f : 0f;
-            float bodyLean = IsCrawler ? -1.20f : -0.10f;
+            float bodySway = walking && !IsCrawler
+                ? Mathf.Sin(_walkAnimationTime) * 0.025f
+                : 0f;
+            float bodyLean = IsCrawler ? 0f : -0.10f;
             _humanoidBodyPivot.Rotation =
                 _humanoidBodyRestRotation +
                 new Vector3(bodyLean, 0f, bodySway);
@@ -980,13 +991,13 @@ public class MobAnimation
 
         if (_humanoidHeadPivot != null)
         {
-            float headWobble = walking
+            float headWobble = walking && !IsCrawler
                 ? Mathf.Sin(_walkAnimationTime * 0.5f) * 0.035f
                 : 0f;
 
             _humanoidHeadPivot.Rotation =
                 _humanoidHeadRestRotation +
-                new Vector3((IsCrawler ? -0.55f : -0.20f) + headWobble, 0f, walking ? swing * 0.035f : 0f);
+                new Vector3((IsCrawler ? -0.08f : -0.20f) + headWobble, 0f, walking ? swing * 0.035f : 0f);
         }
     }
 

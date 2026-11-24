@@ -19,6 +19,20 @@ public partial class BlockRegistry : Node
         // Load all textures
         var dirtTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/dirt.png");
         var torchTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/torch.png");
+        if (torchTex == null)
+        {
+            GD.PrintErr(
+                "[BlockRegistry] Torch texture was not loaded. Expected: " +
+                "res://Assets/Textures/Blocks/torch.png. Check exact spelling, " +
+                "capitalization, and that Godot has imported the PNG."
+            );
+        }
+        else
+        {
+            GD.Print(
+                $"[BlockRegistry] Torch texture loaded: {torchTex.GetWidth()}x{torchTex.GetHeight()}."
+            );
+        }
         var farmlandTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/soil.png") ?? dirtTex;
         var stoneTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/stone.png");
         var rockTex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Blocks/rock.png");
