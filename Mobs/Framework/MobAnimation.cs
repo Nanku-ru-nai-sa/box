@@ -763,10 +763,9 @@ public class MobAnimation
 
     private Node3D FindBonePart(string partName)
     {
-        Node3D bones =
-            _mobModel?.FindChild("bones", true, false) as Node3D;
-
-        return bones?.FindChild(partName, true, false) as Node3D;
+        // Bone meshes are reparented into the same pivots as their
+        // matching flesh, so search the complete mob model after setup.
+        return _mobModel?.FindChild(partName, true, false) as Node3D;
     }
 
     // Randomly removes flesh and/or the corresponding bones for one
