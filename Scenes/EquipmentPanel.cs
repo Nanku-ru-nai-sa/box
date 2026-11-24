@@ -65,6 +65,10 @@ public partial class EquipmentPanel : Control
         _previewContainer.Size = new Vector2(131f, 239f);
         _previewContainer.Stretch = true;
         _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
+        // Keep the 3D preview above the equipment panel's border/background,
+        // so the top edge cannot draw over the player's head.
+        _previewContainer.ZIndex = 10;
+        _previewContainer.ZAsRelative = true;
         AddChild(_previewContainer);
 
         var viewport = new SubViewport();
