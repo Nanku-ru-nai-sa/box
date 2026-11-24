@@ -31,6 +31,8 @@ public class MobAnimation
     // Optional humanoid rig used by the player model and undead.
     private Node3D _humanoidModel;
     private Vector3 _humanoidModelRestRotation;
+    private Node3D _humanoidCrawlerPivot;
+    private Vector3 _humanoidCrawlerRestRotation;
     private Node3D _lookTarget;
     private Node3D _humanoidHeadPivot;
     private Vector3 _humanoidHeadRestRotation;
@@ -724,9 +726,9 @@ public class MobAnimation
         leftThighs.Add(leftLegBone);
         rightThighs.Add(rightLegBone);
 
-        CreateHumanoidPivot("MobLeftHip", new Vector3(-0.125f, 0.75f, 0f),
+        CreateHumanoidPivot("MobLeftHip", new Vector3(-0.125f, 0.75f - (3f / 16f), 0f),
             _humanoidLeftLeg, null, leftThighs.ToArray());
-        CreateHumanoidPivot("MobRightHip", new Vector3(0.125f, 0.75f, 0f),
+        CreateHumanoidPivot("MobRightHip", new Vector3(0.125f, 0.75f - (3f / 16f), 0f),
             _humanoidRightLeg, null, rightThighs.ToArray());
 
         CreateHumanoidPivot("MobLeftKnee", new Vector3(-0.125f, 0.375f, 0f),
@@ -787,6 +789,31 @@ public class MobAnimation
                 skull.Reparent(_humanoidHeadPivot, true);
 
             _humanoidHeadRestRotation = _humanoidHeadPivot.Rotation;
+        }
+
+        // Rotate crawlers around the torso, between the shoulders, rather
+        // than around the imported model origin at the feet.
+        Node parent = _humanoidModel.GetParent();
+        if (parent is Node3D parent3D)
+        {
+            Vector3 torsoWorldPosition = _humanoidBodyPivot != null
+                ? _humanoidBodyPivot.GlobalPosition
+                : _humanoidModel.GlobalPosition +
+                  (_humanoidModel.GlobalBasis * new Vector3(0f, 1.1f, 0f));
+
+            _humanoidCrawlerPivot = new Node3D
+            {
+                Name = "MobCrawlerTorsoPivot"
+            };
+
+            parent3D.AddChild(_humanoidCrawlerPivot);
+            _humanoidCrawlerPivot.GlobalTransform =
+                new Transform3D(Basis.Identity, torsoWorldPosition);
+
+            _humanoidModel.Reparent(_humanoidCrawlerPivot, true);
+
+            _humanoidCrawlerRestRotation = _humanoidCrawlerPivot.Rotation;
+            _humanoidModelRestRotation = _humanoidModel.Rotation;
         }
 
         GD.Print("[MobAnimation] Humanoid walking rig created.");
@@ -856,26 +883,6 @@ public class MobAnimation
         IsCrawler = loseLeftLeg || loseRightLeg;
         IsFastCrawler = loseLeftLeg && loseRightLeg;
 
-        // Lower both hip joints by 3 pixels on crawler variants so the
-        // surviving legs trail from the lowered pelvis instead of floating.
-        if (IsCrawler)
-        {
-            Vector3 hipDrop = new Vector3(0f, -3f / 16f, 0f);
-
-            if (_humanoidLeftLeg.Count > 0 &&
-                _humanoidLeftLeg[0].Node != null &&
-                GodotObject.IsInstanceValid(_humanoidLeftLeg[0].Node))
-            {
-                _humanoidLeftLeg[0].Node.Position += hipDrop;
-            }
-
-            if (_humanoidRightLeg.Count > 0 &&
-                _humanoidRightLeg[0].Node != null &&
-                GodotObject.IsInstanceValid(_humanoidRightLeg[0].Node))
-            {
-                _humanoidRightLeg[0].Node.Position += hipDrop;
-            }
-        }
         // Give the head more visible variety: normal, skull-only, or
         // completely missing (including the skull).
         bool loseEntireHead = rng.Randf() < 0.04f;
@@ -898,24 +905,26 @@ public class MobAnimation
         SetVisible(leftLowerLeg, leftLegFlesh && rng.Randf() >= 0.20f);
         SetVisible(rightLowerLeg, rightLegFlesh && rng.Randf() >= 0.20f);
 
-        // Bone hands and lower legs remain attached only when their
-        // corresponding upper bone section exists.
-        bool leftArmBoneVisible = !loseLeftArm && rng.Randf() >= 0.18f;
-        bool rightArmBoneVisible = !loseRightArm && rng.Randf() >= 0.18f;
-        bool leftLegBoneVisible = !loseLeftLeg && rng.Randf() >= 0.18f;
-        bool rightLegBoneVisible = !loseRightLeg && rng.Randf() >= 0.18f;
+        // Only render exposed skeleton: never draw bone meshes underneath
+        // a visible flesh section. Hands/lower legs are checked separately.
+        bool leftArmBoneVisible = !leftArmFlesh && !loseLeftArm && rng.Randf() >= 0.18f;
+        bool rightArmBoneVisible = !rightArmFlesh && !loseRightArm && rng.Randf() >= 0.18f;
+        bool leftHandFlesh = leftArmFlesh && leftHand.Visible;
+        bool rightHandFlesh = rightArmFlesh && rightHand.Visible;
+        bool leftLegBoneVisible = !leftLegFlesh && !loseLeftLeg && rng.Randf() >= 0.18f;
+        bool rightLegBoneVisible = !rightLegFlesh && !loseRightLeg && rng.Randf() >= 0.18f;
 
         SetVisible(leftArmBone, leftArmBoneVisible);
-        SetVisible(leftHandBone, leftArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(leftHandBone, !leftHandFlesh && leftArmBoneVisible && rng.Randf() >= 0.22f);
         SetVisible(rightArmBone, rightArmBoneVisible);
-        SetVisible(rightHandBone, rightArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightHandBone, !rightHandFlesh && rightArmBoneVisible && rng.Randf() >= 0.22f);
         SetVisible(leftLegBone, leftLegBoneVisible);
-        SetVisible(leftLowerLegBone, leftLegBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(leftLowerLegBone, !leftLowerLeg.Visible && leftLegBoneVisible && rng.Randf() >= 0.22f);
         SetVisible(rightLegBone, rightLegBoneVisible);
-        SetVisible(rightLowerLegBone, rightLegBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightLowerLegBone, !rightLowerLeg.Visible && rightLegBoneVisible && rng.Randf() >= 0.22f);
 
         SetVisible(body, !loseTorsoFlesh);
-        SetVisible(ribs, rng.Randf() >= 0.18f);
+        SetVisible(ribs, !body.Visible && rng.Randf() >= 0.18f);
 
         Node3D head = FindHumanoidPart("head");
         bool showFleshHead = !loseEntireHead && !skullOnlyHead;
@@ -924,7 +933,7 @@ public class MobAnimation
         SetVisible(FindHumanoidPart("left pupil"), showFleshHead);
         SetVisible(FindHumanoidPart("right eye"), showFleshHead);
         SetVisible(FindHumanoidPart("right pupil"), showFleshHead);
-        SetVisible(skull, !loseEntireHead && (skullOnlyHead || rng.Randf() >= 0.20f));
+        SetVisible(skull, !loseEntireHead && !showFleshHead && rng.Randf() >= 0.80f);
 
         GD.Print("[MobAnimation] Rolled random undead damage.");
     }
@@ -977,9 +986,14 @@ public class MobAnimation
         // Crawlers rotate the complete humanoid root, not just the torso.
         // This keeps the head, arms, torso and surviving legs aligned as one
         // body while the limbs retain only subtle crawling movement.
-        _humanoidModel.Rotation =
-            _humanoidModelRestRotation +
-            new Vector3(IsCrawler ? -1.38f : 0f, 0f, 0f);
+        _humanoidModel.Rotation = _humanoidModelRestRotation;
+
+        if (_humanoidCrawlerPivot != null)
+        {
+            _humanoidCrawlerPivot.Rotation =
+                _humanoidCrawlerRestRotation +
+                new Vector3(IsCrawler ? -1.38f : 0f, 0f, 0f);
+        }
 
         // Crawlers reach and pull with the same broad arm movement as
         // upright walkers; their legs simply trail behind their body.

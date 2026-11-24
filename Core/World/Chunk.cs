@@ -1172,9 +1172,11 @@ private void AddCustomShapeFaces(
     // Crop the side texture vertically to match the actual model height.
     // A 12/16-high torch shows 12 real texture rows instead of squeezing
     // all 16 rows into a shorter model. Full-height shapes remain unchanged.
-    float sideVCrop = (1.0f - height) * 0.5f;
-    float sideVMin = sideVCrop;
-    float sideVMax = 1.0f - sideVCrop;
+    // For short posts such as the torch, use the first "height"
+    // fraction of the source texture. A 12/16 model therefore maps
+    // exactly 12 source rows (rather than a centred strip).
+    float sideVMin = 0.0f;
+    float sideVMax = height;
 
 
     // ============================================================
