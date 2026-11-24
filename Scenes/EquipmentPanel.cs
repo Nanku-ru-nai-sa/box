@@ -68,7 +68,7 @@ public partial class EquipmentPanel : Control
         // Draw the player preview at the front of the equipment UI.
         // The equipment CanvasLayer sits below the cursor-item layer, so
         // held items and the operating-system mouse cursor remain on top.
-        _previewContainer.ZIndex = RenderingServer.CanvasItemZMax;
+        _previewContainer.ZIndex = 4096;
         _previewContainer.ZAsRelative = false;
         AddChild(_previewContainer);
 
