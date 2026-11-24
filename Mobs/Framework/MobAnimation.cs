@@ -855,6 +855,27 @@ public class MobAnimation
         bool loseRightLeg = rng.Randf() < 0.10f;
         IsCrawler = loseLeftLeg || loseRightLeg;
         IsFastCrawler = loseLeftLeg && loseRightLeg;
+
+        // Lower both hip joints by 3 pixels on crawler variants so the
+        // surviving legs trail from the lowered pelvis instead of floating.
+        if (IsCrawler)
+        {
+            Vector3 hipDrop = new Vector3(0f, -3f / 16f, 0f);
+
+            if (_humanoidLeftLeg.Count > 0 &&
+                _humanoidLeftLeg[0].Node != null &&
+                GodotObject.IsInstanceValid(_humanoidLeftLeg[0].Node))
+            {
+                _humanoidLeftLeg[0].Node.Position += hipDrop;
+            }
+
+            if (_humanoidRightLeg.Count > 0 &&
+                _humanoidRightLeg[0].Node != null &&
+                GodotObject.IsInstanceValid(_humanoidRightLeg[0].Node))
+            {
+                _humanoidRightLeg[0].Node.Position += hipDrop;
+            }
+        }
         // Give the head more visible variety: normal, skull-only, or
         // completely missing (including the skull).
         bool loseEntireHead = rng.Randf() < 0.04f;

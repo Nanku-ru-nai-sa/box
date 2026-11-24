@@ -1509,14 +1509,14 @@ private void RollAppearance()
 
             if (_animation.IsCrawler)
             {
-                float crawlerSpeedMultiplier = _animation.IsFastCrawler ? 2.0f : 1.25f;
-                MoveSpeed *= crawlerSpeedMultiplier;
+                // Crawlers move at half the speed of upright walkers.
+                MoveSpeed *= 0.5f;
                 _animation.SetMoveSpeed(MoveSpeed);
 
-                // Drop the whole body closer to the ground so the undead
-                // reads as a crawler instead of a standing model leaning over.
-                _mobModel.Position += new Vector3(0f, -0.30f, 0f);
+                // Apply the crawler pose, then align its lowest visible mesh
+                // with the mob's ground level so the legs/body do not float.
                 _animation.Update(0f, Vector3.Zero);
+                AlignCrawlerModelToGround();
 
                 GD.Print(
                     $"{LogPrefix} {Name}: " +
@@ -1550,6 +1550,58 @@ private void RollAppearance()
                 $"{LogPrefix} {Name}: Applied texture {texturePath}"
             );
         }
+    }
+
+
+    // =========================================================
+    // ALIGN CRAWLER MODEL TO GROUND
+    // =========================================================
+
+    private void AlignCrawlerModelToGround()
+    {
+        if (_mobModel == null || !GodotObject.IsInstanceValid(_mobModel))
+            return;
+
+        float lowestY = float.MaxValue;
+        Transform3D mobInverse = GlobalTransform.AffineInverse();
+
+        foreach (Node node in _mobModel.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            if (node is not MeshInstance3D mesh ||
+                mesh.Mesh == null ||
+                !mesh.IsVisibleInTree())
+            {
+                continue;
+            }
+
+            Aabb bounds = mesh.Mesh.GetAabb();
+            Vector3 min = bounds.Position;
+            Vector3 max = bounds.Position + bounds.Size;
+
+            Vector3[] corners =
+            {
+                new Vector3(min.X, min.Y, min.Z),
+                new Vector3(max.X, min.Y, min.Z),
+                new Vector3(min.X, max.Y, min.Z),
+                new Vector3(max.X, max.Y, min.Z),
+                new Vector3(min.X, min.Y, max.Z),
+                new Vector3(max.X, min.Y, max.Z),
+                new Vector3(min.X, max.Y, max.Z),
+                new Vector3(max.X, max.Y, max.Z)
+            };
+
+            foreach (Vector3 corner in corners)
+            {
+                Vector3 point = mobInverse * (mesh.GlobalTransform * corner);
+                lowestY = Mathf.Min(lowestY, point.Y);
+            }
+        }
+
+        if (lowestY == float.MaxValue)
+            return;
+
+        // The mob root marks the ground contact height.
+        _mobModel.Position -= new Vector3(0f, lowestY, 0f);
     }
 
 
