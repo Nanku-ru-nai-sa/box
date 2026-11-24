@@ -32,6 +32,8 @@ public class MobAnimation
     private Node3D _humanoidModel;
     private Node3D _humanoidHeadPivot;
     private Vector3 _humanoidHeadRestRotation;
+    private Node3D _humanoidBodyPivot;
+    private Vector3 _humanoidBodyRestRotation;
     private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftArm = new();
     private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidRightArm = new();
     private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftForearm = new();
@@ -684,6 +686,20 @@ public class MobAnimation
         CreateHumanoidPivot("MobRightKnee", new Vector3(0.125f, 0.375f, 0f),
             _humanoidRightLowerLeg, _humanoidRightLeg[0].Node, rightLowerLeg);
 
+        // Give the torso a small forward hunch around its actual centre.
+        Node3D body = FindHumanoidPart("body");
+        if (body is MeshInstance3D bodyMesh && bodyMesh.Mesh != null)
+        {
+            Vector3 bodyCenter =
+                _humanoidModel.ToLocal(body.ToGlobal(bodyMesh.GetAabb().GetCenter()));
+
+            _humanoidBodyPivot = new Node3D { Name = "MobBodyPivot" };
+            _humanoidModel.AddChild(_humanoidBodyPivot);
+            _humanoidBodyPivot.Position = bodyCenter;
+            body.Reparent(_humanoidBodyPivot, true);
+            _humanoidBodyRestRotation = _humanoidBodyPivot.Rotation;
+        }
+
         // Keep the face together while giving the undead a slight,
         // permanently forward/downward head posture.
         Node3D head = FindHumanoidPart("head");
@@ -766,10 +782,10 @@ public class MobAnimation
         float swing = walking ? Mathf.Sin(_walkAnimationTime) * 0.48f : 0f;
 
         // Arms stay reaching forward, with a small uneven swing.
-        SetHumanoidSwing(_humanoidLeftArm, -0.72f + swing * 0.12f);
-        SetHumanoidSwing(_humanoidRightArm, -0.82f - swing * 0.10f);
-        SetHumanoidSwing(_humanoidLeftForearm, -0.22f + Mathf.Max(0f, swing) * 0.18f);
-        SetHumanoidSwing(_humanoidRightForearm, -0.28f + Mathf.Max(0f, -swing) * 0.18f);
+        SetHumanoidSwing(_humanoidLeftArm, 0.72f - swing * 0.12f);
+        SetHumanoidSwing(_humanoidRightArm, 0.82f + swing * 0.10f);
+        SetHumanoidSwing(_humanoidLeftForearm, 0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, 0.28f + Mathf.Max(0f, -swing) * 0.18f);
 
         // Opposite legs move together in a slow, heavy, uneven gait.
         SetHumanoidSwing(_humanoidLeftLeg, walking ? swing : 0f);
@@ -779,6 +795,14 @@ public class MobAnimation
         SetHumanoidSwing(_humanoidRightLowerLeg,
             walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
 
+        if (_humanoidBodyPivot != null)
+        {
+            float bodySway = walking ? Mathf.Sin(_walkAnimationTime) * 0.025f : 0f;
+            _humanoidBodyPivot.Rotation =
+                _humanoidBodyRestRotation +
+                new Vector3(-0.10f, 0f, bodySway);
+        }
+
         if (_humanoidHeadPivot != null)
         {
             float headWobble = walking
@@ -787,7 +811,7 @@ public class MobAnimation
 
             _humanoidHeadPivot.Rotation =
                 _humanoidHeadRestRotation +
-                new Vector3(0.20f + headWobble, 0f, walking ? swing * 0.035f : 0f);
+                new Vector3(-0.20f + headWobble, 0f, walking ? swing * 0.035f : 0f);
         }
     }
 
