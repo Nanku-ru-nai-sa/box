@@ -1791,12 +1791,19 @@ public bool IsMounted =>
 {
     float dt = (float)delta;
 
-    // Keep interaction reach anchored to the player, not the zoomed camera.
-    // Direction still follows the camera so aiming remains intuitive.
+    // Start the interaction ray at the actual camera so it lines up with
+    // the crosshair. Its endpoint remains five units from the player, so
+    // zooming the third-person camera does not change interaction reach.
     if (_rayCast != null && _playerCamera?.GetCamera() is Camera3D interactionCamera)
     {
-        _rayCast.GlobalPosition = GlobalPosition + Vector3.Up * 0.6f;
+        _rayCast.GlobalPosition = interactionCamera.GlobalPosition;
         _rayCast.GlobalRotation = interactionCamera.GlobalRotation;
+
+        Vector3 interactionOrigin = GlobalPosition + Vector3.Up * 0.6f;
+        Vector3 aimDirection = -interactionCamera.GlobalTransform.Basis.Z;
+        Vector3 interactionEnd = interactionOrigin + aimDirection * 5f;
+
+        _rayCast.TargetPosition = _rayCast.ToLocal(interactionEnd);
         _rayCast.ForceRaycastUpdate();
     }
 

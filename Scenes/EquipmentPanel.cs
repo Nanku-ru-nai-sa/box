@@ -139,29 +139,13 @@ public partial class EquipmentPanel : Control
         if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
             headCenter = headMesh.GetAabb().GetCenter();
 
-        // The imported eyes and pupils are separate meshes. Parent all face
-        // pieces to the same pivot so the preview behaves like the live model.
-        Node3D[] faceParts =
-        {
-            headNode,
-            playerParts.FindChild("left eye", true, false) as Node3D,
-            playerParts.FindChild("left pupil", true, false) as Node3D,
-            playerParts.FindChild("right eye", true, false) as Node3D,
-            playerParts.FindChild("right pupil", true, false) as Node3D
-        };
-
         // Put the pivot at the centre of the head, then preserve the imported
-        // mesh transforms while parenting every face piece beneath it.
+        // mesh transform while parenting it beneath that pivot.
         Vector3 headCenterInModel = model.ToLocal(headNode.ToGlobal(headCenter));
         _previewHeadPivot = new Node3D { Name = "PreviewHeadPivot" };
         model.AddChild(_previewHeadPivot);
         _previewHeadPivot.Position = headCenterInModel;
-
-        foreach (Node3D facePart in faceParts)
-        {
-            if (facePart != null && GodotObject.IsInstanceValid(facePart))
-                facePart.Reparent(_previewHeadPivot, true);
-        }
+        headNode.Reparent(_previewHeadPivot, true);
     }
 
     private void SetPreviewMeshesVisible(Node parent, bool visible)
