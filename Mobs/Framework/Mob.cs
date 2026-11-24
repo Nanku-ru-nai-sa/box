@@ -1471,6 +1471,15 @@ private void RollAppearance()
             _mobModel
         );
 
+        Node3D skeletonLayer =
+            _mobModel.FindChild("bones", true, false) as Node3D;
+
+        if (skeletonLayer != null)
+        {
+            skeletonLayer.Visible =
+                _definition?.showSkeleton ?? false;
+        }
+
         _mobModel.Scale =
     Vector3.One *
     _mobScaleMultiplier;
@@ -1564,6 +1573,15 @@ private void RollAppearance()
         AddChild(
             _mobModel
         );
+
+        Node3D skeletonLayer =
+            _mobModel.FindChild("bones", true, false) as Node3D;
+
+        if (skeletonLayer != null)
+        {
+            skeletonLayer.Visible =
+                _definition?.showSkeleton ?? false;
+        }
 
         _mobModel.Scale =
     Vector3.One *
