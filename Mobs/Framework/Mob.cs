@@ -1506,6 +1506,19 @@ private void RollAppearance()
         if (_definition?.randomUndeadDamage == true)
         {
             _animation.ApplyUndeadDamage(_rng);
+
+            if (_animation.IsCrawler)
+            {
+                float crawlerSpeedMultiplier = _animation.IsFastCrawler ? 2.0f : 1.25f;
+                MoveSpeed *= crawlerSpeedMultiplier;
+                _animation.SetMoveSpeed(MoveSpeed);
+
+                GD.Print(
+                    $"{LogPrefix} {Name}: " +
+                    (_animation.IsFastCrawler ? "Fast crawler" : "Crawler") +
+                    $" variant. MoveSpeed={MoveSpeed:0.##}"
+                );
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(

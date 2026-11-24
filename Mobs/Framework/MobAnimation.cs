@@ -46,6 +46,14 @@ public class MobAnimation
     private float _walkAnimationTime = 0f;
     private float _moveSpeed = 2.5f;
 
+    public bool IsCrawler { get; private set; }
+    public bool IsFastCrawler { get; private set; }
+
+    public void SetMoveSpeed(float speed)
+    {
+        _moveSpeed = Mathf.Max(0.1f, speed);
+    }
+
     // ---------------------------------------------------------
     // SLEEP
     // ---------------------------------------------------------
@@ -828,12 +836,16 @@ public class MobAnimation
         // entire limb. Missing an upper limb section also removes its hand.
         bool loseLeftArm = rng.Randf() < 0.09f;
         bool loseRightArm = rng.Randf() < 0.09f;
-        bool loseLeftLeg = rng.Randf() < 0.07f;
-        bool loseRightLeg = rng.Randf() < 0.07f;
+        // Each leg has a 10% chance to be completely missing.
+        // Losing either leg creates a crawler; losing both creates a fast crawler.
+        bool loseLeftLeg = rng.Randf() < 0.10f;
+        bool loseRightLeg = rng.Randf() < 0.10f;
+        IsCrawler = loseLeftLeg || loseRightLeg;
+        IsFastCrawler = loseLeftLeg && loseRightLeg;
         // Give the head more visible variety: normal, skull-only, or
         // completely missing (including the skull).
-        bool loseEntireHead = rng.Randf() < 0.10f;
-        bool skullOnlyHead = !loseEntireHead && rng.Randf() < 0.28f;
+        bool loseEntireHead = rng.Randf() < 0.04f;
+        bool skullOnlyHead = !loseEntireHead && rng.Randf() < 0.09f;
         bool loseTorsoFlesh = rng.Randf() < 0.12f;
 
         bool leftArmFlesh = !loseLeftArm && rng.Randf() >= 0.24f;
@@ -929,25 +941,27 @@ public class MobAnimation
         float swing = walking ? Mathf.Sin(_walkAnimationTime) * 0.48f : 0f;
 
         // Arms stay reaching forward, with a small uneven swing.
-        SetHumanoidSwing(_humanoidLeftArm, 0.72f - swing * 0.12f);
-        SetHumanoidSwing(_humanoidRightArm, 0.82f + swing * 0.10f);
-        SetHumanoidSwing(_humanoidLeftForearm, 0.22f + Mathf.Max(0f, swing) * 0.18f);
-        SetHumanoidSwing(_humanoidRightForearm, 0.28f + Mathf.Max(0f, -swing) * 0.18f);
+        float armReach = IsCrawler ? 1.05f : 0.72f;
+        SetHumanoidSwing(_humanoidLeftArm, armReach - swing * 0.12f);
+        SetHumanoidSwing(_humanoidRightArm, armReach + 0.10f + swing * 0.10f);
+        SetHumanoidSwing(_humanoidLeftForearm, IsCrawler ? 0.48f : 0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, IsCrawler ? 0.48f : 0.28f + Mathf.Max(0f, -swing) * 0.18f);
 
         // Opposite legs move together in a slow, heavy, uneven gait.
-        SetHumanoidSwing(_humanoidLeftLeg, walking ? swing : 0f);
-        SetHumanoidSwing(_humanoidRightLeg, walking ? -swing : 0f);
+        SetHumanoidSwing(_humanoidLeftLeg, !IsCrawler && walking ? swing : 0f);
+        SetHumanoidSwing(_humanoidRightLeg, !IsCrawler && walking ? -swing : 0f);
         SetHumanoidSwing(_humanoidLeftLowerLeg,
-            walking ? -Mathf.Max(0f, -swing) * 0.62f : 0f);
+            !IsCrawler && walking ? -Mathf.Max(0f, -swing) * 0.62f : 0f);
         SetHumanoidSwing(_humanoidRightLowerLeg,
-            walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
+            !IsCrawler && walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
 
         if (_humanoidBodyPivot != null)
         {
             float bodySway = walking ? Mathf.Sin(_walkAnimationTime) * 0.025f : 0f;
+            float bodyLean = IsCrawler ? -0.85f : -0.10f;
             _humanoidBodyPivot.Rotation =
                 _humanoidBodyRestRotation +
-                new Vector3(-0.10f, 0f, bodySway);
+                new Vector3(bodyLean, 0f, bodySway);
         }
 
         if (_humanoidHeadPivot != null)

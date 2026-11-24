@@ -14,7 +14,7 @@
     "maxIdleTime": 4,
     "detectionRange": 12,
     "attackRange": 1,
-    "attackDamage": 2,
+    "attackDamage": 1,
     "attackInterval": 1
   },
   "flee": {
