@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 // =============================================================
 // MOB ANIMATION
@@ -26,6 +27,19 @@ public class MobAnimation
 
     private Node3D _body;
     private Node3D _head;
+
+    // Optional humanoid rig used by the player model and undead.
+    private Node3D _humanoidModel;
+    private Node3D _humanoidHeadPivot;
+    private Vector3 _humanoidHeadRestRotation;
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftArm = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidRightArm = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftForearm = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidRightForearm = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftLeg = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidRightLeg = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidLeftLowerLeg = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _humanoidRightLowerLeg = new();
 
     private float _walkAnimationTime = 0f;
     private float _moveSpeed = 2.5f;
@@ -93,6 +107,7 @@ public class MobAnimation
             false;
 
         FindNodes();
+        SetupHumanoidRig();
 
         CaptureStandingPose();
 
@@ -594,6 +609,198 @@ public class MobAnimation
 
 
     // =========================================================
+    // HUMANOID / UNDEAD RIG
+    // =========================================================
+    //
+    // The player GLTF stores its body parts as separate meshes.
+    // Build the same shoulder, elbow, hip and knee pivots used by
+    // the player controller so this model can be animated by mobs.
+    // =========================================================
+
+    private void SetupHumanoidRig()
+    {
+        _humanoidModel =
+            _mobModel?.FindChild("player", true, false) as Node3D;
+
+        if (_humanoidModel == null)
+            return;
+
+        Node3D leftBicep = FindHumanoidPart("left bicep");
+        Node3D rightBicep = FindHumanoidPart("right bicep");
+        Node3D leftHand = FindHumanoidPart("left hand");
+        Node3D rightHand = FindHumanoidPart("right hand");
+        Node3D leftLowerLeg = FindHumanoidPart("lower left leg");
+        Node3D rightLowerLeg = FindHumanoidPart("lower right leg");
+
+        var leftThighs = new List<Node3D>();
+        var rightThighs = new List<Node3D>();
+
+        foreach (Node node in _humanoidModel.FindChildren("*", "Node3D", true, false))
+        {
+            if (node is not Node3D part)
+                continue;
+
+            string partName = part.Name.ToString().ToLowerInvariant();
+
+            if (partName.Contains("left") && partName.Contains("thigh"))
+                leftThighs.Add(part);
+            else if (partName.Contains("right") && partName.Contains("thigh"))
+                rightThighs.Add(part);
+        }
+
+        if (leftBicep == null || rightBicep == null ||
+            leftHand == null || rightHand == null ||
+            leftThighs.Count == 0 || rightThighs.Count == 0 ||
+            leftLowerLeg == null || rightLowerLeg == null)
+        {
+            GD.PrintErr("[MobAnimation] Humanoid model is missing one or more named body parts.");
+            _humanoidModel = null;
+            return;
+        }
+
+        CreateHumanoidPivot("MobLeftShoulder", new Vector3(-0.25f, 1.5f, 0f),
+            _humanoidLeftArm, null, leftBicep);
+        CreateHumanoidPivot("MobRightShoulder", new Vector3(0.25f, 1.5f, 0f),
+            _humanoidRightArm, null, rightBicep);
+
+        CreateHumanoidPivot("MobLeftElbow", new Vector3(-0.34375f, 1.125f, 0f),
+            _humanoidLeftForearm, _humanoidLeftArm[0].Node, leftHand);
+        CreateHumanoidPivot("MobRightElbow", new Vector3(0.34375f, 1.125f, 0f),
+            _humanoidRightForearm, _humanoidRightArm[0].Node, rightHand);
+
+        CreateHumanoidPivot("MobLeftHip", new Vector3(-0.125f, 0.75f, 0f),
+            _humanoidLeftLeg, null, leftThighs.ToArray());
+        CreateHumanoidPivot("MobRightHip", new Vector3(0.125f, 0.75f, 0f),
+            _humanoidRightLeg, null, rightThighs.ToArray());
+
+        CreateHumanoidPivot("MobLeftKnee", new Vector3(-0.125f, 0.375f, 0f),
+            _humanoidLeftLowerLeg, _humanoidLeftLeg[0].Node, leftLowerLeg);
+        CreateHumanoidPivot("MobRightKnee", new Vector3(0.125f, 0.375f, 0f),
+            _humanoidRightLowerLeg, _humanoidRightLeg[0].Node, rightLowerLeg);
+
+        // Keep the face together while giving the undead a slight,
+        // permanently forward/downward head posture.
+        Node3D head = FindHumanoidPart("head");
+        if (head != null)
+        {
+            Node3D[] faceParts =
+            {
+                head,
+                FindHumanoidPart("left eye"),
+                FindHumanoidPart("left pupil"),
+                FindHumanoidPart("right eye"),
+                FindHumanoidPart("right pupil")
+            };
+
+            Vector3 center = Vector3.Zero;
+            if (head is MeshInstance3D headMesh && headMesh.Mesh != null)
+                center = headMesh.GetAabb().GetCenter();
+
+            Vector3 centerInModel =
+                _humanoidModel.ToLocal(head.ToGlobal(center));
+
+            _humanoidHeadPivot = new Node3D { Name = "MobHeadPivot" };
+            _humanoidModel.AddChild(_humanoidHeadPivot);
+            _humanoidHeadPivot.Position = centerInModel;
+
+            foreach (Node3D facePart in faceParts)
+            {
+                if (facePart != null && GodotObject.IsInstanceValid(facePart))
+                    facePart.Reparent(_humanoidHeadPivot, true);
+            }
+
+            _humanoidHeadRestRotation = _humanoidHeadPivot.Rotation;
+        }
+
+        GD.Print("[MobAnimation] Humanoid walking rig created.");
+    }
+
+    private Node3D FindHumanoidPart(string partName)
+    {
+        return _humanoidModel?.FindChild(partName, true, false) as Node3D;
+    }
+
+    private void CreateHumanoidPivot(
+        string pivotName,
+        Vector3 jointPosition,
+        List<(Node3D Node, Vector3 RestRotation)> animationParts,
+        Node3D parentPivot,
+        params Node3D[] meshes)
+    {
+        Node3D pivot = new Node3D { Name = pivotName };
+        Node3D pivotParent = parentPivot ?? _humanoidModel;
+        pivotParent.AddChild(pivot);
+
+        Vector3 jointWorldPosition = _humanoidModel.ToGlobal(jointPosition);
+        pivot.Position = pivotParent.ToLocal(jointWorldPosition);
+
+        foreach (Node3D mesh in meshes)
+        {
+            if (mesh != null && GodotObject.IsInstanceValid(mesh))
+                mesh.Reparent(pivot, true);
+        }
+
+        animationParts.Add((pivot, pivot.Rotation));
+    }
+
+    private void UpdateHumanoidWalkAnimation(float dt, Vector3 velocity)
+    {
+        if (_humanoidModel == null)
+            return;
+
+        float speed = new Vector2(velocity.X, velocity.Z).Length();
+        bool walking = speed > 0.05f;
+
+        if (walking)
+        {
+            float animationSpeed = Mathf.Clamp(speed / _moveSpeed, 0.45f, 1.5f);
+            _walkAnimationTime += dt * animationSpeed * 5.2f;
+        }
+
+        float swing = walking ? Mathf.Sin(_walkAnimationTime) * 0.48f : 0f;
+
+        // Arms stay reaching forward, with a small uneven swing.
+        SetHumanoidSwing(_humanoidLeftArm, -0.72f + swing * 0.12f);
+        SetHumanoidSwing(_humanoidRightArm, -0.82f - swing * 0.10f);
+        SetHumanoidSwing(_humanoidLeftForearm, -0.22f + Mathf.Max(0f, swing) * 0.18f);
+        SetHumanoidSwing(_humanoidRightForearm, -0.28f + Mathf.Max(0f, -swing) * 0.18f);
+
+        // Opposite legs move together in a slow, heavy, uneven gait.
+        SetHumanoidSwing(_humanoidLeftLeg, walking ? swing : 0f);
+        SetHumanoidSwing(_humanoidRightLeg, walking ? -swing : 0f);
+        SetHumanoidSwing(_humanoidLeftLowerLeg,
+            walking ? -Mathf.Max(0f, -swing) * 0.62f : 0f);
+        SetHumanoidSwing(_humanoidRightLowerLeg,
+            walking ? -Mathf.Max(0f, swing) * 0.62f : 0f);
+
+        if (_humanoidHeadPivot != null)
+        {
+            float headWobble = walking
+                ? Mathf.Sin(_walkAnimationTime * 0.5f) * 0.035f
+                : 0f;
+
+            _humanoidHeadPivot.Rotation =
+                _humanoidHeadRestRotation +
+                new Vector3(0.20f + headWobble, 0f, walking ? swing * 0.035f : 0f);
+        }
+    }
+
+    private void SetHumanoidSwing(
+        List<(Node3D Node, Vector3 RestRotation)> parts,
+        float xRotation)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !GodotObject.IsInstanceValid(part.Node))
+                continue;
+
+            part.Node.Rotation =
+                part.RestRotation + new Vector3(xRotation, 0f, 0f);
+        }
+    }
+
+
+    // =========================================================
     // WALKING
     // =========================================================
 
@@ -601,6 +808,12 @@ public class MobAnimation
         float dt,
         Vector3 velocity)
     {
+        if (_humanoidModel != null)
+        {
+            UpdateHumanoidWalkAnimation(dt, velocity);
+            return;
+        }
+
         if (_mobModel == null ||
             _frontRightLeg == null ||
             _frontLeftLeg == null ||
