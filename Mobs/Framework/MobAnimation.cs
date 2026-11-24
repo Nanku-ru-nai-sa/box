@@ -909,19 +909,21 @@ public class MobAnimation
         // a visible flesh section. Hands/lower legs are checked separately.
         bool leftArmBoneVisible = !leftArmFlesh && !loseLeftArm && rng.Randf() >= 0.18f;
         bool rightArmBoneVisible = !rightArmFlesh && !loseRightArm && rng.Randf() >= 0.18f;
-        bool leftHandFlesh = leftArmFlesh && leftHand.Visible;
-        bool rightHandFlesh = rightArmFlesh && rightHand.Visible;
+        bool leftHandBoneVisible = !leftHand.Visible && !loseLeftArm && rng.Randf() >= 0.22f;
+        bool rightHandBoneVisible = !rightHand.Visible && !loseRightArm && rng.Randf() >= 0.22f;
         bool leftLegBoneVisible = !leftLegFlesh && !loseLeftLeg && rng.Randf() >= 0.18f;
         bool rightLegBoneVisible = !rightLegFlesh && !loseRightLeg && rng.Randf() >= 0.18f;
+        bool leftLowerLegBoneVisible = !leftLowerLeg.Visible && !loseLeftLeg && rng.Randf() >= 0.22f;
+        bool rightLowerLegBoneVisible = !rightLowerLeg.Visible && !loseRightLeg && rng.Randf() >= 0.22f;
 
         SetVisible(leftArmBone, leftArmBoneVisible);
-        SetVisible(leftHandBone, !leftHandFlesh && leftArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(leftHandBone, leftHandBoneVisible);
         SetVisible(rightArmBone, rightArmBoneVisible);
-        SetVisible(rightHandBone, !rightHandFlesh && rightArmBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightHandBone, rightHandBoneVisible);
         SetVisible(leftLegBone, leftLegBoneVisible);
-        SetVisible(leftLowerLegBone, !leftLowerLeg.Visible && leftLegBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(leftLowerLegBone, leftLowerLegBoneVisible);
         SetVisible(rightLegBone, rightLegBoneVisible);
-        SetVisible(rightLowerLegBone, !rightLowerLeg.Visible && rightLegBoneVisible && rng.Randf() >= 0.22f);
+        SetVisible(rightLowerLegBone, rightLowerLegBoneVisible);
 
         SetVisible(body, !loseTorsoFlesh);
         SetVisible(ribs, !body.Visible && rng.Randf() >= 0.18f);
