@@ -122,8 +122,13 @@ public partial class EquipmentPanel : Control
         }
 
         var camera = new Camera3D();
-        camera.Fov = 35f;
-        camera.Position = new Vector3(0f, 0.05f, -3.5f);
+        // The preview is rendered into a fixed-height SubViewport. The old
+        // 35-degree FOV at 3.5 units filled that viewport too tightly, so the
+        // top of the head was clipped by the SubViewportContainer's bounds.
+        // Pull the camera back and widen the FOV to leave visible space above
+        // the head (and below the feet) without changing the UI panel layout.
+        camera.Fov = 42f;
+        camera.Position = new Vector3(0f, 0.05f, -4.1f);
         viewport.AddChild(camera);
         camera.LookAt(Vector3.Zero, Vector3.Up);
         camera.Current = true;
