@@ -396,6 +396,14 @@ private float _stepTargetY = 0f;
 
     public MobDefinition Definition => _definition;
 
+    private string LogPrefix =>
+        $"[{(!string.IsNullOrWhiteSpace(_definition?.displayName)
+            ? _definition.displayName
+            : (!string.IsNullOrWhiteSpace(_definition?.id)
+                ? _definition.id
+                : "Mob"))}]";
+
+
     public float Health => _health;
 
     public bool IsHappy =>
@@ -487,7 +495,7 @@ private float _stepTargetY = 0f;
             );
 
         GD.Print(
-            $"[Mob] {Name} initialized. " +
+            $"{LogPrefix} {Name} initialized. " +
             $"Definition={DefinitionPath} " +
             $"Behavior={BehaviorType} " +
             $"Gender={_gender}"
@@ -538,7 +546,7 @@ private void RollAppearance()
         SavedBigOverride.HasValue)
     {
         GD.Print(
-            $"[Mob] {Name}: Restored Appearance " +
+            $"{LogPrefix} {Name}: Restored Appearance " +
             $"Shiny={_isShiny} " +
             $"Big={_isBig} " +
             $"Scale={_mobScaleMultiplier}"
@@ -581,7 +589,7 @@ private void RollAppearance()
     }
 
     GD.Print(
-        $"[Mob] {Name}: Appearance " +
+        $"{LogPrefix} {Name}: Appearance " +
         $"Shiny={_isShiny} " +
         $"Big={_isBig} " +
         $"Scale={_mobScaleMultiplier}"
@@ -596,7 +604,7 @@ private void RollAppearance()
         if (_mobModel == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Cannot build collision because model is null."
+                $"{LogPrefix} {Name}: Cannot build collision because model is null."
             );
 
             return;
@@ -679,7 +687,7 @@ private void RollAppearance()
         if (!foundMesh)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: No mesh found for automatic collision."
+                $"{LogPrefix} {Name}: No mesh found for automatic collision."
             );
 
             return;
@@ -735,7 +743,7 @@ private void RollAppearance()
         _collisionBuilt = true;
 
         GD.Print(
-            $"[Mob] {Name}: Automatic collision created. " +
+            $"{LogPrefix} {Name}: Automatic collision created. " +
             $"Size={_adultCollisionSize} " +
             $"Position={_adultCollisionPosition}"
         );
@@ -803,7 +811,7 @@ private void RollAppearance()
         if (_definition == null)
         {
             GD.PrintErr(
-                $"[Mob] Could not load definition: {DefinitionPath}"
+                $"{LogPrefix} Could not load definition: {DefinitionPath}"
             );
 
             return;
@@ -983,7 +991,7 @@ private void RollAppearance()
         }
 
         GD.Print(
-            $"[Mob] Loaded definition: {_definition.displayName}"
+            $"{LogPrefix} Loaded definition: {_definition.displayName}"
         );
     }
 
@@ -1030,7 +1038,7 @@ private void RollAppearance()
             }
 
             GD.Print(
-                $"[Mob] {Name} is going to sleep."
+                $"{LogPrefix} {Name} is going to sleep."
             );
         }
         else
@@ -1053,7 +1061,7 @@ private void RollAppearance()
             }
 
             GD.Print(
-                $"[Mob] {Name} woke up."
+                $"{LogPrefix} {Name} woke up."
             );
         }
     }
@@ -1163,7 +1171,7 @@ private void RollAppearance()
             _gender = ForcedGender.Value;
 
             GD.Print(
-                $"[Mob] {_definition?.displayName ?? Name} " +
+                $"{LogPrefix} {_definition?.displayName ?? Name} " +
                 $"spawned as forced {_gender}"
             );
 
@@ -1213,7 +1221,7 @@ private void RollAppearance()
             _gender = MobGender.Female;
 
         GD.Print(
-            $"[Mob] {_definition.displayName} spawned as {_gender}"
+            $"{LogPrefix} {_definition.displayName} spawned as {_gender}"
         );
     }
 
@@ -1283,7 +1291,7 @@ private void RollAppearance()
         }
 
         GD.PrintErr(
-            $"[Mob] {Name}: Shiny was rolled, " +
+            $"{LogPrefix} {Name}: Shiny was rolled, " +
             $"but shiny.png was not found at {shinyPath}"
         );
     }
@@ -1362,7 +1370,7 @@ private void RollAppearance()
         if (texture == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load mob texture: {texturePath}"
+                $"{LogPrefix} {Name}: Could not load mob texture: {texturePath}"
             );
         }
 
@@ -1458,7 +1466,7 @@ private void RollAppearance()
         if (scene == null)
         {
             GD.PrintErr(
-                $"[Mob] Could not load mob model: {modelPath}"
+                $"{LogPrefix} Could not load mob model: {modelPath}"
             );
 
             return;
@@ -1470,6 +1478,15 @@ private void RollAppearance()
         AddChild(
             _mobModel
         );
+
+        Node3D skeletonLayer =
+            _mobModel.FindChild("bones", true, false) as Node3D;
+
+        if (skeletonLayer != null)
+        {
+            skeletonLayer.Visible =
+                _definition?.showSkeleton ?? false;
+        }
 
         _mobModel.Scale =
     Vector3.One *
@@ -1486,6 +1503,29 @@ private void RollAppearance()
             MoveSpeed
         );
 
+        if (_definition?.randomUndeadDamage == true)
+        {
+            _animation.ApplyUndeadDamage(_rng);
+
+            if (_animation.IsCrawler)
+            {
+                // Crawlers move at half the speed of upright walkers.
+                MoveSpeed *= 0.5f;
+                _animation.SetMoveSpeed(MoveSpeed);
+
+                // Apply the crawler pose, then align its lowest visible mesh
+                // with the mob's ground level so the legs/body do not float.
+                _animation.Update(0f, Vector3.Zero);
+                AlignCrawlerModelToGround();
+
+                GD.Print(
+                    $"{LogPrefix} {Name}: " +
+                    (_animation.IsFastCrawler ? "Fast crawler" : "Crawler") +
+                    $" variant. MoveSpeed={MoveSpeed:0.##}"
+                );
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(
             texturePath))
         {
@@ -1500,16 +1540,68 @@ private void RollAppearance()
         }
 
         GD.Print(
-            $"[Mob] {Name}: Loaded adult model {modelPath}"
+            $"{LogPrefix} {Name}: Loaded adult model {modelPath}"
         );
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
         {
             GD.Print(
-                $"[Mob] {Name}: Applied texture {texturePath}"
+                $"{LogPrefix} {Name}: Applied texture {texturePath}"
             );
         }
+    }
+
+
+    // =========================================================
+    // ALIGN CRAWLER MODEL TO GROUND
+    // =========================================================
+
+    private void AlignCrawlerModelToGround()
+    {
+        if (_mobModel == null || !GodotObject.IsInstanceValid(_mobModel))
+            return;
+
+        float lowestY = float.MaxValue;
+        Transform3D mobInverse = GlobalTransform.AffineInverse();
+
+        foreach (Node node in _mobModel.FindChildren("*", "MeshInstance3D", true, false))
+        {
+            if (node is not MeshInstance3D mesh ||
+                mesh.Mesh == null ||
+                !mesh.IsVisibleInTree())
+            {
+                continue;
+            }
+
+            Aabb bounds = mesh.Mesh.GetAabb();
+            Vector3 min = bounds.Position;
+            Vector3 max = bounds.Position + bounds.Size;
+
+            Vector3[] corners =
+            {
+                new Vector3(min.X, min.Y, min.Z),
+                new Vector3(max.X, min.Y, min.Z),
+                new Vector3(min.X, max.Y, min.Z),
+                new Vector3(max.X, max.Y, min.Z),
+                new Vector3(min.X, min.Y, max.Z),
+                new Vector3(max.X, min.Y, max.Z),
+                new Vector3(min.X, max.Y, max.Z),
+                new Vector3(max.X, max.Y, max.Z)
+            };
+
+            foreach (Vector3 corner in corners)
+            {
+                Vector3 point = mobInverse * (mesh.GlobalTransform * corner);
+                lowestY = Mathf.Min(lowestY, point.Y);
+            }
+        }
+
+        if (lowestY == float.MaxValue)
+            return;
+
+        // The mob root marks the ground contact height.
+        _mobModel.Position -= new Vector3(0f, lowestY, 0f);
     }
 
 
@@ -1526,7 +1618,7 @@ private void RollAppearance()
             modelPath))
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Model path is empty."
+                $"{LogPrefix} {Name}: Model path is empty."
             );
 
             return false;
@@ -1540,7 +1632,7 @@ private void RollAppearance()
         if (scene == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load model: {modelPath}"
+                $"{LogPrefix} {Name}: Could not load model: {modelPath}"
             );
 
             return false;
@@ -1565,6 +1657,15 @@ private void RollAppearance()
             _mobModel
         );
 
+        Node3D skeletonLayer =
+            _mobModel.FindChild("bones", true, false) as Node3D;
+
+        if (skeletonLayer != null)
+        {
+            skeletonLayer.Visible =
+                _definition?.showSkeleton ?? false;
+        }
+
         _mobModel.Scale =
     Vector3.One *
     _mobScaleMultiplier;
@@ -1579,6 +1680,11 @@ private void RollAppearance()
             _mobModel,
             MoveSpeed
         );
+
+        if (_definition?.randomUndeadDamage == true)
+        {
+            _animation.ApplyUndeadDamage(_rng);
+        }
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
@@ -1597,7 +1703,7 @@ private void RollAppearance()
         UpdateHealthBarPosition();
 
         GD.Print(
-            $"[Mob] {Name}: Switched model to {modelPath}"
+            $"{LogPrefix} {Name}: Switched model to {modelPath}"
         );
 
         return true;
@@ -1879,6 +1985,13 @@ private void RollAppearance()
 
         UpdateHitFeedback(dt);
 
+        if (_player is Player stompPlayer &&
+            IsInstanceValid(stompPlayer) &&
+            TryGetStompedByPlayer(stompPlayer))
+        {
+            return;
+        }
+
         Vector3 velocity =
             Velocity;
 
@@ -1976,6 +2089,12 @@ private void RollAppearance()
 
             if (_animation != null)
             {
+                Node3D lookTarget =
+                    _hostileTarget != null && IsInstanceValid(_hostileTarget)
+                        ? _hostileTarget
+                        : _player;
+
+                _animation.SetLookTarget(lookTarget);
                 _animation.Update(
                     dt,
                     velocity
@@ -2061,6 +2180,12 @@ private void RollAppearance()
 
         if (_animation != null)
         {
+            Node3D lookTarget =
+                _hostileTarget != null && IsInstanceValid(_hostileTarget)
+                    ? _hostileTarget
+                    : _player;
+
+            _animation.SetLookTarget(lookTarget);
             _animation.Update(
                 dt,
                 velocity
@@ -2184,6 +2309,21 @@ private void RollAppearance()
 
         if (IsMovementBlocked(direction))
         {
+            // A player is a physical body. When the undead reaches
+            // contact distance, stop pushing sideways around them and
+            // hold position facing them so the attack state can connect.
+            if (_state == State.Chase &&
+                _hostileTarget != null &&
+                IsInstanceValid(_hostileTarget) &&
+                GetFlatDistance(GlobalPosition, _hostileTarget.GlobalPosition)
+                    <= AttackRange + 0.35f)
+            {
+                velocity.X = 0f;
+                velocity.Z = 0f;
+                FaceDirection(direction, dt);
+                return;
+            }
+
             // Try walking up one normal block.
             if (TryStepUp(direction))
             {
@@ -2832,7 +2972,7 @@ return true;
         }
 
         GD.Print(
-            $"[Mob] {Name} was sheared. " +
+            $"{LogPrefix} {Name} was sheared. " +
             $"Fur={FurItem} Amount={FurShearAmount}"
         );
 
@@ -2884,12 +3024,7 @@ return true;
             _hostileTarget =
                 closestTarget;
 
-            float distance =
-                GlobalPosition.DistanceTo(
-                    closestTarget.GlobalPosition
-                );
-
-            if (distance <= AttackRange)
+            if (IsWithinAttackReach(closestTarget))
             {
                 _state =
                     State.Attack;
@@ -2909,7 +3044,7 @@ return true;
         if (!wasAlreadyHostile)
         {
             GD.Print(
-                $"[Mob] {Name} became HOSTILE."
+                $"{LogPrefix} {Name} became HOSTILE."
             );
         }
     }
@@ -3001,10 +3136,20 @@ return true;
             if (!IsInstanceValid(candidate))
                 continue;
 
+            // Dead players are not valid hostile targets until they respawn.
+            if (candidate is Player player &&
+                player.GetStats() != null &&
+                player.GetStats().IsDead)
+            {
+                continue;
+            }
+
+            Vector3 playerOffset =
+                candidate.GlobalPosition - GlobalPosition;
+            playerOffset.Y = 0f;
+
             float distanceSquared =
-                GlobalPosition.DistanceSquaredTo(
-                    candidate.GlobalPosition
-                );
+                playerOffset.LengthSquared();
 
             if (distanceSquared <
                 closestDistanceSquared)
@@ -3035,10 +3180,12 @@ return true;
                 if (otherMob.IsBeefalo())
                     continue;
 
+                Vector3 mobOffset =
+                    otherMob.GlobalPosition - GlobalPosition;
+                mobOffset.Y = 0f;
+
                 float distanceSquared =
-                    GlobalPosition.DistanceSquaredTo(
-                        otherMob.GlobalPosition
-                    );
+                    mobOffset.LengthSquared();
 
                 if (distanceSquared <
                     closestDistanceSquared)
@@ -3052,7 +3199,10 @@ return true;
 
         if (closest == null &&
             _player != null &&
-            IsInstanceValid(_player))
+            IsInstanceValid(_player) &&
+            !(_player is Player fallbackPlayer &&
+              fallbackPlayer.GetStats() != null &&
+              fallbackPlayer.GetStats().IsDead))
         {
             closest =
                 _player;
@@ -3147,7 +3297,7 @@ return true;
         if (seasonManager == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: SeasonManager not found. " +
+                $"{LogPrefix} {Name}: SeasonManager not found. " +
                 "Seasonal breeding is blocked."
             );
 
@@ -3220,7 +3370,7 @@ return true;
             cooldown;
 
         GD.Print(
-            $"[Mob] {Name} and {partner.Name} are breeding!"
+            $"{LogPrefix} {Name} and {partner.Name} are breeding!"
         );
 
         SpawnBabies(partner);
@@ -3268,7 +3418,7 @@ return true;
         if (string.IsNullOrEmpty(scenePath))
         {
             GD.PrintErr(
-                $"[Mob] {Name}: SceneFilePath is empty."
+                $"{LogPrefix} {Name}: SceneFilePath is empty."
             );
 
             return;
@@ -3282,7 +3432,7 @@ return true;
         if (mobScene == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Could not load mob scene: {scenePath}"
+                $"{LogPrefix} {Name}: Could not load mob scene: {scenePath}"
             );
 
             return;
@@ -3304,7 +3454,7 @@ return true;
             if (baby == null)
             {
                 GD.PrintErr(
-                    "[Mob] Failed to create baby mob."
+                    LogPrefix + " Failed to create baby mob."
                 );
 
                 continue;
@@ -3344,7 +3494,7 @@ return true;
             baby.MakeBaby();
 
             GD.Print(
-                $"[Mob] Baby {baby.Name} was born. " +
+                $"{LogPrefix} Baby {baby.Name} was born. " +
                 $"Definition={baby.DefinitionPath} " +
                 $"Growth={baby._babyGrowthTimer:F1}s"
             );
@@ -3424,7 +3574,7 @@ return true;
                 _usingCustomBabyModel = true;
 
                 GD.Print(
-                    $"[Mob] {Name}: Using custom baby model."
+                    $"{LogPrefix} {Name}: Using custom baby model."
                 );
             }
             else
@@ -3466,7 +3616,7 @@ return true;
         }
 
         GD.Print(
-            $"[Mob] {Name} is a baby. " +
+            $"{LogPrefix} {Name} is a baby. " +
             $"Growth time: {_babyGrowthTimer:F1} seconds."
         );
     }
@@ -3527,7 +3677,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} has grown into an adult."
+            $"{LogPrefix} {Name} has grown into an adult."
         );
     }
 
@@ -3585,18 +3735,18 @@ return true;
                     closestTarget;
 
                 float distance =
-                    GlobalPosition.DistanceTo(
+                    GetFlatDistance(
+                        GlobalPosition,
                         closestTarget.GlobalPosition
                     );
 
-                if (distance <= AttackRange)
+                if (IsWithinAttackReach(closestTarget))
                 {
-                    _state =
-                        State.Attack;
+                    if (_state != State.Attack)
+                        _attackTimer = 0f;
 
-                    _hasMovementTarget =
-                        false;
-
+                    _state = State.Attack;
+                    _hasMovementTarget = false;
                     return;
                 }
 
@@ -3660,27 +3810,35 @@ return true;
                     IsInstanceValid(_hostileTarget))
                 {
                     float distance =
-                        GlobalPosition.DistanceTo(
+                        GetFlatDistance(
+                            GlobalPosition,
                             _hostileTarget.GlobalPosition
                         );
 
-                    if (distance <= AttackRange)
+                    if (IsWithinAttackReach(_hostileTarget))
                     {
-                        _state =
-                            State.Attack;
+                        if (_state != State.Attack)
+                            _attackTimer = 0f;
 
-                        _hasMovementTarget =
-                            false;
-
+                        _state = State.Attack;
+                        _hasMovementTarget = false;
                         return;
                     }
 
-                    if (distance <=
-                        DetectionRange)
+                    if (distance <= DetectionRange)
                     {
-                        SetMovementTarget(
-                            _hostileTarget.GlobalPosition
-                        );
+                        Vector3 toTarget =
+                            _hostileTarget.GlobalPosition - GlobalPosition;
+                        toTarget.Y = 0f;
+
+                        if (toTarget.LengthSquared() > 0.0001f)
+                        {
+                            Vector3 approachPoint =
+                                _hostileTarget.GlobalPosition -
+                                toTarget.Normalized() * Mathf.Min(1.0f, AttackRange * 0.75f);
+
+                            SetMovementTarget(approachPoint);
+                        }
                     }
                     else
                     {
@@ -3729,39 +3887,35 @@ return true;
 
             case State.Attack:
 
+                if (_hostileTarget != null &&
+                    IsInstanceValid(_hostileTarget))
+                {
+                    Vector3 faceTarget =
+                        _hostileTarget.GlobalPosition - GlobalPosition;
+                    faceTarget.Y = 0f;
+                    FaceDirection(faceTarget, dt);
+                }
+
                 _attackTimer -= dt;
 
                 if (_attackTimer <= 0f)
                 {
-                    _attackTimer =
-                        AttackInterval;
+                    _attackTimer = AttackInterval;
 
-                    Node3D attackTarget =
-                        FindClosestValidTarget();
+                    Node3D attackTarget = FindClosestValidTarget();
 
                     if (attackTarget != null &&
                         IsInstanceValid(attackTarget))
                     {
-                        _hostileTarget =
-                            attackTarget;
+                        _hostileTarget = attackTarget;
 
-                        float distance =
-                            GlobalPosition.DistanceTo(
-                                attackTarget.GlobalPosition
-                            );
-
-                        if (distance >
-                            AttackRange)
+                        if (!IsWithinAttackReach(attackTarget))
                         {
-                            _state =
-                                State.Chase;
-
+                            _state = State.Chase;
                             return;
                         }
 
-                        DealAttackDamage(
-                            attackTarget
-                        );
+                        DealAttackDamage(attackTarget);
                     }
                     else
                     {
@@ -3778,6 +3932,24 @@ return true;
     // =========================================================
     // SET MOVEMENT TARGET
     // =========================================================
+
+    private float GetFlatDistance(Vector3 a, Vector3 b)
+    {
+        float dx = a.X - b.X;
+        float dz = a.Z - b.Z;
+        return Mathf.Sqrt(dx * dx + dz * dz);
+    }
+
+    private bool IsWithinAttackReach(Node3D target)
+    {
+        if (target == null || !GodotObject.IsInstanceValid(target))
+            return false;
+
+        const float verticalReach = 1.25f;
+
+        return GetFlatDistance(GlobalPosition, target.GlobalPosition) <= AttackRange &&
+               Mathf.Abs(target.GlobalPosition.Y - GlobalPosition.Y) <= verticalReach;
+    }
 
     private void SetMovementTarget(
         Vector3 target)
@@ -3828,7 +4000,7 @@ return true;
             );
 
             GD.Print(
-                $"[Mob] {Name} hits {targetMob.Name} " +
+                $"{LogPrefix} {Name} hits {targetMob.Name} " +
                 $"for {AttackDamage} damage."
             );
 
@@ -3837,12 +4009,18 @@ return true;
 
         if (target is Player player)
         {
+            PlayerStats playerStats = player.GetStats();
+
+            // Do not damage or report attacks against a dead player.
+            if (playerStats != null && playerStats.IsDead)
+                return;
+
             player.TakeDamage(
                 AttackDamage
             );
 
             GD.Print(
-                $"[Mob] {Name} attacks the player " +
+                $"{LogPrefix} {Name} attacks the player " +
                 $"for {AttackDamage} damage."
             );
 
@@ -3852,7 +4030,7 @@ return true;
         if (IsPlayerNode(target))
         {
             GD.Print(
-                $"[Mob] {Name} found a player target, " +
+                $"{LogPrefix} {Name} found a player target, " +
                 $"but the target is not a Player instance."
             );
         }
@@ -4079,7 +4257,7 @@ return true;
         HasSaddle = true;
 
         GD.Print(
-            $"[Mob] {Name} was saddled."
+            $"{LogPrefix} {Name} was saddled."
         );
 
         return true;
@@ -4097,7 +4275,7 @@ return true;
         HasSaddle = false;
 
         GD.Print(
-            $"[Mob] {Name} saddle removed."
+            $"{LogPrefix} {Name} saddle removed."
         );
 
         return true;
@@ -4143,7 +4321,7 @@ return true;
             Vector3.Zero;
 
         GD.Print(
-            $"[Mob] {Name} is now being ridden by {player.Name}."
+            $"{LogPrefix} {Name} is now being ridden by {player.Name}."
         );
 
         return true;
@@ -4188,7 +4366,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} was dismounted by {rider.Name}."
+            $"{LogPrefix} {Name} was dismounted by {rider.Name}."
         );
     }
 
@@ -4383,7 +4561,7 @@ return true;
             _breedingReady = true;
 
             GD.Print(
-                $"[Mob] {Name} is ready to breed."
+                $"{LogPrefix} {Name} is ready to breed."
             );
         }
 
@@ -4479,6 +4657,58 @@ return true;
     }
 
 
+    private bool TryGetStompedByPlayer(Player player)
+    {
+        if (_definition == null ||
+            !string.Equals(_definition.id, "rat", StringComparison.OrdinalIgnoreCase) ||
+            _health <= 0f ||
+            !player.IsOnFloor())
+        {
+            return false;
+        }
+
+        CollisionShape3D playerShape =
+            player.GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+
+        if (playerShape == null ||
+            playerShape.Shape == null)
+        {
+            return false;
+        }
+
+        float playerHalfHeight = 0.9f;
+        if (playerShape.Shape is CapsuleShape3D capsule)
+            playerHalfHeight = capsule.Height * 0.5f;
+        else if (playerShape.Shape is BoxShape3D box)
+            playerHalfHeight = box.Size.Y * 0.5f;
+
+        float playerFeetY =
+            playerShape.GlobalPosition.Y - playerHalfHeight;
+
+        float ratTopY =
+            GlobalPosition.Y +
+            _adultCollisionPosition.Y +
+            (_adultCollisionSize.Y * 0.5f);
+
+        float footToRatTop = playerFeetY - ratTopY;
+
+        // The player must be standing on, or just barely above, the rat.
+        if (footToRatTop < -0.12f || footToRatTop > 0.22f)
+            return false;
+
+        Vector2 playerFlat = new Vector2(player.GlobalPosition.X, player.GlobalPosition.Z);
+        Vector2 ratFlat = new Vector2(GlobalPosition.X, GlobalPosition.Z);
+        float stompRadius =
+            Mathf.Max(_adultCollisionSize.X, _adultCollisionSize.Z) * 0.5f + 0.28f;
+
+        if (playerFlat.DistanceTo(ratFlat) > stompRadius)
+            return false;
+
+        GD.Print($"{LogPrefix} {Name} was stomped flat!");
+        TakeDamage(_health, player.GlobalPosition, player);
+        return true;
+    }
+
     // =========================================================
     // FIND CLOSEST PLAYER
     // =========================================================
@@ -4562,7 +4792,7 @@ return true;
         if (parent == null)
         {
             GD.PrintErr(
-                $"[Mob] {Name}: Cannot spawn drops because parent is null."
+                $"{LogPrefix} {Name}: Cannot spawn drops because parent is null."
             );
 
             return;
@@ -4638,7 +4868,7 @@ return true;
             );
 
             GD.Print(
-                $"[Mob] {Name} dropped fur: " +
+                $"{LogPrefix} {Name} dropped fur: " +
                 $"{FurItem} x{FurDeathAmount}"
             );
         }
@@ -4709,7 +4939,7 @@ return true;
             );
 
         GD.Print(
-            $"[Mob] {Name} dropped " +
+            $"{LogPrefix} {Name} dropped " +
             $"{count}x {itemId}"
         );
     }

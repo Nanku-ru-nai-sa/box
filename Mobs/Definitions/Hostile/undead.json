@@ -1,0 +1,55 @@
+{
+  "id": "undead",
+  "displayName": "Undead",
+  "model": "res://Assets/Models/Player/player.gltf",
+  "showSkeleton": true,
+  "randomUndeadDamage": true,
+  "stats": {
+    "maxHealth": 20.0,
+    "moveSpeed": 1.8,
+    "turnSpeed": 5.0
+  },
+  "behavior": {
+    "type": "hostile",
+    "wanderRadius": 5.0,
+    "minIdleTime": 1.0,
+    "maxIdleTime": 3.0,
+    "detectionRange": 14.0,
+    "attackRange": 1.45,
+    "attackDamage": 3.0,
+    "attackInterval": 1.0
+  },
+  "sleep": {
+    "enabled": false
+  },
+  "flee": {
+    "enabled": false
+  },
+  "food": {
+    "enabled": false,
+    "items": [],
+    "healAmount": 0.0
+  },
+  "breeding": {
+    "enabled": false,
+    "foodItems": [],
+    "litterMin": 0,
+    "litterMax": 0
+  },
+  "gender": {
+    "enabled": false
+  },
+  "drops": {
+    "enabled": false,
+    "items": []
+  },
+  "spawning": {
+    "enabled": true,
+    "minGroupSize": 1,
+    "maxGroupSize": 2,
+    "minSpawnDistance": 14.0,
+    "maxSpawnDistance": 42.0,
+    "maxWorldCount": 8,
+    "seasons": []
+  }
+}

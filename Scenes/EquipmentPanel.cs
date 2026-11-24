@@ -26,6 +26,12 @@ public partial class EquipmentPanel : Control
     private Label _staminaLabel;
     private Label _manaLabel;
 
+    private SubViewportContainer _previewContainer;
+    private Node3D _previewPivot;
+    private Node3D _previewHeadPivot;
+    private float _previewTargetYaw;
+    private float _previewTargetPitch;
+
     // Called by Player before this node enters the tree (same pattern as
     // CraftingPanel.Init) — stores the reference; _Ready() reads it once
     // building the stats section, and events keep it live afterward.
@@ -48,7 +54,171 @@ public partial class EquipmentPanel : Control
         BuildExternalTitle();
         BuildColumn(GearLabels,    0, GearSlots);
         BuildColumn(ApparelLabels, 1, ApparelSlots);
+        BuildPlayerPreview();
         BuildStatsSection();
+    }
+
+    private void BuildPlayerPreview()
+    {
+        _previewContainer = new SubViewportContainer();
+        _previewContainer.Position = new Vector2(70f, 28f);
+        _previewContainer.Size = new Vector2(131f, 239f);
+        _previewContainer.Stretch = true;
+        _previewContainer.MouseFilter = MouseFilterEnum.Ignore;
+        // Draw the player preview at the front of the equipment UI.
+        // The equipment CanvasLayer sits below the cursor-item layer, so
+        // held items and the operating-system mouse cursor remain on top.
+        _previewContainer.ZIndex = 4096;
+        _previewContainer.ZAsRelative = false;
+        AddChild(_previewContainer);
+
+        var viewport = new SubViewport();
+        viewport.Size = new Vector2I(262, 478);
+        viewport.World3D = new World3D();
+        viewport.TransparentBg = true;
+        viewport.RenderTargetUpdateMode = SubViewport.UpdateMode.Always;
+
+        // A private preview world has no ambient lighting by default. Keep
+        // the background transparent, but add soft white ambient light so
+        // the model's original textures and colors remain visible.
+        var previewEnvironment = new Environment();
+        previewEnvironment.BackgroundMode = Environment.BGMode.Canvas;
+        previewEnvironment.AmbientLightSource = Environment.AmbientSource.Color;
+        previewEnvironment.AmbientLightColor = Colors.White;
+        previewEnvironment.AmbientLightEnergy = 0.85f;
+
+        var worldEnvironment = new WorldEnvironment();
+        worldEnvironment.Environment = previewEnvironment;
+        viewport.AddChild(worldEnvironment);
+        _previewContainer.AddChild(viewport);
+
+        _previewPivot = new Node3D();
+        viewport.AddChild(_previewPivot);
+
+        PackedScene playerScene = GD.Load<PackedScene>(
+            "res://Assets/Models/Player/player.gltf"
+        );
+
+        if (playerScene == null)
+        {
+            GD.PrintErr("[EquipmentPanel] Could not load player preview model.");
+            return;
+        }
+
+        Node3D model = playerScene.Instantiate<Node3D>();
+        _previewPivot.AddChild(model);
+        model.Position = new Vector3(0f, -0.9f, 0f);
+
+        Node3D playerParts = model.FindChild("player", true, false) as Node3D;
+        Node3D bones = model.FindChild("bones", true, false) as Node3D;
+
+        if (bones != null)
+            bones.Visible = false;
+
+        if (playerParts != null)
+        {
+            SetPreviewMeshesVisible(playerParts, true);
+            BuildHeadPreviewPivot(model, playerParts);
+        }
+
+        var camera = new Camera3D();
+        // The preview is rendered into a fixed-height SubViewport. The old
+        // 35-degree FOV at 3.5 units filled that viewport too tightly, so the
+        // top of the head was clipped by the SubViewportContainer's bounds.
+        // Pull the camera back and widen the FOV to leave visible space above
+        // the head (and below the feet) without changing the UI panel layout.
+        // Keep the preview closer to its original size while
+        // leaving a little extra vertical room above the player's head.
+        camera.Fov = 38f;
+        camera.Position = new Vector3(0f, 0.12f, -3.75f);
+        viewport.AddChild(camera);
+        camera.LookAt(Vector3.Zero, Vector3.Up);
+        camera.Current = true;
+
+        var light = new DirectionalLight3D();
+        light.RotationDegrees = new Vector3(-25f, -25f, 0f);
+        light.LightEnergy = 1.5f;
+        viewport.AddChild(light);
+    }
+
+    private void BuildHeadPreviewPivot(Node3D model, Node3D playerParts)
+    {
+        Node3D headNode = playerParts.FindChild("head", true, false) as Node3D;
+        if (headNode == null)
+            return;
+
+        // Keep every facial piece on the same pivot so the inventory preview
+        // head turns as one model instead of leaving the eyes and pupils behind.
+        Node3D[] faceParts =
+        {
+            headNode,
+            playerParts.FindChild("left eye", true, false) as Node3D,
+            playerParts.FindChild("left pupil", true, false) as Node3D,
+            playerParts.FindChild("right eye", true, false) as Node3D,
+            playerParts.FindChild("right pupil", true, false) as Node3D
+        };
+
+        Vector3 headCenter = Vector3.Zero;
+        if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
+            headCenter = headMesh.GetAabb().GetCenter();
+
+        // Place the shared pivot at the head centre and preserve each imported
+        // mesh's world transform as it is reparented beneath the pivot.
+        Vector3 headCenterInModel = model.ToLocal(headNode.ToGlobal(headCenter));
+        _previewHeadPivot = new Node3D { Name = "PreviewHeadPivot" };
+        model.AddChild(_previewHeadPivot);
+        _previewHeadPivot.Position = headCenterInModel;
+
+        foreach (Node3D facePart in faceParts)
+        {
+            if (facePart != null && IsInstanceValid(facePart))
+                facePart.Reparent(_previewHeadPivot, true);
+        }
+    }
+
+    private void SetPreviewMeshesVisible(Node parent, bool visible)
+    {
+        foreach (Node child in parent.GetChildren())
+        {
+            if (child is GeometryInstance3D visual)
+                visual.Visible = visible;
+
+            SetPreviewMeshesVisible(child, visible);
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        if (_previewPivot == null || !Visible || _previewContainer == null)
+            return;
+
+        // Use the main game viewport, not this small equipment panel, so the
+        // preview keeps following the cursor anywhere while the inventory is open.
+        Vector2 mouse = GetViewport().GetMousePosition();
+        Vector2 viewportSize = GetViewportRect().Size;
+
+        float normalizedX =
+            (mouse.X - viewportSize.X * 0.5f) / (viewportSize.X * 0.5f);
+        float normalizedY =
+            (mouse.Y - viewportSize.Y * 0.5f) / (viewportSize.Y * 0.5f);
+
+        // Positive X/Y now follow the cursor direction rather than opposing it.
+        // Keep the body movement subtle; Minecraft-style menu movement is
+        // mostly the head tracking the cursor vertically.
+        _previewTargetYaw = Mathf.Clamp(normalizedX, -1f, 1f) * 0.28f;
+        _previewTargetPitch = -Mathf.Clamp(normalizedY, -1f, 1f) * 0.24f;
+
+        float weight = 1f - Mathf.Exp(-(float)delta * 12f);
+        Vector3 bodyRotation = _previewPivot.Rotation;
+        bodyRotation.Y = Mathf.LerpAngle(bodyRotation.Y, _previewTargetYaw, weight);
+        _previewPivot.Rotation = bodyRotation;
+
+        if (_previewHeadPivot != null && IsInstanceValid(_previewHeadPivot))
+        {
+            Vector3 headRotation = _previewHeadPivot.Rotation;
+            headRotation.X = Mathf.LerpAngle(headRotation.X, _previewTargetPitch, weight);
+            _previewHeadPivot.Rotation = headRotation;
+        }
     }
 
     private void BuildBackground()
@@ -137,11 +307,9 @@ public partial class EquipmentPanel : Control
 
     private void BuildColumn(string[] labels, int columnIndex, Panel[] target)
     {
-        float columnGap = 13f;
-        float columnsWidth = SlotSz * 2f + columnGap;
-        float startX =
-            (PanelW - columnsWidth) / 2f +
-            columnIndex * (SlotSz + columnGap);
+        float startX = columnIndex == 0
+            ? 8f
+            : PanelW - SlotSz - 8f;
         float startY = 14f;
 
         for (int i = 0; i < labels.Length; i++)

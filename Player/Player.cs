@@ -14,6 +14,32 @@ public partial class Player : CharacterBody3D
     private float _gravity = 20f;
     private PlayerStats _stats;
     private PlayerCamera _playerCamera;
+    private Node3D _playerModelRoot;
+    private Node3D _playerModelParts;
+    private Node3D _bonesModel;
+    private Node3D _playerHeadPivot;
+    private float _playerHeadHalfDepth = 0.25f;
+    private Vector3 _defaultPlayerCameraPosition = new Vector3(0f, 0.6f, 0f);
+    private Node3D _leftBicep;
+    private Node3D _rightBicep;
+    private Node3D _leftHand;
+    private Node3D _rightHand;
+    // 0 = first-person, 1 = third-person, 2 = front-facing third-person.
+    private int _cameraMode = 0;
+    private bool _thirdPersonView = false;
+    private float _cameraZoomDistance = 4.5f;
+    private const float CameraZoomMin = 1.5f;
+    private const float CameraZoomMax = 8.0f;
+    private const float CameraZoomStep = 0.5f;
+    private float _armAnimationTime = 0f;
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftArmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightArmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftForearmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightForearmParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _leftLowerLegParts = new();
+    private readonly List<(Node3D Node, Vector3 RestRotation)> _rightLowerLegParts = new();
     private RayCast3D _rayCast;
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
@@ -158,10 +184,13 @@ public bool IsMounted =>
         InitializeDeathSystem();
 
         _playerCamera = GetNodeOrNull<PlayerCamera>("PlayerCamera");
+        _defaultPlayerCameraPosition = _playerCamera?.Position ?? new Vector3(0f, 0.6f, 0f);
         _rayCast = GetNode<RayCast3D>("PlayerCamera/Camera3D/RayCast3D");
         _rayCast.AddException(this);
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+
+        SetupPlayerModel();
 
         AddToGroup("player");
 
@@ -269,6 +298,405 @@ public bool IsMounted =>
             GD.PrintErr("GameModeManager not found — add to Autoload.");
 
         GD.Print("Player ready.");
+    }
+
+    // =========================================================================
+    // PLAYER MODEL AND CAMERA MODES
+    // =========================================================================
+
+    private void SetupPlayerModel()
+    {
+        _playerModelRoot = GetNodeOrNull<Node3D>("PlayerModel");
+
+        if (_playerModelRoot == null)
+        {
+            GD.PrintErr("Player model scene is missing.");
+            return;
+        }
+
+        _playerModelParts =
+            _playerModelRoot.FindChild("player", true, false) as Node3D;
+
+        _bonesModel =
+            _playerModelRoot.FindChild("bones", true, false) as Node3D;
+
+        if (_playerModelParts == null)
+        {
+            GD.PrintErr("Player model is missing its player mesh group.");
+            return;
+        }
+
+        // Keep references to the visible arm meshes for first-person view.
+        _leftBicep =
+            _playerModelParts.FindChild("left bicep", true, false) as Node3D;
+        _rightBicep =
+            _playerModelParts.FindChild("right bicep", true, false) as Node3D;
+        _leftHand =
+            _playerModelParts.FindChild("left hand", true, false) as Node3D;
+        _rightHand =
+            _playerModelParts.FindChild("right hand", true, false) as Node3D;
+
+        // The skeleton is a separate display group. Hide the whole group so
+        // none of its bone meshes can accidentally become visible.
+        if (_bonesModel != null)
+            _bonesModel.Visible = false;
+
+        List<Node3D> leftUpperLegMeshes = new();
+        List<Node3D> rightUpperLegMeshes = new();
+        Node3D leftLowerLegMesh = null;
+        Node3D rightLowerLegMesh = null;
+
+        foreach (Node node in _playerModelParts.FindChildren("*", "Node3D", true, false))
+        {
+            if (node is not Node3D part)
+                continue;
+
+            string partName = part.Name.ToString().ToLowerInvariant();
+
+            if (partName.Contains("left") && partName.Contains("thigh"))
+                leftUpperLegMeshes.Add(part);
+            else if (partName.Contains("right") && partName.Contains("thigh"))
+                rightUpperLegMeshes.Add(part);
+            else if (partName == "lower left leg")
+                leftLowerLegMesh = part;
+            else if (partName == "lower right leg")
+                rightLowerLegMesh = part;
+        }
+
+        BuildPlayerHeadPivot();
+
+        // Build a parent/child joint hierarchy so lower limbs follow the
+        // upper limbs while still bending independently at elbows and knees.
+        Node3D leftShoulder = null;
+        Node3D rightShoulder = null;
+        Node3D leftHip = null;
+        Node3D rightHip = null;
+
+        if (_leftBicep != null)
+            leftShoulder = CreateLimbPivot(
+                "LeftShoulderPivot", new Vector3(-0.25f, 1.5f, 0f),
+                _leftArmParts, null, _leftBicep);
+        if (_rightBicep != null)
+            rightShoulder = CreateLimbPivot(
+                "RightShoulderPivot", new Vector3(0.25f, 1.5f, 0f),
+                _rightArmParts, null, _rightBicep);
+
+        if (_leftHand != null && leftShoulder != null)
+            CreateLimbPivot(
+                "LeftElbowPivot", new Vector3(-0.34375f, 1.125f, 0f),
+                _leftForearmParts, leftShoulder, _leftHand);
+        if (_rightHand != null && rightShoulder != null)
+            CreateLimbPivot(
+                "RightElbowPivot", new Vector3(0.34375f, 1.125f, 0f),
+                _rightForearmParts, rightShoulder, _rightHand);
+
+        if (leftUpperLegMeshes.Count > 0)
+            leftHip = CreateLimbPivot(
+                "LeftHipPivot", new Vector3(-0.125f, 0.75f, 0f),
+                _leftLegParts, null, leftUpperLegMeshes.ToArray());
+        if (rightUpperLegMeshes.Count > 0)
+            rightHip = CreateLimbPivot(
+                "RightHipPivot", new Vector3(0.125f, 0.75f, 0f),
+                _rightLegParts, null, rightUpperLegMeshes.ToArray());
+
+        if (leftLowerLegMesh != null && leftHip != null)
+            CreateLimbPivot(
+                "LeftKneePivot", new Vector3(-0.125f, 0.375f, 0f),
+                _leftLowerLegParts, leftHip, leftLowerLegMesh);
+        if (rightLowerLegMesh != null && rightHip != null)
+            CreateLimbPivot(
+                "RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
+                _rightLowerLegParts, rightHip, rightLowerLegMesh);
+
+        // The imported model is authored with its feet at local Y=0,
+        // while the player's capsule is centred on the CharacterBody.
+        _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
+
+        SetCameraMode(0);
+    }
+
+    private void BuildPlayerHeadPivot()
+    {
+        Node3D headNode = _playerModelParts.FindChild("head", true, false) as Node3D;
+        if (headNode == null)
+            return;
+
+        // Eyes and pupils are separate imported meshes, so attach all five
+        // pieces to the same pivot to keep the face together while looking.
+        Node3D[] faceParts =
+        {
+            headNode,
+            _playerModelParts.FindChild("left eye", true, false) as Node3D,
+            _playerModelParts.FindChild("left pupil", true, false) as Node3D,
+            _playerModelParts.FindChild("right eye", true, false) as Node3D,
+            _playerModelParts.FindChild("right pupil", true, false) as Node3D
+        };
+
+        Vector3 headCenter = Vector3.Zero;
+        if (headNode is MeshInstance3D headMesh && headMesh.Mesh != null)
+        {
+            headCenter = headMesh.GetAabb().GetCenter();
+            _playerHeadHalfDepth = headMesh.GetAabb().Size.Z * 0.5f;
+        }
+
+        // Place the pivot at the head centre, then preserve each imported
+        // mesh's world transform as it is parented beneath the pivot.
+        Vector3 headCenterInModel = _playerModelParts.ToLocal(headNode.ToGlobal(headCenter));
+        _playerHeadPivot = new Node3D { Name = "PlayerHeadPivot" };
+        _playerModelParts.AddChild(_playerHeadPivot);
+        _playerHeadPivot.Position = headCenterInModel;
+
+        foreach (Node3D facePart in faceParts)
+        {
+            if (facePart != null && IsInstanceValid(facePart))
+                facePart.Reparent(_playerHeadPivot, true);
+        }
+    }
+
+    private void UpdatePlayerHeadLook()
+    {
+        if (_playerHeadPivot == null || !IsInstanceValid(_playerHeadPivot) || _playerCamera == null)
+            return;
+
+        // PlayerCamera pitch already follows vertical mouse movement. Keep this
+        // active in first-person too, even while the head mesh is hidden.
+        Vector3 headRotation = _playerHeadPivot.Rotation;
+        headRotation.X = _playerCamera.GetPitch();
+        _playerHeadPivot.Rotation = headRotation;
+    }
+
+    private Node3D CreateLimbPivot(
+        string pivotName,
+        Vector3 jointPosition,
+        List<(Node3D Node, Vector3 RestRotation)> animationParts,
+        Node3D parentPivot,
+        params Node3D[] meshes)
+    {
+        Node3D pivot = new Node3D
+        {
+            Name = pivotName
+        };
+
+        Node3D pivotParent = parentPivot ?? _playerModelParts;
+        pivotParent.AddChild(pivot);
+
+        // jointPosition is authored in player-model local coordinates.
+        // Convert it into the selected parent's local space so nested joints
+        // still sit exactly at the elbow or knee in the untouched rest pose.
+        Vector3 jointWorldPosition = _playerModelParts.ToGlobal(jointPosition);
+        pivot.Position = pivotParent.ToLocal(jointWorldPosition);
+
+        foreach (Node3D mesh in meshes)
+        {
+            if (mesh == null || !IsInstanceValid(mesh))
+                continue;
+
+            mesh.Reparent(pivot, true);
+        }
+
+        animationParts.Add((pivot, pivot.Rotation));
+        return pivot;
+    }
+
+    private void SetCameraMode(int mode)
+    {
+        _cameraMode = ((mode % 3) + 3) % 3;
+        _thirdPersonView = _cameraMode != 0;
+
+        if (_playerModelParts != null)
+        {
+            // Keep the complete model visible in every camera mode for now.
+            // This also lets us verify head tracking in first-person.
+            SetModelMeshesVisible(_playerModelParts, true);
+        }
+
+        if (_bonesModel != null)
+            _bonesModel.Visible = false;
+
+        // In first-person, never render the player's own head or face.
+        // The camera sits just in front of the head, so extreme pitch
+        // angles could otherwise reveal the face from above or below.
+        if (_playerHeadPivot != null && IsInstanceValid(_playerHeadPivot))
+            _playerHeadPivot.Visible = _cameraMode != 0;
+
+        UpdateCameraModeTransform();
+    }
+
+    private void UpdateCameraModeTransform()
+    {
+        Camera3D camera = _playerCamera?.GetCamera();
+        if (camera == null)
+            return;
+
+        if (_cameraMode == 0)
+        {
+            // Put the camera just in front of the head, rather than at the
+            // character body's origin. This keeps first-person view out of
+            // the head and torso while preserving the camera's mouse pitch.
+            if (_playerHeadPivot != null && _playerModelRoot != null)
+            {
+                Vector3 faceFront = _playerHeadPivot.GlobalPosition +
+                    _playerModelRoot.GlobalBasis *
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+
+                _playerCamera.Position = ToLocal(faceFront);
+            }
+            else
+            {
+                _playerCamera.Position = _defaultPlayerCameraPosition;
+            }
+
+            camera.Position = Vector3.Zero;
+            camera.Rotation = Vector3.Zero;
+        }
+        else
+        {
+            _playerCamera.Position = _defaultPlayerCameraPosition;
+
+            float direction = _cameraMode == 2 ? -1f : 1f;
+            camera.Position = new Vector3(
+                0f,
+                0f,
+                direction * _cameraZoomDistance
+            );
+
+            // The front camera sits in front of the character and looks back
+            // toward them; the rear camera keeps the normal forward view.
+            camera.Rotation = new Vector3(
+                0f,
+                _cameraMode == 2 ? Mathf.Pi : 0f,
+                0f
+            );
+        }
+    }
+
+    private void SetModelMeshesVisible(Node parent, bool visible)
+    {
+        foreach (Node child in parent.GetChildren())
+        {
+            if (child is GeometryInstance3D visual)
+                visual.Visible = visible;
+
+            SetModelMeshesVisible(child, visible);
+        }
+    }
+
+    private void SetModelPartVisible(Node3D part, bool visible)
+    {
+        if (part is GeometryInstance3D visual)
+            visual.Visible = visible;
+    }
+
+    private void UpdateFirstPersonArms(float delta)
+    {
+        if (_playerModelParts == null)
+            return;
+
+        Vector2 horizontalVelocity =
+            new Vector2(Velocity.X, Velocity.Z);
+
+        bool moving =
+            horizontalVelocity.Length() > 0.15f &&
+            IsOnFloor();
+
+        if (moving)
+        {
+            float speedFactor =
+                Mathf.Clamp(horizontalVelocity.Length() / WalkSpeed, 0.5f, 2f);
+
+            _armAnimationTime += delta * speedFactor * 7f;
+
+            float swing =
+                Mathf.Sin(_armAnimationTime) * 0.45f;
+
+            float leftLegSwing = swing;
+            float rightLegSwing = -swing;
+            float leftArmSwing = -swing;
+            float rightArmSwing = swing;
+
+            // Upper legs swing like the existing mob walk animation.
+            ApplyLimbSwing(_leftLegParts, leftLegSwing);
+            ApplyLimbSwing(_rightLegParts, rightLegSwing);
+
+            // Knees bend during the backward part of each leg's stride.
+            ApplyLimbSwing(
+                _leftLowerLegParts,
+                -Mathf.Max(0f, -leftLegSwing) * 0.8f
+            );
+            ApplyLimbSwing(
+                _rightLowerLegParts,
+                -Mathf.Max(0f, -rightLegSwing) * 0.8f
+            );
+
+            // Upper arms counter-swing against the legs.
+            ApplyLimbSwing(_leftArmParts, leftArmSwing);
+            ApplyLimbSwing(_rightArmParts, rightArmSwing);
+
+            // Elbows flex slightly as the arms swing forward.
+            ApplyLimbSwing(
+                _leftForearmParts,
+                Mathf.Max(0f, leftArmSwing) * 0.3f
+            );
+            ApplyLimbSwing(
+                _rightForearmParts,
+                Mathf.Max(0f, rightArmSwing) * 0.3f
+            );
+        }
+        else
+        {
+            // Ease every joint back to its authored standing pose.
+            ResetLimbParts(_leftLegParts, delta);
+            ResetLimbParts(_rightLegParts, delta);
+            ResetLimbParts(_leftLowerLegParts, delta);
+            ResetLimbParts(_rightLowerLegParts, delta);
+            ResetLimbParts(_leftArmParts, delta);
+            ResetLimbParts(_rightArmParts, delta);
+            ResetLimbParts(_leftForearmParts, delta);
+            ResetLimbParts(_rightForearmParts, delta);
+        }
+    }
+
+    private void ApplyLimbSwing(
+        List<(Node3D Node, Vector3 RestRotation)> parts,
+        float swing)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            part.Node.Rotation =
+                part.RestRotation + new Vector3(swing, 0f, 0f);
+        }
+    }
+
+    private void ResetLimbParts(
+        List<(Node3D Node, Vector3 RestRotation)> parts,
+        float delta)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            Vector3 rotation = part.Node.Rotation;
+            rotation.X = Mathf.LerpAngle(
+                rotation.X,
+                part.RestRotation.X,
+                delta * 8f
+            );
+            rotation.Y = Mathf.LerpAngle(
+                rotation.Y,
+                part.RestRotation.Y,
+                delta * 8f
+            );
+            rotation.Z = Mathf.LerpAngle(
+                rotation.Z,
+                part.RestRotation.Z,
+                delta * 8f
+            );
+            part.Node.Rotation = rotation;
+        }
     }
 
     // =========================================================================
@@ -1261,6 +1689,9 @@ public bool IsMounted =>
 
     public override void _Process(double delta)
 {
+    UpdateFirstPersonArms((float)delta);
+    UpdatePlayerHeadLook();
+
     if (_feedbackTimer > 0f)
     {
         _feedbackTimer -= (float)delta;
@@ -1365,6 +1796,34 @@ public bool IsMounted =>
     public override void _PhysicsProcess(double delta)
 {
     float dt = (float)delta;
+
+    // The RayCast3D is a child of the active camera, so keep its local
+    // direction exactly on the camera's -Z axis (the screen-centre crosshair).
+    // Limit its endpoint to the five-unit interaction sphere around the player
+    // so third-person zoom does not increase the player's reach.
+    if (_rayCast != null && _playerCamera?.GetCamera() is Camera3D interactionCamera)
+    {
+        Vector3 interactionOrigin = GlobalPosition + Vector3.Up * 0.6f;
+        Vector3 cameraOffset = interactionCamera.GlobalPosition - interactionOrigin;
+        Vector3 aimDirection = -interactionCamera.GlobalTransform.Basis.Z;
+
+        float projection = cameraOffset.Dot(aimDirection);
+        float discriminant = projection * projection + 25f - cameraOffset.LengthSquared();
+
+        if (discriminant > 0f)
+        {
+            float rayLength = -projection + Mathf.Sqrt(discriminant);
+            _rayCast.TargetPosition = new Vector3(0f, 0f, -rayLength);
+        }
+        else
+        {
+            // The camera's centre ray does not pass through the player's
+            // interaction range, so it must not hit something out of reach.
+            _rayCast.TargetPosition = Vector3.Zero;
+        }
+
+        _rayCast.ForceRaycastUpdate();
+    }
 
     UpdateBlockOutline();
 
@@ -1987,6 +2446,31 @@ public override void _UnhandledInput(InputEvent @event)
 
     if (@event is InputEventMouseButton mb)
     {
+        // Hold Ctrl and use the wheel to zoom while in either third-person view.
+        if (mb.Pressed &&
+            (mb.ButtonIndex == MouseButton.WheelUp ||
+             mb.ButtonIndex == MouseButton.WheelDown) &&
+            _cameraMode != 0 &&
+            Input.IsKeyPressed(Key.Ctrl) &&
+            !_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
+        {
+            _cameraZoomDistance +=
+                mb.ButtonIndex == MouseButton.WheelUp
+                    ? -CameraZoomStep
+                    : CameraZoomStep;
+
+            _cameraZoomDistance = Mathf.Clamp(
+                _cameraZoomDistance,
+                CameraZoomMin,
+                CameraZoomMax
+            );
+
+            UpdateCameraModeTransform();
+            return;
+        }
+
         // Middle mouse: pick block.
         if (mb.ButtonIndex == MouseButton.Middle && mb.Pressed)
         {
@@ -2290,6 +2774,28 @@ if (key.Keycode == Key.Escape)
         }
 
         // =====================================================
+        // PLAYER CAMERA MODE (F3)
+        // =====================================================
+
+        if (key.Keycode == Key.F3 &&
+            !_inventoryOpen &&
+            !_chatOpen &&
+            !_creativeMenuOpen)
+        {
+            SetCameraMode((_cameraMode + 1) % 3);
+
+            string cameraModeName = _cameraMode switch
+            {
+                0 => "First-person view",
+                1 => "Third-person view",
+                _ => "Front-facing view"
+            };
+
+            ShowFeedback(cameraModeName);
+            return;
+        }
+
+        // =====================================================
         // SCREENSHOT
         // =====================================================
 
@@ -2302,16 +2808,6 @@ if (key.Keycode == Key.Escape)
 
             img.SavePng(p);
             GD.Print($"Screenshot saved: {p}");
-        }
-
-        // =====================================================
-        // CHUNK BORDERS
-        // =====================================================
-
-        if (key.Keycode == Key.F3)
-        {
-            _showChunkBorders = !_showChunkBorders;
-            ToggleChunkBorders();
         }
 
         // =====================================================
@@ -2538,6 +3034,14 @@ if (key.Keycode == Key.Escape)
     // =========================================================================
     // CHUNK BORDERS
     // =========================================================================
+
+    public bool AreChunkBordersVisible => _showChunkBorders;
+
+    public void SetChunkBordersFromDebugMenu(bool visible)
+    {
+        _showChunkBorders = visible;
+        ToggleChunkBorders();
+    }
 
     private void ToggleChunkBorders()
     {
