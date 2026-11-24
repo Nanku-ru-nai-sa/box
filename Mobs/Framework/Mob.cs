@@ -1495,6 +1495,11 @@ private void RollAppearance()
             MoveSpeed
         );
 
+        if (_definition?.randomUndeadDamage == true)
+        {
+            _animation.ApplyUndeadDamage(_rng);
+        }
+
         if (!string.IsNullOrWhiteSpace(
             texturePath))
         {
@@ -1597,6 +1602,11 @@ private void RollAppearance()
             _mobModel,
             MoveSpeed
         );
+
+        if (_definition?.randomUndeadDamage == true)
+        {
+            _animation.ApplyUndeadDamage(_rng);
+        }
 
         if (!string.IsNullOrWhiteSpace(
             texturePath))
