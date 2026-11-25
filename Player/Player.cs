@@ -587,73 +587,210 @@ public bool IsMounted =>
             visual.Visible = visible;
     }
 
+    private float _locomotionBlend = 0f;
+    private float _locomotionPhase = 0f;
+    private Vector3 _locomotionBaseModelPosition;
+    private Vector3 _locomotionBaseModelRotation;
+    private bool _locomotionBasePoseCaptured = false;
+
     private void UpdateFirstPersonArms(float delta)
     {
-        if (_playerModelParts == null)
+        if (_playerModelParts == null || !IsInstanceValid(_playerModelParts))
             return;
 
-        Vector2 horizontalVelocity =
-            new Vector2(Velocity.X, Velocity.Z);
+        if (!_locomotionBasePoseCaptured)
+        {
+            if (_playerModelRoot != null && IsInstanceValid(_playerModelRoot))
+            {
+                _locomotionBaseModelPosition = _playerModelRoot.Position;
+                _locomotionBaseModelRotation = _playerModelRoot.Rotation;
+            }
+            _locomotionBasePoseCaptured = true;
+        }
 
-        bool moving =
-            horizontalVelocity.Length() > 0.15f &&
-            IsOnFloor();
+        Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
+        float speed = worldVelocity.Length();
+        bool grounded = IsOnFloor();
+        bool moving = speed > 0.12f && grounded;
+
+        // Work in the character's own space so forward, backward and strafing
+        // each produce a slightly different gait rather than one fixed swing.
+        Vector3 localDirection = Vector3.Zero;
+        if (speed > 0.001f)
+        {
+            localDirection =
+                _playerModelParts.GlobalTransform.Basis.Inverse() *
+                (worldVelocity / speed);
+            localDirection.Y = 0f;
+            if (localDirection.LengthSquared() > 0.001f)
+                localDirection = localDirection.Normalized();
+        }
+
+        float forwardAmount = -localDirection.Z;
+        float sideAmount = localDirection.X;
+        float sprintAmount = Mathf.Clamp(
+            (speed - WalkSpeed) / Mathf.Max(0.1f, SprintSpeed - WalkSpeed),
+            0f, 1f);
+
+        float targetBlend = moving ? 1f : 0f;
+        _locomotionBlend = Mathf.MoveToward(
+            _locomotionBlend, targetBlend, delta * (moving ? 5.5f : 4.0f));
 
         if (moving)
         {
-            float speedFactor =
-                Mathf.Clamp(horizontalVelocity.Length() / WalkSpeed, 0.5f, 2f);
+            float cadence = Mathf.Lerp(6.4f, 9.0f, sprintAmount);
+            _locomotionPhase = Mathf.PosMod(
+                _locomotionPhase + delta * cadence, Mathf.Tau);
+            _armAnimationTime = _locomotionPhase;
+        }
 
-            _armAnimationTime += delta * speedFactor * 7f;
+        if (!grounded)
+        {
+            // A small airborne pose gives jumps a little anticipation without
+            // interfering with the player's movement or collision.
+            ApplyLimbRotation(_leftLegParts, 0.12f, 0.02f, 0.025f);
+            ApplyLimbRotation(_rightLegParts, 0.12f, -0.02f, -0.025f);
+            ApplyLimbRotation(_leftLowerLegParts, 0.28f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, 0.28f, 0f, 0f);
+            ApplyLimbRotation(_leftArmParts, -0.38f, 0f, -0.08f);
+            ApplyLimbRotation(_rightArmParts, -0.38f, 0f, 0.08f);
+            ApplyLimbRotation(_leftForearmParts, -0.22f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, -0.22f, 0f, 0f);
+            UpdateLocomotionBodyPose(0.035f, -0.035f, 0f, delta);
+            return;
+        }
 
-            float swing =
-                Mathf.Sin(_armAnimationTime) * 0.45f;
+        if (moving)
+        {
+            float phaseLeft = _locomotionPhase;
+            float phaseRight = _locomotionPhase + Mathf.Pi;
+            float leftSwing = Mathf.Sin(phaseLeft);
+            float rightSwing = Mathf.Sin(phaseRight);
+            float leftLift = Mathf.Max(0f, Mathf.Cos(phaseLeft));
+            float rightLift = Mathf.Max(0f, Mathf.Cos(phaseRight));
 
-            float leftLegSwing = swing;
-            float rightLegSwing = -swing;
-            float leftArmSwing = -swing;
-            float rightArmSwing = swing;
+            float stride = Mathf.Lerp(0.34f, 0.52f, sprintAmount);
+            float forwardSwingLeft = leftSwing * forwardAmount;
+            float forwardSwingRight = rightSwing * forwardAmount;
 
-            // Upper legs swing like the existing mob walk animation.
-            ApplyLimbSwing(_leftLegParts, leftLegSwing);
-            ApplyLimbSwing(_rightLegParts, rightLegSwing);
+            // A forward walk uses a broad hip swing. Strafing shifts the legs
+            // laterally and adds a little hip yaw so the feet don't look locked
+            // to a single front/back hinge.
+            float sideStride = sideAmount * 0.20f;
+            float legPitchLeft = forwardSwingLeft * stride;
+            float legPitchRight = forwardSwingRight * stride;
+            float legYaw = sideAmount * 0.14f;
+            float legRollLeft = sideStride * leftSwing + sideAmount * 0.035f;
+            float legRollRight = sideStride * rightSwing + sideAmount * 0.035f;
 
-            // Knees bend during the backward part of each leg's stride.
-            ApplyLimbSwing(
-                _leftLowerLegParts,
-                -Mathf.Max(0f, -leftLegSwing) * 0.8f
-            );
-            ApplyLimbSwing(
-                _rightLowerLegParts,
-                -Mathf.Max(0f, -rightLegSwing) * 0.8f
-            );
+            ApplyLimbRotation(
+                _leftLegParts,
+                legPitchLeft,
+                legYaw + sideAmount * leftLift * 0.035f,
+                legRollLeft);
+            ApplyLimbRotation(
+                _rightLegParts,
+                legPitchRight,
+                legYaw - sideAmount * rightLift * 0.035f,
+                legRollRight);
 
-            // Upper arms counter-swing against the legs.
-            ApplyLimbSwing(_leftArmParts, leftArmSwing);
-            ApplyLimbSwing(_rightArmParts, rightArmSwing);
+            // The knee folds most while the foot is travelling forward, then
+            // opens as the leg reaches back to support the next step.
+            float kneeBase = Mathf.Lerp(0.52f, 0.68f, sprintAmount);
+            float leftKnee = kneeBase * leftLift +
+                             Mathf.Max(0f, -forwardSwingLeft) * 0.18f;
+            float rightKnee = kneeBase * rightLift +
+                              Mathf.Max(0f, -forwardSwingRight) * 0.18f;
+            ApplyLimbRotation(_leftLowerLegParts, leftKnee, 0f, -sideAmount * 0.035f);
+            ApplyLimbRotation(_rightLowerLegParts, rightKnee, 0f, sideAmount * 0.035f);
 
-            // Elbows flex slightly as the arms swing forward.
-            ApplyLimbSwing(
-                _leftForearmParts,
-                Mathf.Max(0f, leftArmSwing) * 0.3f
-            );
-            ApplyLimbSwing(
-                _rightForearmParts,
-                Mathf.Max(0f, rightArmSwing) * 0.3f
-            );
+            // Arms move opposite the legs. Shoulder roll and yaw add a small
+            // amount of 3D follow-through; elbows remain softly bent.
+            float armAmount = Mathf.Lerp(0.62f, 0.78f, sprintAmount);
+            ApplyLimbRotation(
+                _leftArmParts,
+                -forwardSwingRight * armAmount + sideAmount * 0.06f,
+                -sideAmount * 0.10f,
+                -legRollRight * 0.65f - 0.035f);
+            ApplyLimbRotation(
+                _rightArmParts,
+                -forwardSwingLeft * armAmount - sideAmount * 0.06f,
+                -sideAmount * 0.10f,
+                -legRollLeft * 0.65f + 0.035f);
+
+            float elbowLeft = 0.12f + Mathf.Max(0f, -forwardSwingRight) * 0.28f +
+                              sprintAmount * 0.12f;
+            float elbowRight = 0.12f + Mathf.Max(0f, -forwardSwingLeft) * 0.28f +
+                               sprintAmount * 0.12f;
+            ApplyLimbRotation(_leftForearmParts, elbowLeft, -sideAmount * 0.035f, 0f);
+            ApplyLimbRotation(_rightForearmParts, elbowRight, sideAmount * 0.035f, 0f);
+
+            float bob = (0.012f + sprintAmount * 0.012f) *
+                       (0.5f + 0.5f * Mathf.Cos(_locomotionPhase * 2f));
+            float forwardLean = 0.025f + sprintAmount * 0.055f;
+            float sideLean = -sideAmount * 0.035f +
+                             Mathf.Sin(_locomotionPhase) * sideAmount * 0.018f;
+            UpdateLocomotionBodyPose(bob, forwardLean, sideLean, delta);
         }
         else
         {
-            // Ease every joint back to its authored standing pose.
-            ResetLimbParts(_leftLegParts, delta);
-            ResetLimbParts(_rightLegParts, delta);
-            ResetLimbParts(_leftLowerLegParts, delta);
-            ResetLimbParts(_rightLowerLegParts, delta);
-            ResetLimbParts(_leftArmParts, delta);
-            ResetLimbParts(_rightArmParts, delta);
-            ResetLimbParts(_leftForearmParts, delta);
-            ResetLimbParts(_rightForearmParts, delta);
+            // Subtle idle breathing and relaxed, slightly asymmetrical posture.
+            float breathe = Mathf.Sin((float)Time.GetTicksMsec() * 0.0012f);
+            float idle = 1f - _locomotionBlend;
+            ApplyLimbRotation(_leftLegParts, 0.015f * idle, 0f, 0.008f * idle);
+            ApplyLimbRotation(_rightLegParts, -0.008f * idle, 0f, -0.006f * idle);
+            ApplyLimbRotation(_leftLowerLegParts, 0f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, 0f, 0f, 0f);
+            ApplyLimbRotation(_leftArmParts, 0.025f * breathe, 0f, -0.025f);
+            ApplyLimbRotation(_rightArmParts, 0.025f * breathe, 0f, 0.025f);
+            ApplyLimbRotation(_leftForearmParts, 0.10f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.10f, 0f, 0f);
+            UpdateLocomotionBodyPose(
+                0.003f * breathe, 0f, 0f, delta);
         }
+    }
+
+    private void ApplyLimbRotation(
+        List<(Node3D Node, Vector3 RestRotation)> parts,
+        float pitch,
+        float yaw,
+        float roll)
+    {
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            Vector3 target = part.RestRotation +
+                new Vector3(pitch, yaw, roll) * _locomotionBlend;
+            Vector3 current = part.Node.Rotation;
+            current.X = Mathf.LerpAngle(current.X, target.X, 1f);
+            current.Y = Mathf.LerpAngle(current.Y, target.Y, 1f);
+            current.Z = Mathf.LerpAngle(current.Z, target.Z, 1f);
+            part.Node.Rotation = current;
+        }
+    }
+
+    private void UpdateLocomotionBodyPose(
+        float bob,
+        float forwardLean,
+        float sideLean,
+        float delta)
+    {
+        if (_playerModelRoot == null || !IsInstanceValid(_playerModelRoot))
+            return;
+
+        Vector3 targetPosition = _locomotionBaseModelPosition +
+                                 new Vector3(0f, bob, 0f);
+        _playerModelRoot.Position = _playerModelRoot.Position.Lerp(
+            targetPosition, Mathf.Clamp(delta * 10f, 0f, 1f));
+
+        Vector3 targetRotation = _locomotionBaseModelRotation +
+                                 new Vector3(forwardLean, 0f, sideLean);
+        _playerModelRoot.Rotation = new Vector3(
+            Mathf.LerpAngle(_playerModelRoot.Rotation.X, targetRotation.X, delta * 8f),
+            Mathf.LerpAngle(_playerModelRoot.Rotation.Y, targetRotation.Y, delta * 8f),
+            Mathf.LerpAngle(_playerModelRoot.Rotation.Z, targetRotation.Z, delta * 8f));
     }
 
     private void ApplyLimbSwing(
