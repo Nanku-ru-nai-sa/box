@@ -2523,7 +2523,13 @@ private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
     // destination. TestMove only reports collisions along a movement sweep;
     // it is not a reliable "ground exists underneath" test for an edge.
     if (!HasSneakGroundSupport(GlobalTransform))
+    {
+        // If the support probes cannot confirm the current footing, fail
+        // safely instead of allowing crouch movement toward an unseen edge.
+        velocity.X = 0f;
+        velocity.Z = 0f;
         return;
+    }
 
     Transform3D candidateTransform = GlobalTransform;
     candidateTransform.Origin += moveDirection * requestedDistance;
