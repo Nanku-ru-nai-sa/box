@@ -688,7 +688,7 @@ public bool IsMounted =>
             // A modest forward lean gives the crouch the compact Skyrim-like
             // silhouette while the pelvis and thigh roots move as one unit.
             Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
-                                              new Vector3(-0.34f * _sneakBlend, 0f, 0f);
+                                              new Vector3(-0.408f * _sneakBlend, 0f, 0f);
             _playerUpperBodyPivot.Rotation = new Vector3(
                 Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
                     Mathf.Clamp(delta * 10f, 0f, 1f)),
@@ -860,24 +860,24 @@ public bool IsMounted =>
             {
                 // Drive the thighs forward and spread the knees for a
                 // deeper, balanced stealth squat.
-                pitch += 0.525f * _sneakBlend;
+                pitch += 0.63f * _sneakBlend;
                 roll -= 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLegParts))
             {
-                pitch += 0.525f * _sneakBlend;
+                pitch += 0.63f * _sneakBlend;
                 roll += 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftLowerLegParts))
             {
                 // Keep the shins folded while allowing the normal walk
                 // cycle to continue adding its alternating knee motion.
-                pitch -= 0.88f * _sneakBlend;
+                pitch -= 1.056f * _sneakBlend;
                 roll -= 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLowerLegParts))
             {
-                pitch -= 0.88f * _sneakBlend;
+                pitch -= 1.056f * _sneakBlend;
                 roll += 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftArmParts))
@@ -2507,7 +2507,8 @@ if (_isBreaking)
 
 private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
 {
-    if (!_isCrouching || !IsOnFloor() || delta <= 0f)
+    if (!_isCrouching || !IsOnFloor() || delta <= 0f ||
+        _playerCollision == null || _playerCapsule == null)
         return;
 
     Vector3 horizontalVelocity = new Vector3(velocity.X, 0f, velocity.Z);
@@ -2516,30 +2517,31 @@ private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
         return;
 
     Vector3 moveDirection = horizontalVelocity.Normalized();
-    const float groundProbeDistance = 0.35f;
+    float safeDistance = requestedDistance;
 
-    // Only guard movement when the player is currently supported by ground.
-    if (!TestMove(GlobalTransform, Vector3.Down * groundProbeDistance))
+    // Check the actual ground beneath the capsule footprint at the proposed
+    // destination. TestMove only reports collisions along a movement sweep;
+    // it is not a reliable "ground exists underneath" test for an edge.
+    if (!HasSneakGroundSupport(GlobalTransform))
         return;
 
-    float safeDistance = requestedDistance;
     Transform3D candidateTransform = GlobalTransform;
     candidateTransform.Origin += moveDirection * requestedDistance;
 
-    if (!TestMove(candidateTransform, Vector3.Down * groundProbeDistance))
+    if (!HasSneakGroundSupport(candidateTransform))
     {
         float low = 0f;
         float high = requestedDistance;
 
-        // Find the furthest point this frame where the capsule still detects
-        // ground beneath it. Eight passes give sub-centimeter precision.
-        for (int i = 0; i < 8; i++)
+        // Binary-search the furthest position that still has ground under
+        // the whole sampled footprint, including diagonal block corners.
+        for (int i = 0; i < 10; i++)
         {
             float middle = (low + high) * 0.5f;
             candidateTransform = GlobalTransform;
             candidateTransform.Origin += moveDirection * middle;
 
-            if (TestMove(candidateTransform, Vector3.Down * groundProbeDistance))
+            if (HasSneakGroundSupport(candidateTransform))
                 low = middle;
             else
                 high = middle;
@@ -2548,9 +2550,64 @@ private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
         safeDistance = low;
     }
 
+    // Leave a small safety margin so the capsule does not balance exactly
+    // on the last supported sample.
+    safeDistance = Mathf.Max(0f, safeDistance - 0.025f);
     float safeFraction = Mathf.Clamp(safeDistance / requestedDistance, 0f, 1f);
     velocity.X *= safeFraction;
     velocity.Z *= safeFraction;
+}
+
+private bool HasSneakGroundSupport(Transform3D playerTransform)
+{
+    if (_playerCollision == null || _playerCapsule == null)
+        return false;
+
+    PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
+    if (space == null)
+        return false;
+
+    Vector3 capsuleCenter = playerTransform * _playerCollision.Position;
+    float footY = capsuleCenter.Y - (_playerCapsule.Height * 0.5f);
+    float sampleRadius = _playerCapsule.Radius * 0.78f;
+
+    // Nine downward rays cover the centre and the capsule's outer footprint.
+    // Starting slightly above the feet also accommodates small floor steps.
+    Vector3[] sampleOffsets =
+    {
+        Vector3.Zero,
+        new Vector3(sampleRadius, 0f, 0f),
+        new Vector3(-sampleRadius, 0f, 0f),
+        new Vector3(0f, 0f, sampleRadius),
+        new Vector3(0f, 0f, -sampleRadius),
+        new Vector3(sampleRadius * 0.7071f, 0f, sampleRadius * 0.7071f),
+        new Vector3(-sampleRadius * 0.7071f, 0f, sampleRadius * 0.7071f),
+        new Vector3(sampleRadius * 0.7071f, 0f, -sampleRadius * 0.7071f),
+        new Vector3(-sampleRadius * 0.7071f, 0f, -sampleRadius * 0.7071f)
+    };
+
+    foreach (Vector3 offset in sampleOffsets)
+    {
+        Vector3 rayStart = new Vector3(
+            capsuleCenter.X + offset.X,
+            footY + 0.55f,
+            capsuleCenter.Z + offset.Z);
+        Vector3 rayEnd = new Vector3(
+            rayStart.X,
+            footY - 0.4f,
+            rayStart.Z);
+
+        var query = PhysicsRayQueryParameters3D.Create(
+            rayStart,
+            rayEnd,
+            CollisionMask);
+        query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+
+        if (space.IntersectRay(query).Count == 0)
+            return false;
+    }
+
+    return true;
 }
 
 private bool TryGetSafeDismountPosition(
