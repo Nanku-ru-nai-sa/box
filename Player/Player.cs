@@ -872,12 +872,12 @@ public bool IsMounted =>
             {
                 // Keep the shins folded while allowing the normal walk
                 // cycle to continue adding its alternating knee motion.
-                pitch -= 2.9f * _sneakBlend;
+                pitch -= 1.9f * _sneakBlend;
                 roll -= 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLowerLegParts))
             {
-                pitch -= 2.9f * _sneakBlend;
+                pitch -= 1.9f * _sneakBlend;
                 roll += 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftArmParts))
