@@ -860,24 +860,24 @@ public bool IsMounted =>
             {
                 // Drive the thighs forward and spread the knees for a
                 // deeper, balanced stealth squat.
-                pitch += 0.63f * _sneakBlend;
+                pitch += 0.95f * _sneakBlend;
                 roll -= 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLegParts))
             {
-                pitch += 0.63f * _sneakBlend;
+                pitch += 0.95f * _sneakBlend;
                 roll += 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftLowerLegParts))
             {
                 // Keep the shins folded while allowing the normal walk
                 // cycle to continue adding its alternating knee motion.
-                pitch -= 1.056f * _sneakBlend;
+                pitch -= 1.45f * _sneakBlend;
                 roll -= 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLowerLegParts))
             {
-                pitch -= 1.056f * _sneakBlend;
+                pitch -= 1.45f * _sneakBlend;
                 roll += 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftArmParts))
