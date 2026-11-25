@@ -230,7 +230,14 @@ public bool IsMounted =>
         _sneakEyeLabel = new Label();
         _sneakEyeLabel.Text = "◉";
         _sneakEyeLabel.Size = new Vector2(28f, 28f);
-        _sneakEyeLabel.Position = new Vector2(-14f, -14f);
+        _sneakEyeLabel.AnchorLeft = 0.5f;
+        _sneakEyeLabel.AnchorRight = 0.5f;
+        _sneakEyeLabel.AnchorTop = 0.5f;
+        _sneakEyeLabel.AnchorBottom = 0.5f;
+        _sneakEyeLabel.OffsetLeft = -14f;
+        _sneakEyeLabel.OffsetRight = 14f;
+        _sneakEyeLabel.OffsetTop = -14f;
+        _sneakEyeLabel.OffsetBottom = 14f;
         _sneakEyeLabel.HorizontalAlignment = HorizontalAlignment.Center;
         _sneakEyeLabel.VerticalAlignment = VerticalAlignment.Center;
         _sneakEyeLabel.AddThemeFontSizeOverride("font_size", 20);
