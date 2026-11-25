@@ -503,10 +503,14 @@ public bool IsMounted =>
         if (_playerHeadPivot == null || !IsInstanceValid(_playerHeadPivot) || _playerCamera == null)
             return;
 
-        // PlayerCamera pitch already follows vertical mouse movement. Keep this
-        // active in first-person too, even while the head mesh is hidden.
+        // Match the camera's world pitch, compensating for the model's own
+        // forward lean and the upper-body sneak bend so the head does not
+        // appear to aim above or below the camera cursor.
         Vector3 headRotation = _playerHeadPivot.Rotation;
-        headRotation.X = _playerCamera.GetPitch();
+        float parentPitch = 0f;
+        if (_playerHeadPivot.GetParent() is Node3D headParent)
+            parentPitch = headParent.GlobalRotation.X;
+        headRotation.X = _playerCamera.GetPitch() - parentPitch;
         _playerHeadPivot.Rotation = headRotation;
     }
 
@@ -882,18 +886,20 @@ public bool IsMounted =>
             }
             else if (ReferenceEquals(parts, _leftArmParts))
             {
-                // Arms sit a little wider for balance instead of pinning
-                // tightly against the torso.
-                roll -= 0.18f * _sneakBlend;
+                // Hold the upper arm farther out to create a wider
+                // balancing posture while sneaking.
+                roll -= 0.32f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightArmParts))
             {
-                roll += 0.18f * _sneakBlend;
+                roll += 0.32f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftForearmParts) ||
                      ReferenceEquals(parts, _rightForearmParts))
             {
-                pitch += 0.22f * _sneakBlend;
+                // Bring the forearms forward, as if using them to
+                // counterbalance the low crouched centre of gravity.
+                pitch += 0.55f * _sneakBlend;
             }
         }
 
