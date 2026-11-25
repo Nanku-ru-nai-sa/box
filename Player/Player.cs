@@ -605,7 +605,8 @@ public bool IsMounted =>
                 _locomotionBaseModelPosition = _playerModelRoot.Position;
                 _locomotionBaseModelRotation = _playerModelRoot.Rotation;
             }
-            _locomotionBasePoseCaptured = true;
+            if (_playerModelRoot != null && IsInstanceValid(_playerModelRoot))
+                _locomotionBasePoseCaptured = true;
         }
 
         Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
@@ -632,7 +633,7 @@ public bool IsMounted =>
             (speed - WalkSpeed) / Mathf.Max(0.1f, SprintSpeed - WalkSpeed),
             0f, 1f);
 
-        float targetBlend = moving ? 1f : 0f;
+        float targetBlend = moving ? 1f : (grounded ? 0.35f : 1f);
         _locomotionBlend = Mathf.MoveToward(
             _locomotionBlend, targetBlend, delta * (moving ? 5.5f : 4.0f));
 
