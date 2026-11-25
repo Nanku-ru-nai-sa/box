@@ -658,12 +658,14 @@ public bool IsMounted =>
         // Small, deliberate bends: knees flex while the thighs stay mostly
         // upright, and the arms settle slightly forward. This avoids the
         // exaggerated all-limbs curl from the previous attempt.
-        ApplySneakJointPose(_leftLegParts, -0.16f);
-        ApplySneakJointPose(_rightLegParts, -0.16f);
-        ApplySneakJointPose(_leftLowerLegParts, 0.42f);
-        ApplySneakJointPose(_rightLowerLegParts, 0.42f);
-        ApplySneakJointPose(_leftArmParts, -0.14f);
-        ApplySneakJointPose(_rightArmParts, -0.14f);
+        float sneakStep = moving ? Mathf.Sin(_armAnimationTime) * 0.10f : 0f;
+
+        ApplySneakJointPose(_leftLegParts, -0.16f + sneakStep);
+        ApplySneakJointPose(_rightLegParts, -0.16f - sneakStep);
+        ApplySneakJointPose(_leftLowerLegParts, 0.42f + Mathf.Max(0f, -sneakStep) * 0.35f);
+        ApplySneakJointPose(_rightLowerLegParts, 0.42f + Mathf.Max(0f, sneakStep) * 0.35f);
+        ApplySneakJointPose(_leftArmParts, -0.14f - sneakStep * 0.35f);
+        ApplySneakJointPose(_rightArmParts, -0.14f + sneakStep * 0.35f);
         ApplySneakJointPose(_leftForearmParts, -0.08f);
         ApplySneakJointPose(_rightForearmParts, -0.08f);
     }
