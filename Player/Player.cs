@@ -888,11 +888,11 @@ public bool IsMounted =>
             {
                 // Hold the upper arm farther out to create a wider
                 // balancing posture while sneaking.
-                roll -= 0.32f * _sneakBlend;
+                roll -= 0.416f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightArmParts))
             {
-                roll += 0.32f * _sneakBlend;
+                roll += 0.416f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftForearmParts) ||
                      ReferenceEquals(parts, _rightForearmParts))
