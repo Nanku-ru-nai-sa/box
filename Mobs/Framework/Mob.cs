@@ -3151,6 +3151,19 @@ return true;
             float distanceSquared =
                 playerOffset.LengthSquared();
 
+            float allowedDetectionRange = DetectionRange;
+            if (candidate is Player sneakingPlayer &&
+                sneakingPlayer.IsSneaking &&
+                _hostileTarget != candidate)
+            {
+                // An unseen sneaking player is much harder to notice.
+                // Once this mob has acquired them, normal tracking range applies.
+                allowedDetectionRange *= 0.3f;
+            }
+
+            if (distanceSquared > allowedDetectionRange * allowedDetectionRange)
+                continue;
+
             if (distanceSquared <
                 closestDistanceSquared)
             {
@@ -3204,8 +3217,16 @@ return true;
               fallbackPlayer.GetStats() != null &&
               fallbackPlayer.GetStats().IsDead))
         {
-            closest =
-                _player;
+            float fallbackRange = DetectionRange;
+            if (_player is Player sneakingFallback &&
+                sneakingFallback.IsSneaking &&
+                _hostileTarget != _player)
+            {
+                fallbackRange *= 0.3f;
+            }
+
+            if (GetFlatDistance(GlobalPosition, _player.GlobalPosition) <= fallbackRange)
+                closest = _player;
         }
 
         return closest;
@@ -3938,6 +3959,23 @@ return true;
         float dx = a.X - b.X;
         float dz = a.Z - b.Z;
         return Mathf.Sqrt(dx * dx + dz * dz);
+    }
+
+    public bool CanCurrentlyDetectPlayer(Player player)
+    {
+        if (player == null || !GodotObject.IsInstanceValid(player) ||
+            Health <= 0f || BehaviorType != MobBehaviorType.Hostile)
+            return false;
+
+        PlayerStats stats = player.GetStats();
+        if (stats != null && stats.IsDead)
+            return false;
+
+        float range = DetectionRange;
+        if (player.IsSneaking && _hostileTarget != player)
+            range *= 0.3f;
+
+        return GetFlatDistance(GlobalPosition, player.GlobalPosition) <= range;
     }
 
     private bool IsWithinAttackReach(Node3D target)

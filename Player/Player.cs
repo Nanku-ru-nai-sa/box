@@ -44,6 +44,15 @@ public partial class Player : CharacterBody3D
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
     private bool _isCrouching = false;
+    private float _sneakBlend = 0f;
+    private float _sneakAwarenessTimer = 0f;
+    private bool _isBeingDetected = false;
+    private float _standingCapsuleHeight = 1.8f;
+    private Vector3 _standingCollisionPosition = Vector3.Zero;
+    private Vector3 _standingModelScale = Vector3.One;
+    private Label _sneakEyeLabel;
+    public bool IsSneaking => _isCrouching;
+    public bool IsBeingDetected => _isBeingDetected;
     private bool _hasDoubleJumped = false;
     private bool _isGliding = false;
     private bool _isPlacing = false;
@@ -189,6 +198,19 @@ public bool IsMounted =>
         _rayCast.AddException(this);
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+        if (_playerCollision != null)
+        {
+            _standingCollisionPosition = _playerCollision.Position;
+            if (_playerCollision.Shape is CapsuleShape3D sourceCapsule)
+            {
+                CapsuleShape3D uniqueCapsule = sourceCapsule.Duplicate() as CapsuleShape3D;
+                if (uniqueCapsule != null)
+                {
+                    _playerCollision.Shape = uniqueCapsule;
+                    _standingCapsuleHeight = uniqueCapsule.Height;
+                }
+            }
+        }
 
         SetupPlayerModel();
 
@@ -203,20 +225,18 @@ public bool IsMounted =>
         _crosshairLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", _crosshairLayer);
 
-        var crosshair = new ColorRect();
-        crosshair.Color = new Color(1, 1, 1);
-        crosshair.Size = new Vector2(2, 2);
-        crosshair.PivotOffset = new Vector2(1, 1);
-        crosshair.MouseFilter = Control.MouseFilterEnum.Ignore;
-        crosshair.AnchorLeft = 0.5f;
-        crosshair.AnchorRight = 0.5f;
-        crosshair.AnchorTop = 0.5f;
-        crosshair.AnchorBottom = 0.5f;
-        crosshair.OffsetLeft = -1;
-        crosshair.OffsetTop = -1;
-        crosshair.OffsetRight = 1;
-        crosshair.OffsetBottom = 1;
-        _crosshairLayer.CallDeferred("add_child", crosshair);
+        // Skyrim-style stealth eye: open while a hostile mob can detect us,
+        // closed while we remain hidden.
+        _sneakEyeLabel = new Label();
+        _sneakEyeLabel.Text = "◉";
+        _sneakEyeLabel.Size = new Vector2(28f, 28f);
+        _sneakEyeLabel.Position = new Vector2(-14f, -14f);
+        _sneakEyeLabel.HorizontalAlignment = HorizontalAlignment.Center;
+        _sneakEyeLabel.VerticalAlignment = VerticalAlignment.Center;
+        _sneakEyeLabel.AddThemeFontSizeOverride("font_size", 20);
+        _sneakEyeLabel.AddThemeColorOverride("font_color", Colors.White);
+        _sneakEyeLabel.MouseFilter = Control.MouseFilterEnum.Ignore;
+        _crosshairLayer.CallDeferred("add_child", _sneakEyeLabel);
 
         _blockOutline = new MeshInstance3D();
         var st = new SurfaceTool();
@@ -411,6 +431,7 @@ public bool IsMounted =>
         // The imported model is authored with its feet at local Y=0,
         // while the player's capsule is centred on the CharacterBody.
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
+        _standingModelScale = _playerModelRoot.Scale;
 
         SetCameraMode(0);
     }
@@ -592,6 +613,20 @@ public bool IsMounted =>
         if (_playerModelParts == null)
             return;
 
+        if (_isCrouching)
+        {
+            // Low, forward-leaning Skyrim-style sneak stance.
+            ApplyLimbSwing(_leftLegParts, 0.35f);
+            ApplyLimbSwing(_rightLegParts, 0.35f);
+            ApplyLimbSwing(_leftLowerLegParts, 0.75f);
+            ApplyLimbSwing(_rightLowerLegParts, 0.75f);
+            ApplyLimbSwing(_leftArmParts, 0.85f);
+            ApplyLimbSwing(_rightArmParts, 0.85f);
+            ApplyLimbSwing(_leftForearmParts, -0.2f);
+            ApplyLimbSwing(_rightForearmParts, -0.2f);
+            return;
+        }
+
         Vector2 horizontalVelocity =
             new Vector2(Velocity.X, Velocity.Z);
 
@@ -653,6 +688,93 @@ public bool IsMounted =>
             ResetLimbParts(_rightArmParts, delta);
             ResetLimbParts(_leftForearmParts, delta);
             ResetLimbParts(_rightForearmParts, delta);
+        }
+    }
+
+    private void UpdateSneakPose(float delta)
+    {
+        _sneakBlend = Mathf.MoveToward(_sneakBlend, _isCrouching ? 1f : 0f, delta * 7f);
+
+        if (_playerModelRoot != null && IsInstanceValid(_playerModelRoot))
+        {
+            _playerModelRoot.Scale = new Vector3(
+                _standingModelScale.X,
+                _standingModelScale.Y * Mathf.Lerp(1f, 0.72f, _sneakBlend),
+                _standingModelScale.Z
+            );
+        }
+
+        // Lower the third-person camera smoothly. First-person follows the
+        // animated head pivot, so its eye height naturally drops with the pose.
+        if (_cameraMode != 0 && _playerCamera != null)
+        {
+            Vector3 target = _defaultPlayerCameraPosition + new Vector3(0f, -0.28f * _sneakBlend, 0f);
+            _playerCamera.Position = _playerCamera.Position.Lerp(target, Mathf.Clamp(delta * 10f, 0f, 1f));
+        }
+    }
+
+    private void UpdateSneakCollision(float delta)
+    {
+        if (_playerCollision?.Shape is not CapsuleShape3D capsule)
+            return;
+
+        float targetHeight = _isCrouching ? Mathf.Max(capsule.Radius * 2f, 1.2f) : _standingCapsuleHeight;
+        capsule.Height = Mathf.MoveToward(capsule.Height, targetHeight, delta * 4f);
+
+        Vector3 position = _standingCollisionPosition;
+        position.Y -= (_standingCapsuleHeight - capsule.Height) * 0.5f;
+        _playerCollision.Position = position;
+    }
+
+    private bool HasSneakFloorAhead(Vector3 direction)
+    {
+        if (GetWorld3D() == null)
+            return true;
+
+        Vector3 flatDirection = new Vector3(direction.X, 0f, direction.Z);
+        if (flatDirection.LengthSquared() < 0.0001f)
+            return true;
+
+        flatDirection = flatDirection.Normalized();
+        Vector3 rayStart = GlobalPosition + flatDirection * 0.48f + Vector3.Up * 0.18f;
+        Vector3 rayEnd = rayStart + Vector3.Down * 0.85f;
+
+        PhysicsRayQueryParameters3D query =
+            PhysicsRayQueryParameters3D.Create(rayStart, rayEnd, CollisionMask);
+        query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        query.CollideWithAreas = false;
+        query.CollideWithBodies = true;
+
+        return GetWorld3D().DirectSpaceState.IntersectRay(query).Count > 0;
+    }
+
+    private void UpdateSneakAwareness(float delta)
+    {
+        _sneakAwarenessTimer -= delta;
+        if (_sneakAwarenessTimer > 0f)
+            return;
+
+        _sneakAwarenessTimer = 0.12f;
+        bool detected = false;
+
+        foreach (Node node in GetTree().GetNodesInGroup("mobs"))
+        {
+            if (node is Mob mob && IsInstanceValid(mob) &&
+                mob.CanCurrentlyDetectPlayer(this))
+            {
+                detected = true;
+                break;
+            }
+        }
+
+        _isBeingDetected = detected;
+        if (_sneakEyeLabel != null && IsInstanceValid(_sneakEyeLabel))
+        {
+            _sneakEyeLabel.Text = detected ? "◉" : "—";
+            _sneakEyeLabel.AddThemeColorOverride(
+                "font_color",
+                detected ? new Color(1f, 0.35f, 0.25f) : Colors.White
+            );
         }
     }
 
@@ -1689,6 +1811,8 @@ public bool IsMounted =>
 
     public override void _Process(double delta)
 {
+    UpdateSneakPose((float)delta);
+    UpdateSneakAwareness((float)delta);
     UpdateFirstPersonArms((float)delta);
     UpdatePlayerHeadLook();
 
@@ -2065,6 +2189,7 @@ if (_isBreaking)
 
     _isCrouching =
         Input.IsActionPressed("crouch");
+    UpdateSneakCollision(dt);
 
     _isSprinting =
         Input.IsActionPressed("sprint") &&
@@ -2113,6 +2238,15 @@ if (_isBreaking)
                 0f,
                 moveSpeed * 10f * dt
             );
+    }
+
+    // While sneaking, keep the leading edge of the player's feet over
+    // supported ground. This prevents walking straight off a ledge.
+    if (_isCrouching && IsOnFloor() && direction.LengthSquared() > 0.0001f &&
+        !HasSneakFloorAhead(direction))
+    {
+        velocity.X = 0f;
+        velocity.Z = 0f;
     }
 
     // ---------------------------------------------------------
