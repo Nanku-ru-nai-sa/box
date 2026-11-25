@@ -442,6 +442,12 @@ public bool IsMounted =>
                 leftShoulder.Reparent(_playerUpperBodyPivot, true);
             if (rightShoulder != null)
                 rightShoulder.Reparent(_playerUpperBodyPivot, true);
+            // Keep the thigh roots attached to the pelvis as the whole
+            // upper-body group lowers and leans into the sneak pose.
+            if (leftHip != null)
+                leftHip.Reparent(_playerUpperBodyPivot, true);
+            if (rightHip != null)
+                rightHip.Reparent(_playerUpperBodyPivot, true);
 
             _upperBodyBasePosition = _playerUpperBodyPivot.Position;
             _upperBodyBaseRotation = _playerUpperBodyPivot.Rotation;
@@ -653,10 +659,25 @@ public bool IsMounted =>
 
         if (_playerCamera != null)
         {
-            Vector3 cameraTarget = _defaultPlayerCameraPosition +
-                                   Vector3.Down * (0.5f * _sneakBlend);
-            _playerCamera.Position = _playerCamera.Position.Lerp(
-                cameraTarget, Mathf.Clamp(delta * 10f, 0f, 1f));
+            if (_cameraMode == 0 && _playerHeadPivot != null &&
+                _playerModelRoot != null)
+            {
+                // First-person camera follows the face pivot every frame.
+                // Since the head belongs to the sneaking upper-body group,
+                // this keeps the view anchored just in front of the face.
+                Vector3 faceFront = _playerHeadPivot.GlobalPosition +
+                    _playerModelRoot.GlobalBasis *
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+                _playerCamera.Position = ToLocal(faceFront);
+            }
+            else
+            {
+                // Third-person camera lowers with the crouched character.
+                Vector3 cameraTarget = _defaultPlayerCameraPosition +
+                                       Vector3.Down * (0.5f * _sneakBlend);
+                _playerCamera.Position = _playerCamera.Position.Lerp(
+                    cameraTarget, Mathf.Clamp(delta * 10f, 0f, 1f));
+            }
         }
 
         if (_playerUpperBodyPivot != null &&
@@ -664,8 +685,10 @@ public bool IsMounted =>
         {
             _playerUpperBodyPivot.Position = _upperBodyBasePosition +
                                              Vector3.Down * (0.5f * _sneakBlend);
+            // A modest forward lean gives the crouch the compact Skyrim-like
+            // silhouette while the pelvis and thigh roots move as one unit.
             Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
-                                              new Vector3(-0.16f * _sneakBlend, 0f, 0f);
+                                              new Vector3(-0.25f * _sneakBlend, 0f, 0f);
             _playerUpperBodyPivot.Rotation = new Vector3(
                 Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
                     Mathf.Clamp(delta * 10f, 0f, 1f)),
@@ -719,10 +742,10 @@ public bool IsMounted =>
             // interfering with the player's movement or collision.
             // Lift the thighs slightly during a jump, then fold the knees
             // backward so the lower legs tuck beneath the body naturally.
-            ApplyLimbRotation(_leftLegParts, 0.22f, 0.02f, 0.025f);
-            ApplyLimbRotation(_rightLegParts, 0.22f, -0.02f, -0.025f);
-            ApplyLimbRotation(_leftLowerLegParts, -0.42f, 0f, 0f);
-            ApplyLimbRotation(_rightLowerLegParts, -0.42f, 0f, 0f);
+            ApplyLimbRotation(_leftLegParts, 0.48f, 0.02f, 0.025f);
+            ApplyLimbRotation(_rightLegParts, 0.48f, -0.02f, -0.025f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.88f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.88f, 0f, 0f);
             ApplyLimbRotation(_leftArmParts, -0.38f, 0f, -0.08f);
             ApplyLimbRotation(_rightArmParts, -0.38f, 0f, 0.08f);
             ApplyLimbRotation(_leftForearmParts, -0.22f, 0f, 0f);
