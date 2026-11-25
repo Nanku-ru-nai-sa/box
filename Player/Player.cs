@@ -200,7 +200,9 @@ public bool IsMounted =>
         if (_playerCollision?.Shape is CapsuleShape3D standingCapsule)
         {
             _standingCollisionShape = (CapsuleShape3D)standingCapsule.Duplicate();
-            _playerCollision.Shape = _standingCollisionShape;
+            // Keep an independent runtime shape so crouching never changes
+            // the saved standing dimensions used by the ceiling clearance test.
+            _playerCollision.Shape = (CapsuleShape3D)_standingCollisionShape.Duplicate();
         }
 
         SetupPlayerModel();
