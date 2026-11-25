@@ -746,10 +746,11 @@ public bool IsMounted =>
             ApplyLimbRotation(_rightLegParts, 0.42f, -0.02f, 0.12f);
             ApplyLimbRotation(_leftLowerLegParts, -0.58f, 0f, 0.12f);
             ApplyLimbRotation(_rightLowerLegParts, -0.58f, 0f, -0.12f);
-            ApplyLimbRotation(_leftArmParts, -0.38f, 0f, -0.08f);
-            ApplyLimbRotation(_rightArmParts, -0.38f, 0f, 0.08f);
-            ApplyLimbRotation(_leftForearmParts, -0.22f, 0f, 0f);
-            ApplyLimbRotation(_rightForearmParts, -0.22f, 0f, 0f);
+            // Swing the arms forward during the jump instead of trailing backward.
+            ApplyLimbRotation(_leftArmParts, 0.38f, 0f, -0.08f);
+            ApplyLimbRotation(_rightArmParts, 0.38f, 0f, 0.08f);
+            ApplyLimbRotation(_leftForearmParts, 0.22f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.22f, 0f, 0f);
             UpdateLocomotionBodyPose(0.035f, -0.035f, 0f, delta);
             return;
         }
@@ -859,12 +860,12 @@ public bool IsMounted =>
             {
                 // Drive the thighs forward and spread the knees for a
                 // deeper, balanced stealth squat.
-                pitch += 0.42f * _sneakBlend;
+                pitch += 0.525f * _sneakBlend;
                 roll -= 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLegParts))
             {
-                pitch += 0.42f * _sneakBlend;
+                pitch += 0.525f * _sneakBlend;
                 roll += 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftLowerLegParts))
@@ -2495,9 +2496,61 @@ if (_isBreaking)
             velocity += flow * 1.25f;
     }
 
+    // Minecraft-style sneak protection: while crouching on the ground,
+    // shorten horizontal movement until the capsule still has ground below it.
+    ApplySneakEdgeProtection(ref velocity, dt);
+
     Velocity = velocity;
 
     MoveAndSlide();
+}
+
+private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
+{
+    if (!_isCrouching || !IsOnFloor() || delta <= 0f)
+        return;
+
+    Vector3 horizontalVelocity = new Vector3(velocity.X, 0f, velocity.Z);
+    float requestedDistance = horizontalVelocity.Length() * delta;
+    if (requestedDistance <= 0.0001f)
+        return;
+
+    Vector3 moveDirection = horizontalVelocity.Normalized();
+    const float groundProbeDistance = 0.35f;
+
+    // Only guard movement when the player is currently supported by ground.
+    if (!TestMove(GlobalTransform, Vector3.Down * groundProbeDistance))
+        return;
+
+    float safeDistance = requestedDistance;
+    Transform3D candidateTransform = GlobalTransform;
+    candidateTransform.Origin += moveDirection * requestedDistance;
+
+    if (!TestMove(candidateTransform, Vector3.Down * groundProbeDistance))
+    {
+        float low = 0f;
+        float high = requestedDistance;
+
+        // Find the furthest point this frame where the capsule still detects
+        // ground beneath it. Eight passes give sub-centimeter precision.
+        for (int i = 0; i < 8; i++)
+        {
+            float middle = (low + high) * 0.5f;
+            candidateTransform = GlobalTransform;
+            candidateTransform.Origin += moveDirection * middle;
+
+            if (TestMove(candidateTransform, Vector3.Down * groundProbeDistance))
+                low = middle;
+            else
+                high = middle;
+        }
+
+        safeDistance = low;
+    }
+
+    float safeFraction = Mathf.Clamp(safeDistance / requestedDistance, 0f, 1f);
+    velocity.X *= safeFraction;
+    velocity.Z *= safeFraction;
 }
 
 private bool TryGetSafeDismountPosition(
