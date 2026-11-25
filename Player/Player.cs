@@ -1689,7 +1689,7 @@ public bool IsMounted =>
 
     public override void _Process(double delta)
 {
-    UpdateFirstPersonArms((float)delta);
+    UpdateProceduralWalkAnimation((float)delta);
     UpdatePlayerHeadLook();
 
     if (_feedbackTimer > 0f)
