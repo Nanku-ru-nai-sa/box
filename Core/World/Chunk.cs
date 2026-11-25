@@ -991,6 +991,19 @@ if (overlay != null)
                     mat.AlbedoTexture =
                         kvp.Key;
 
+                // The torch should visibly glow as well as illuminate nearby
+                // blocks. Its texture is unique, so emissive shading only
+                // affects torch pixels, not other transparent block textures.
+                Texture2D torchTexture =
+                    BlockRegistry.Instance?.GetBlock("torch")?.TextureSide;
+                if (kvp.Key != null && kvp.Key == torchTexture)
+                {
+                    mat.EmissionEnabled = true;
+                    mat.Emission = new Color(1.0f, 0.72f, 0.42f);
+                    mat.EmissionEnergyMultiplier = 0.9f;
+                    mat.EmissionTexture = kvp.Key;
+                }
+
                 arrayMesh.SurfaceSetMaterial(
                     surfIdx,
                     mat
