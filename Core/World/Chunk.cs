@@ -991,6 +991,19 @@ if (overlay != null)
                     mat.AlbedoTexture =
                         kvp.Key;
 
+                // The torch should visibly glow as well as illuminate nearby
+                // blocks. Its texture is unique, so emissive shading only
+                // affects torch pixels, not other transparent block textures.
+                Texture2D torchTexture =
+                    BlockRegistry.Instance?.GetBlock("torch")?.TextureSide;
+                if (kvp.Key != null && kvp.Key == torchTexture)
+                {
+                    mat.EmissionEnabled = true;
+                    mat.Emission = new Color(1.0f, 0.72f, 0.42f);
+                    mat.EmissionEnergyMultiplier = 0.9f;
+                    mat.EmissionTexture = kvp.Key;
+                }
+
                 arrayMesh.SurfaceSetMaterial(
                     surfIdx,
                     mat
@@ -1178,6 +1191,21 @@ private void AddCustomShapeFaces(
     float sideVMin = 0.0f;
     float sideVMax = height;
 
+    if (resource.CustomShapeUseExplicitUVs)
+    {
+        sideUMin = resource.CustomShapeSideUV.X;
+        sideUMax = resource.CustomShapeSideUV.Z;
+        sideVMin = resource.CustomShapeSideUV.Y;
+        sideVMax = resource.CustomShapeSideUV.W;
+    }
+
+    Vector4 topUV = resource.CustomShapeUseExplicitUVs
+        ? resource.CustomShapeTopUV
+        : new Vector4(uMin, vMin, uMax, vMax);
+    Vector4 bottomUV = resource.CustomShapeUseExplicitUVs
+        ? resource.CustomShapeBottomUV
+        : new Vector4(uMin, vMin, uMax, vMax);
+
 
     // ============================================================
     // TOP
@@ -1201,10 +1229,10 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.Top
             ),
-            uMin,
-            uMax,
-            vMin,
-            vMax
+            topUV.X,
+            topUV.Z,
+            topUV.Y,
+            topUV.W
         );
     }
 
@@ -1231,10 +1259,10 @@ private void AddCustomShapeFaces(
                 depth,
                 FaceDirection.Bottom
             ),
-            uMin,
-            uMax,
-            vMin,
-            vMax
+            bottomUV.X,
+            bottomUV.Z,
+            bottomUV.Y,
+            bottomUV.W
         );
     }
 
