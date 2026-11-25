@@ -51,6 +51,9 @@ public partial class Player : CharacterBody3D
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
     private bool _isCrouching = false;
+    private bool _isCrouchJumping = false;
+    private float _crouchChargeTime = 0f;
+    private const float CrouchJumpChargeDuration = 0.15f;
     private bool _hasDoubleJumped = false;
     private bool _isGliding = false;
     private bool _isPlacing = false;
@@ -746,13 +749,15 @@ public bool IsMounted =>
             // interfering with the player's movement or collision.
             // Lift the thighs slightly during a jump, then fold the knees
             // backward so the lower legs tuck beneath the body naturally.
-            ApplyLimbRotation(_leftLegParts, 0.42f, 0.02f, -0.12f);
-            ApplyLimbRotation(_rightLegParts, 0.42f, -0.02f, 0.12f);
-            ApplyLimbRotation(_leftLowerLegParts, -0.58f, 0f, 0.12f);
-            ApplyLimbRotation(_rightLowerLegParts, -0.58f, 0f, -0.12f);
-            // Swing the arms forward during the jump instead of trailing backward.
-            ApplyLimbRotation(_leftArmParts, 0.38f, 0f, -0.08f);
-            ApplyLimbRotation(_rightArmParts, 0.38f, 0f, 0.08f);
+            float jumpPoseMultiplier = _isCrouchJumping ? 2f : 1f;
+            ApplyLimbRotation(_leftLegParts, 0.42f * jumpPoseMultiplier, 0.02f, -0.12f);
+            ApplyLimbRotation(_rightLegParts, 0.42f * jumpPoseMultiplier, -0.02f, 0.12f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.58f * jumpPoseMultiplier, 0f, 0.12f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.58f * jumpPoseMultiplier, 0f, -0.12f);
+            // A crouch jump doubles the outward arm spread as well as the leg tuck.
+            float jumpArmSpread = _isCrouchJumping ? 0.16f : 0.08f;
+            ApplyLimbRotation(_leftArmParts, 0.38f, 0f, -jumpArmSpread);
+            ApplyLimbRotation(_rightArmParts, 0.38f, 0f, jumpArmSpread);
             ApplyLimbRotation(_leftForearmParts, 0.22f, 0f, 0f);
             ApplyLimbRotation(_rightForearmParts, 0.22f, 0f, 0f);
             UpdateLocomotionBodyPose(0.035f, -0.035f, 0f, delta);
@@ -2334,6 +2339,7 @@ if (_isBreaking)
     else
     {
         _hasDoubleJumped = false;
+        _isCrouchJumping = false;
     }
 
     // ---------------------------------------------------------
@@ -2370,6 +2376,15 @@ if (_isBreaking)
     _isCrouching =
         Input.IsActionPressed("crouch");
     UpdateCrouchCollision();
+
+    // Holding crouch briefly on the ground winds up a stronger jump.
+    if (_isCrouching && IsOnFloor())
+        _crouchChargeTime = Mathf.Min(
+            _crouchChargeTime + dt,
+            CrouchJumpChargeDuration
+        );
+    else if (!_isCrouching)
+        _crouchChargeTime = 0f;
 
     _isSprinting =
         Input.IsActionPressed("sprint") &&
@@ -2428,9 +2443,17 @@ if (_isBreaking)
     {
         if (IsOnFloor())
         {
-            velocity.Y =
-                JumpVelocity;
+            bool useCrouchJump =
+                _isCrouching &&
+                _crouchChargeTime >= CrouchJumpChargeDuration;
 
+            // 1.5x jump height requires sqrt(1.5) times the launch velocity.
+            velocity.Y = useCrouchJump
+                ? JumpVelocity * Mathf.Sqrt(1.5f)
+                : JumpVelocity;
+
+            _isCrouchJumping = useCrouchJump;
+            _crouchChargeTime = 0f;
             _hasDoubleJumped = false;
         }
         else if (CanDoubleJump &&
