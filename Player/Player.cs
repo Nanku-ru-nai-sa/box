@@ -688,7 +688,7 @@ public bool IsMounted =>
             // A modest forward lean gives the crouch the compact Skyrim-like
             // silhouette while the pelvis and thigh roots move as one unit.
             Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
-                                              new Vector3(-0.25f * _sneakBlend, 0f, 0f);
+                                              new Vector3(-0.34f * _sneakBlend, 0f, 0f);
             _playerUpperBodyPivot.Rotation = new Vector3(
                 Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
                     Mathf.Clamp(delta * 10f, 0f, 1f)),
@@ -742,10 +742,10 @@ public bool IsMounted =>
             // interfering with the player's movement or collision.
             // Lift the thighs slightly during a jump, then fold the knees
             // backward so the lower legs tuck beneath the body naturally.
-            ApplyLimbRotation(_leftLegParts, 0.48f, 0.02f, 0.025f);
-            ApplyLimbRotation(_rightLegParts, 0.48f, -0.02f, -0.025f);
-            ApplyLimbRotation(_leftLowerLegParts, -0.88f, 0f, 0f);
-            ApplyLimbRotation(_rightLowerLegParts, -0.88f, 0f, 0f);
+            ApplyLimbRotation(_leftLegParts, 0.42f, 0.02f, -0.12f);
+            ApplyLimbRotation(_rightLegParts, 0.42f, -0.02f, 0.12f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.58f, 0f, 0.12f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.58f, 0f, -0.12f);
             ApplyLimbRotation(_leftArmParts, -0.38f, 0f, -0.08f);
             ApplyLimbRotation(_rightArmParts, -0.38f, 0f, 0.08f);
             ApplyLimbRotation(_leftForearmParts, -0.22f, 0f, 0f);
@@ -857,31 +857,37 @@ public bool IsMounted =>
         {
             if (ReferenceEquals(parts, _leftLegParts))
             {
-                pitch += 0.18f * _sneakBlend;
-                roll -= 0.32f * _sneakBlend;
+                // Drive the thighs forward and spread the knees for a
+                // deeper, balanced stealth squat.
+                pitch += 0.42f * _sneakBlend;
+                roll -= 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLegParts))
             {
-                pitch += 0.18f * _sneakBlend;
-                roll += 0.32f * _sneakBlend;
+                pitch += 0.42f * _sneakBlend;
+                roll += 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftLowerLegParts))
             {
-                pitch -= 0.72f * _sneakBlend;
-                roll -= 0.10f * _sneakBlend;
+                // Keep the shins folded while allowing the normal walk
+                // cycle to continue adding its alternating knee motion.
+                pitch -= 0.88f * _sneakBlend;
+                roll -= 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLowerLegParts))
             {
-                pitch -= 0.72f * _sneakBlend;
-                roll += 0.10f * _sneakBlend;
+                pitch -= 0.88f * _sneakBlend;
+                roll += 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftArmParts))
             {
-                roll += 0.14f * _sneakBlend;
+                // Arms sit a little wider for balance instead of pinning
+                // tightly against the torso.
+                roll -= 0.18f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightArmParts))
             {
-                roll -= 0.14f * _sneakBlend;
+                roll += 0.18f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftForearmParts) ||
                      ReferenceEquals(parts, _rightForearmParts))
