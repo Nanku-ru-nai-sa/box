@@ -744,7 +744,7 @@ public bool IsMounted =>
 
         flatDirection = flatDirection.Normalized();
         Vector3 rayStart = GlobalPosition + flatDirection * 0.48f + Vector3.Up * 0.18f;
-        Vector3 rayEnd = rayStart + Vector3.Down * 0.85f;
+        Vector3 rayEnd = rayStart + Vector3.Down * 1.3f;
 
         PhysicsRayQueryParameters3D query =
             PhysicsRayQueryParameters3D.Create(rayStart, rayEnd, CollisionMask);
