@@ -18,6 +18,13 @@ public partial class Player : CharacterBody3D
     private Node3D _playerModelParts;
     private Node3D _bonesModel;
     private Node3D _playerHeadPivot;
+    private Node3D _playerUpperBodyPivot;
+    private Vector3 _upperBodyBasePosition;
+    private Vector3 _upperBodyBaseRotation;
+    private float _sneakBlend = 0f;
+    private CapsuleShape3D _playerCapsule;
+    private float _standingCapsuleHeight = 1.8f;
+    private Vector3 _standingCollisionPosition = Vector3.Zero;
     private float _playerHeadHalfDepth = 0.25f;
     private Vector3 _defaultPlayerCameraPosition = new Vector3(0f, 0.6f, 0f);
     private Node3D _leftBicep;
@@ -189,6 +196,12 @@ public bool IsMounted =>
         _rayCast.AddException(this);
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+        _playerCapsule = _playerCollision?.Shape as CapsuleShape3D;
+        if (_playerCapsule != null)
+        {
+            _standingCapsuleHeight = _playerCapsule.Height;
+            _standingCollisionPosition = _playerCollision.Position;
+        }
 
         SetupPlayerModel();
 
@@ -408,6 +421,32 @@ public bool IsMounted =>
                 "RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
                 _rightLowerLegParts, rightHip, rightLowerLegMesh);
 
+        // Group the torso, head and shoulders so sneaking can lower the
+        // upper body without moving the feet into the ground or scaling meshes.
+        Node3D torsoMesh = _playerModelParts.FindChild("body", true, false) as Node3D;
+        if (torsoMesh != null)
+        {
+            Vector3 torsoCenter = Vector3.Zero;
+            if (torsoMesh is MeshInstance3D torsoVisual && torsoVisual.Mesh != null)
+                torsoCenter = _playerModelParts.ToLocal(
+                    torsoMesh.ToGlobal(torsoVisual.GetAabb().GetCenter()));
+
+            _playerUpperBodyPivot = new Node3D { Name = "PlayerUpperBodyPivot" };
+            _playerModelParts.AddChild(_playerUpperBodyPivot);
+            _playerUpperBodyPivot.Position = torsoCenter;
+
+            torsoMesh.Reparent(_playerUpperBodyPivot, true);
+            if (_playerHeadPivot != null)
+                _playerHeadPivot.Reparent(_playerUpperBodyPivot, true);
+            if (leftShoulder != null)
+                leftShoulder.Reparent(_playerUpperBodyPivot, true);
+            if (rightShoulder != null)
+                rightShoulder.Reparent(_playerUpperBodyPivot, true);
+
+            _upperBodyBasePosition = _playerUpperBodyPivot.Position;
+            _upperBodyBaseRotation = _playerUpperBodyPivot.Rotation;
+        }
+
         // The imported model is authored with its feet at local Y=0,
         // while the player's capsule is centred on the CharacterBody.
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
@@ -609,6 +648,33 @@ public bool IsMounted =>
                 _locomotionBasePoseCaptured = true;
         }
 
+        _sneakBlend = Mathf.MoveToward(
+            _sneakBlend, _isCrouching ? 1f : 0f, delta * 8f);
+
+        if (_playerCamera != null)
+        {
+            Vector3 cameraTarget = _defaultPlayerCameraPosition +
+                                   Vector3.Down * (0.5f * _sneakBlend);
+            _playerCamera.Position = _playerCamera.Position.Lerp(
+                cameraTarget, Mathf.Clamp(delta * 10f, 0f, 1f));
+        }
+
+        if (_playerUpperBodyPivot != null &&
+            IsInstanceValid(_playerUpperBodyPivot))
+        {
+            _playerUpperBodyPivot.Position = _upperBodyBasePosition +
+                                             Vector3.Down * (0.5f * _sneakBlend);
+            Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
+                                              new Vector3(-0.16f * _sneakBlend, 0f, 0f);
+            _playerUpperBodyPivot.Rotation = new Vector3(
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Y, upperBodyTargetRotation.Y,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Z, upperBodyTargetRotation.Z,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)));
+        }
+
         Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
         float speed = worldVelocity.Length();
         bool grounded = IsOnFloor();
@@ -633,7 +699,9 @@ public bool IsMounted =>
             (speed - WalkSpeed) / Mathf.Max(0.1f, SprintSpeed - WalkSpeed),
             0f, 1f);
 
-        float targetBlend = moving ? 1f : (grounded ? 0.35f : 1f);
+        float targetBlend = _isCrouching
+            ? 1f
+            : (moving ? 1f : (grounded ? 0.35f : 1f));
         _locomotionBlend = Mathf.MoveToward(
             _locomotionBlend, targetBlend, delta * (moving ? 5.5f : 4.0f));
 
@@ -760,6 +828,45 @@ public bool IsMounted =>
         float yaw,
         float roll)
     {
+        // Skyrim-inspired sneak stance: knees spread, legs folded, and arms
+        // drawn slightly inward. These are joint rotations, never mesh scaling.
+        if (_sneakBlend > 0f)
+        {
+            if (ReferenceEquals(parts, _leftLegParts))
+            {
+                pitch += 0.18f * _sneakBlend;
+                roll -= 0.32f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightLegParts))
+            {
+                pitch += 0.18f * _sneakBlend;
+                roll += 0.32f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftLowerLegParts))
+            {
+                pitch -= 0.72f * _sneakBlend;
+                roll -= 0.10f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightLowerLegParts))
+            {
+                pitch -= 0.72f * _sneakBlend;
+                roll += 0.10f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftArmParts))
+            {
+                roll += 0.14f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightArmParts))
+            {
+                roll -= 0.14f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftForearmParts) ||
+                     ReferenceEquals(parts, _rightForearmParts))
+            {
+                pitch += 0.22f * _sneakBlend;
+            }
+        }
+
         foreach (var part in parts)
         {
             if (part.Node == null || !IsInstanceValid(part.Node))
@@ -1930,6 +2037,26 @@ public bool IsMounted =>
     }
 }
 
+    private void UpdateCrouchCollision()
+    {
+        if (_playerCollision == null || _playerCapsule == null)
+            return;
+
+        if (_isCrouching)
+        {
+            _playerCapsule.Height = Mathf.Max(
+                _standingCapsuleHeight - 0.5f,
+                _playerCapsule.Radius * 2f);
+            _playerCollision.Position = _standingCollisionPosition +
+                                        new Vector3(0f, -0.25f, 0f);
+        }
+        else
+        {
+            _playerCapsule.Height = _standingCapsuleHeight;
+            _playerCollision.Position = _standingCollisionPosition;
+        }
+    }
+
     // =========================================================================
     // PHYSICS
     // =========================================================================
@@ -2206,6 +2333,7 @@ if (_isBreaking)
 
     _isCrouching =
         Input.IsActionPressed("crouch");
+    UpdateCrouchCollision();
 
     _isSprinting =
         Input.IsActionPressed("sprint") &&

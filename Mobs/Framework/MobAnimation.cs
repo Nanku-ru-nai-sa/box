@@ -913,8 +913,18 @@ public class MobAnimation
         bool rightHandBoneVisible = !rightHand.Visible && !loseRightArm && rng.Randf() >= 0.22f;
         bool leftLegBoneVisible = !leftLegFlesh && !loseLeftLeg && rng.Randf() >= 0.18f;
         bool rightLegBoneVisible = !rightLegFlesh && !loseRightLeg && rng.Randf() >= 0.18f;
-        bool leftLowerLegBoneVisible = !leftLowerLeg.Visible && !loseLeftLeg && rng.Randf() >= 0.22f;
-        bool rightLowerLegBoneVisible = !rightLowerLeg.Visible && !loseRightLeg && rng.Randf() >= 0.22f;
+        // A lower-leg/foot bone is only shown when the upper leg is also
+        // exposed as bone. This prevents isolated floating foot bones.
+        bool leftLowerLegBoneVisible = leftLegBoneVisible &&
+                                       leftLowerLeg != null &&
+                                       !leftLowerLeg.Visible &&
+                                       !loseLeftLeg &&
+                                       rng.Randf() >= 0.22f;
+        bool rightLowerLegBoneVisible = rightLegBoneVisible &&
+                                        rightLowerLeg != null &&
+                                        !rightLowerLeg.Visible &&
+                                        !loseRightLeg &&
+                                        rng.Randf() >= 0.22f;
 
         SetVisible(leftArmBone, leftArmBoneVisible);
         SetVisible(leftHandBone, leftHandBoneVisible);
