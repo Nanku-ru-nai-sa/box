@@ -688,7 +688,7 @@ public bool IsMounted =>
             // A modest forward lean gives the crouch the compact Skyrim-like
             // silhouette while the pelvis and thigh roots move as one unit.
             Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
-                                              new Vector3(-0.408f * _sneakBlend, 0f, 0f);
+                                              new Vector3(-0.816f * _sneakBlend, 0f, 0f);
             _playerUpperBodyPivot.Rotation = new Vector3(
                 Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
                     Mathf.Clamp(delta * 10f, 0f, 1f)),
@@ -860,24 +860,24 @@ public bool IsMounted =>
             {
                 // Drive the thighs forward and spread the knees for a
                 // deeper, balanced stealth squat.
-                pitch += 0.95f * _sneakBlend;
+                pitch += 1.9f * _sneakBlend;
                 roll -= 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLegParts))
             {
-                pitch += 0.95f * _sneakBlend;
+                pitch += 1.9f * _sneakBlend;
                 roll += 0.48f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftLowerLegParts))
             {
                 // Keep the shins folded while allowing the normal walk
                 // cycle to continue adding its alternating knee motion.
-                pitch -= 1.45f * _sneakBlend;
+                pitch -= 2.9f * _sneakBlend;
                 roll -= 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _rightLowerLegParts))
             {
-                pitch -= 1.45f * _sneakBlend;
+                pitch -= 2.9f * _sneakBlend;
                 roll += 0.12f * _sneakBlend;
             }
             else if (ReferenceEquals(parts, _leftArmParts))

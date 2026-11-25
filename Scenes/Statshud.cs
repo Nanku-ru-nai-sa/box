@@ -40,7 +40,7 @@ public partial class StatsHud : HBoxContainer
     private float _staminaFadeTimer;
     private float _manaFadeTimer;
 
-    private const int PipSize = 32;
+    private const int PipSize = 26;
     private const int PipGap = 2;
     private const int GroupGap = 18;
 
@@ -367,37 +367,7 @@ public partial class StatsHud : HBoxContainer
             pips[i].Texture =
                 GetPipTexture(prefix, fraction);
 
-            FitPipToIntegerPixelScale(pips[i]);
         }
-    }
-
-    private void FitPipToIntegerPixelScale(TextureRect pip)
-    {
-        if (pip == null || pip.Texture == null)
-            return;
-
-        // Match the inventory icon renderer: use a whole-number scale
-        // rather than stretching pixel art to an arbitrary size.
-        Texture2D texture = pip.Texture;
-        int scaleX = Mathf.Max(1, Mathf.FloorToInt(
-            PipSize / (float)texture.GetWidth()));
-        int scaleY = Mathf.Max(1, Mathf.FloorToInt(
-            PipSize / (float)texture.GetHeight()));
-        int scale = Mathf.Min(scaleX, scaleY);
-
-        float drawWidth = texture.GetWidth() * scale;
-        float drawHeight = texture.GetHeight() * scale;
-
-        pip.AnchorLeft = 0.5f;
-        pip.AnchorRight = 0.5f;
-        pip.AnchorTop = 0.5f;
-        pip.AnchorBottom = 0.5f;
-        pip.OffsetLeft = -drawWidth * 0.5f;
-        pip.OffsetRight = drawWidth * 0.5f;
-        pip.OffsetTop = -drawHeight * 0.5f;
-        pip.OffsetBottom = drawHeight * 0.5f;
-        pip.StretchMode = TextureRect.StretchModeEnum.Scale;
-        pip.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
     }
 
     private HBoxContainer MakeGroup()
