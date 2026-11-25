@@ -210,9 +210,9 @@ public partial class BlockRegistry : Node
         torch.CustomShapeUseExplicitUVs = true;
         // Blockbench torch.json: side [6,4] to [8,16],
         // top [6,4] to [8,6], bottom [6,14] to [8,16].
-        torch.CustomShapeSideUV = new Vector4(6f / 16f, 4f / 16f, 8f / 16f, 1f);
-        torch.CustomShapeTopUV = new Vector4(6f / 16f, 4f / 16f, 8f / 16f, 6f / 16f);
-        torch.CustomShapeBottomUV = new Vector4(6f / 16f, 14f / 16f, 8f / 16f, 1f);
+        torch.CustomShapeSideUV = new Vector4(7f / 16f, 4f / 16f, 9f / 16f, 1f);
+        torch.CustomShapeTopUV = new Vector4(7f / 16f, 4f / 16f, 9f / 16f, 6f / 16f);
+        torch.CustomShapeBottomUV = new Vector4(7f / 16f, 14f / 16f, 9f / 16f, 1f);
         torch.TextureTop = torchTex;
         torch.TextureSide = torchTex;
         torch.TextureBottom = torchTex;
