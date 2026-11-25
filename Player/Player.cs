@@ -98,12 +98,6 @@ public partial class Player : CharacterBody3D
     private int _dragOrigCount = 0;
     private int _dragLastSlot = -1;
     private CollisionShape3D _playerCollision;
-    private CapsuleShape3D _standingCollisionShape;
-    private Vector3 _standingCollisionPosition;
-    private Vector3 _standingCameraPosition;
-    private Vector3 _standingPlayerPartsScale = Vector3.One;
-    private float _crouchBlend = 0f;
-    private const float CrouchCapsuleHeight = 1.5f;
 
     private Control _inventoryScreen;
     private bool _inventoryOpen = false;
@@ -195,15 +189,6 @@ public bool IsMounted =>
         _rayCast.AddException(this);
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
-        _standingCameraPosition = _playerCamera?.Position ?? _defaultPlayerCameraPosition;
-        _standingCollisionPosition = _playerCollision?.Position ?? Vector3.Zero;
-        if (_playerCollision?.Shape is CapsuleShape3D standingCapsule)
-        {
-            _standingCollisionShape = (CapsuleShape3D)standingCapsule.Duplicate();
-            // Keep an independent runtime shape so crouching never changes
-            // the saved standing dimensions used by the ceiling clearance test.
-            _playerCollision.Shape = (CapsuleShape3D)_standingCollisionShape.Duplicate();
-        }
 
         SetupPlayerModel();
 
@@ -340,8 +325,6 @@ public bool IsMounted =>
             GD.PrintErr("Player model is missing its player mesh group.");
             return;
         }
-
-        _standingPlayerPartsScale = _playerModelParts.Scale;
 
         // Keep references to the visible arm meshes for first-person view.
         _leftBicep =
@@ -666,10 +649,12 @@ public bool IsMounted =>
         {
             // A small airborne pose gives jumps a little anticipation without
             // interfering with the player's movement or collision.
-            ApplyLimbRotation(_leftLegParts, 0.12f, 0.02f, 0.025f);
-            ApplyLimbRotation(_rightLegParts, 0.12f, -0.02f, -0.025f);
-            ApplyLimbRotation(_leftLowerLegParts, 0.28f, 0f, 0f);
-            ApplyLimbRotation(_rightLowerLegParts, 0.28f, 0f, 0f);
+            // Lift the thighs slightly during a jump, then fold the knees
+            // backward so the lower legs tuck beneath the body naturally.
+            ApplyLimbRotation(_leftLegParts, 0.22f, 0.02f, 0.025f);
+            ApplyLimbRotation(_rightLegParts, 0.22f, -0.02f, -0.025f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.42f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.42f, 0f, 0f);
             ApplyLimbRotation(_leftArmParts, -0.38f, 0f, -0.08f);
             ApplyLimbRotation(_rightArmParts, -0.38f, 0f, 0.08f);
             ApplyLimbRotation(_leftForearmParts, -0.22f, 0f, 0f);
@@ -719,9 +704,7 @@ public bool IsMounted =>
                              Mathf.Max(0f, -forwardSwingLeft) * 0.18f;
             float rightKnee = kneeBase * rightLift +
                               Mathf.Max(0f, -forwardSwingRight) * 0.18f;
-            // The imported legs point down their local -Y axis. Negative X
-            // rotation folds the lower leg toward the rear (+Z), so the knee
-            // bends backward instead of kicking forward through the thigh.
+            // Lower legs hinge backward from the knee (negative local X).
             ApplyLimbRotation(_leftLowerLegParts, -leftKnee, 0f, -sideAmount * 0.035f);
             ApplyLimbRotation(_rightLowerLegParts, -rightKnee, 0f, sideAmount * 0.035f);
 
@@ -2224,8 +2207,6 @@ if (_isBreaking)
     _isCrouching =
         Input.IsActionPressed("crouch");
 
-    UpdateCrouchStance(dt);
-
     _isSprinting =
         Input.IsActionPressed("sprint") &&
         !_isCrouching &&
@@ -2360,65 +2341,6 @@ if (_isBreaking)
     Velocity = velocity;
 
     MoveAndSlide();
-}
-
-private void UpdateCrouchStance(float delta)
-{
-    if (_playerCollision == null || _standingCollisionShape == null)
-        return;
-
-    // Do not let the player stand up into a ceiling or overhang.
-    if (!_isCrouching && _crouchBlend > 0.01f && !CanStandAtCurrentPosition())
-        _isCrouching = true;
-
-    float targetBlend = _isCrouching ? 1f : 0f;
-    _crouchBlend = Mathf.MoveToward(_crouchBlend, targetBlend, delta * 7f);
-
-    float capsuleHeight = Mathf.Lerp(_standingCollisionShape.Height, CrouchCapsuleHeight, _crouchBlend);
-    if (_playerCollision.Shape is CapsuleShape3D capsule)
-        capsule.Height = capsuleHeight;
-
-    // Keep the capsule's feet planted while its top lowers by half a block.
-    _playerCollision.Position = _standingCollisionPosition +
-        new Vector3(0f, (capsuleHeight - _standingCollisionShape.Height) * 0.5f, 0f);
-
-    if (_playerCamera != null)
-    {
-        Vector3 targetCameraPosition = _standingCameraPosition +
-            new Vector3(0f, -0.5f * _crouchBlend, 0f);
-        _playerCamera.Position = _playerCamera.Position.Lerp(
-            targetCameraPosition, Mathf.Clamp(delta * 9f, 0f, 1f));
-    }
-
-    if (_playerModelParts != null && IsInstanceValid(_playerModelParts))
-    {
-        Vector3 crouchedScale = new Vector3(
-            _standingPlayerPartsScale.X,
-            _standingPlayerPartsScale.Y * (1f - 0.167f * _crouchBlend),
-            _standingPlayerPartsScale.Z);
-        _playerModelParts.Scale = _playerModelParts.Scale.Lerp(
-            crouchedScale, Mathf.Clamp(delta * 9f, 0f, 1f));
-    }
-}
-
-private bool CanStandAtCurrentPosition()
-{
-    if (_playerCollision == null || _standingCollisionShape == null)
-        return true;
-
-    PhysicsShapeQueryParameters3D query = new PhysicsShapeQueryParameters3D
-    {
-        Shape = _standingCollisionShape,
-        Transform = GlobalTransform * new Transform3D(
-            _playerCollision.Transform.Basis,
-            _standingCollisionPosition),
-        CollisionMask = CollisionMask,
-        CollideWithAreas = false,
-        CollideWithBodies = true
-    };
-    query.Exclude.Add(GetRid());
-
-    return GetWorld3D().DirectSpaceState.IntersectShape(query, 1).Count == 0;
 }
 
 private bool TryGetSafeDismountPosition(
