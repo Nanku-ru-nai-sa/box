@@ -36,7 +36,7 @@ public static List<string> GetAllItemIds()
 
 
     // Core farming items remain available in Creative even before their PNGs exist.
-    foreach (string id in new[] { "scythe", "wheat_seed", "corn_seed", "tomato_seed", "wheat", "corn", "tomato" })
+    foreach (string id in new[] { "scythe", "wheat_seed", "corn_seed", "tomato_seed", "wheat", "corn", "tomato", "pilot_helmet" })
         if (!_allItemIds.Exists(existing => string.Equals(existing, id, StringComparison.OrdinalIgnoreCase)))
             _allItemIds.Add(id);
 
