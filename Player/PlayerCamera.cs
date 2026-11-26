@@ -15,8 +15,10 @@ public partial class PlayerCamera : Node3D
 
     public void SetWallRunTilt(bool attached, float wallSide)
     {
+        // Invert the previous roll direction: the old sign made the
+        // horizon lean away from the wall from the player's viewpoint.
         _wallRunRollTarget = attached
-            ? -Mathf.Sign(wallSide) * WallRunCameraRoll
+            ? Mathf.Sign(wallSide) * WallRunCameraRoll
             : 0f;
     }
 
