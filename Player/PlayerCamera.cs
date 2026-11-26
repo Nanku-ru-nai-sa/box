@@ -82,7 +82,7 @@ public float GetPitch()
 public void SetPitch(float pitch)
 {
     _pitch = Mathf.Clamp(pitch, MinPitch, MaxPitch);
-    Rotation = new Vector3(_pitch, 0, 0);
+    Rotation = new Vector3(_pitch, 0, _wallRunRoll);
 }
 
     public Camera3D GetCamera() => _camera;
