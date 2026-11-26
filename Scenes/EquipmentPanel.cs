@@ -108,9 +108,9 @@ public partial class EquipmentPanel : Control
         // A private preview world has no ambient lighting by default. Keep
         // the background transparent, but add soft white ambient light so
         // the model's original textures and colors remain visible.
-        var previewEnvironment = new Environment();
-        previewEnvironment.BackgroundMode = Environment.BGMode.Canvas;
-        previewEnvironment.AmbientLightSource = Environment.AmbientSource.Color;
+        var previewEnvironment = new Godot.Environment();
+        previewEnvironment.BackgroundMode = Godot.Environment.BGMode.Canvas;
+        previewEnvironment.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         previewEnvironment.AmbientLightColor = Colors.White;
         previewEnvironment.AmbientLightEnergy = 0.85f;
 
@@ -365,7 +365,12 @@ public partial class EquipmentPanel : Control
             target[i] = slot;
 
             if (isGearColumn)
-                slot.GuiInput += ev => GearSlotInput?.Invoke(ev, i);
+            {
+                // Capture this slot's index, not the for-loop variable.
+                // Without a local copy every click can report the final loop index.
+                int slotIndex = i;
+                slot.GuiInput += ev => GearSlotInput?.Invoke(ev, slotIndex);
+            }
         }
     }
 
