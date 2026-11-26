@@ -98,6 +98,7 @@ public partial class ItemRegistry : Node
         // Fixes: crafted tools showing no icon/stats after restarting the game.
         ToolCrafting.LoadPersistedRecipes();
         RegisterBasicFlintTools();
+        RegisterPilotHelmet();
     }
 
     // Make the basic flint-and-stick versions available to the normal
@@ -120,6 +121,20 @@ public partial class ItemRegistry : Node
         }
     }
 
+
+    private void RegisterPilotHelmet()
+    {
+        var helmet = new ItemResource();
+        helmet.ItemId = "pilot_helmet";
+        helmet.DisplayName = "Pilot Helmet";
+        helmet.Description = "Prototype movement gear. Enables wall running, wall jumps and mantling while equipped.";
+        helmet.IsEquippable = true;
+        helmet.EquipSlot = "Helmet";
+        helmet.IsStackable = false;
+        helmet.MaxStackSize = 1;
+        helmet.GrantsWallClimb = true;
+        _items[helmet.ItemId] = helmet;
+    }
 
     private void RegisterFarmingItem(string id, string name, bool stackable, string description)
     {
