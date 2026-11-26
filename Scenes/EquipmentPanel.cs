@@ -1,4 +1,5 @@
 using Godot;
+using System;
 
 // EquipmentPanel — gear/appearance slot layout, plus a simple text readout of
 // the player's core stats (Health / Stamina / Mana) in the panel's reserved
@@ -20,6 +21,32 @@ public partial class EquipmentPanel : Control
     private Panel _bg;
     public Panel[] GearSlots    { get; private set; } = new Panel[4];
     public Panel[] ApparelSlots { get; private set; } = new Panel[4];
+
+    public event Action<InputEvent, int> GearSlotInput;
+    private readonly string[] _gearItemIds = new string[4];
+    private readonly Label[] _gearItemLabels = new Label[4];
+
+    public string GetGearSlotItem(int index)
+    {
+        return index >= 0 && index < _gearItemIds.Length
+            ? _gearItemIds[index]
+            : "";
+    }
+
+    public void SetGearSlotItem(int index, string itemId)
+    {
+        if (index < 0 || index >= _gearItemIds.Length)
+            return;
+
+        _gearItemIds[index] = itemId ?? "";
+        if (_gearItemLabels[index] != null)
+        {
+            string displayName = string.IsNullOrEmpty(itemId)
+                ? GearLabels[index]
+                : ItemRegistry.Instance?.GetItem(itemId)?.DisplayName ?? itemId;
+            _gearItemLabels[index].Text = displayName;
+        }
+    }
 
     private PlayerStats _stats;
     private Label _healthLabel;
@@ -307,6 +334,7 @@ public partial class EquipmentPanel : Control
 
     private void BuildColumn(string[] labels, int columnIndex, Panel[] target)
     {
+        bool isGearColumn = ReferenceEquals(target, GearSlots);
         float startX = columnIndex == 0
             ? 8f
             : PanelW - SlotSz - 8f;
@@ -326,6 +354,8 @@ public partial class EquipmentPanel : Control
 
             var lbl = new Label();
             lbl.Text        = labels[i];
+            if (isGearColumn)
+                _gearItemLabels[i] = lbl;
             lbl.Position    = new Vector2(2f, 2f);
             lbl.AddThemeFontSizeOverride("font_size", 8);
             lbl.AddThemeColorOverride("font_color", new Color(0.55f, 0.55f, 0.55f));
@@ -333,6 +363,9 @@ public partial class EquipmentPanel : Control
             slot.AddChild(lbl);
 
             target[i] = slot;
+
+            if (isGearColumn)
+                slot.GuiInput += ev => GearSlotInput?.Invoke(ev, i);
         }
     }
 
