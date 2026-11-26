@@ -18,6 +18,13 @@ public partial class Player : CharacterBody3D
     private Node3D _playerModelParts;
     private Node3D _bonesModel;
     private Node3D _playerHeadPivot;
+    private Node3D _playerUpperBodyPivot;
+    private Vector3 _upperBodyBasePosition;
+    private Vector3 _upperBodyBaseRotation;
+    private float _sneakBlend = 0f;
+    private CapsuleShape3D _playerCapsule;
+    private float _standingCapsuleHeight = 1.8f;
+    private Vector3 _standingCollisionPosition = Vector3.Zero;
     private float _playerHeadHalfDepth = 0.25f;
     private Vector3 _defaultPlayerCameraPosition = new Vector3(0f, 0.6f, 0f);
     private Node3D _leftBicep;
@@ -44,6 +51,9 @@ public partial class Player : CharacterBody3D
     private RandomNumberGenerator _dropRng = new RandomNumberGenerator();
     private bool _isSprinting = false;
     private bool _isCrouching = false;
+    private bool _isCrouchJumping = false;
+    private float _crouchChargeTime = 0f;
+    private const float CrouchJumpChargeDuration = 0.15f;
     private bool _hasDoubleJumped = false;
     private bool _isGliding = false;
     private bool _isPlacing = false;
@@ -189,6 +199,12 @@ public bool IsMounted =>
         _rayCast.AddException(this);
         _dropRng.Randomize();
         _playerCollision = GetNodeOrNull<CollisionShape3D>("CollisionShape3D");
+        _playerCapsule = _playerCollision?.Shape as CapsuleShape3D;
+        if (_playerCapsule != null)
+        {
+            _standingCapsuleHeight = _playerCapsule.Height;
+            _standingCollisionPosition = _playerCollision.Position;
+        }
 
         SetupPlayerModel();
 
@@ -408,6 +424,38 @@ public bool IsMounted =>
                 "RightKneePivot", new Vector3(0.125f, 0.375f, 0f),
                 _rightLowerLegParts, rightHip, rightLowerLegMesh);
 
+        // Group the torso, head and shoulders so sneaking can lower the
+        // upper body without moving the feet into the ground or scaling meshes.
+        Node3D torsoMesh = _playerModelParts.FindChild("body", true, false) as Node3D;
+        if (torsoMesh != null)
+        {
+            Vector3 torsoCenter = Vector3.Zero;
+            if (torsoMesh is MeshInstance3D torsoVisual && torsoVisual.Mesh != null)
+                torsoCenter = _playerModelParts.ToLocal(
+                    torsoMesh.ToGlobal(torsoVisual.GetAabb().GetCenter()));
+
+            _playerUpperBodyPivot = new Node3D { Name = "PlayerUpperBodyPivot" };
+            _playerModelParts.AddChild(_playerUpperBodyPivot);
+            _playerUpperBodyPivot.Position = torsoCenter;
+
+            torsoMesh.Reparent(_playerUpperBodyPivot, true);
+            if (_playerHeadPivot != null)
+                _playerHeadPivot.Reparent(_playerUpperBodyPivot, true);
+            if (leftShoulder != null)
+                leftShoulder.Reparent(_playerUpperBodyPivot, true);
+            if (rightShoulder != null)
+                rightShoulder.Reparent(_playerUpperBodyPivot, true);
+            // Keep the thigh roots attached to the pelvis as the whole
+            // upper-body group lowers and leans into the sneak pose.
+            if (leftHip != null)
+                leftHip.Reparent(_playerUpperBodyPivot, true);
+            if (rightHip != null)
+                rightHip.Reparent(_playerUpperBodyPivot, true);
+
+            _upperBodyBasePosition = _playerUpperBodyPivot.Position;
+            _upperBodyBaseRotation = _playerUpperBodyPivot.Rotation;
+        }
+
         // The imported model is authored with its feet at local Y=0,
         // while the player's capsule is centred on the CharacterBody.
         _playerModelRoot.Position = new Vector3(0f, -0.9f, 0f);
@@ -458,10 +506,14 @@ public bool IsMounted =>
         if (_playerHeadPivot == null || !IsInstanceValid(_playerHeadPivot) || _playerCamera == null)
             return;
 
-        // PlayerCamera pitch already follows vertical mouse movement. Keep this
-        // active in first-person too, even while the head mesh is hidden.
+        // Match the camera's world pitch, compensating for the model's own
+        // forward lean and the upper-body sneak bend so the head does not
+        // appear to aim above or below the camera cursor.
         Vector3 headRotation = _playerHeadPivot.Rotation;
-        headRotation.X = _playerCamera.GetPitch();
+        float parentPitch = 0f;
+        if (_playerHeadPivot.GetParent() is Node3D headParent)
+            parentPitch = headParent.GlobalRotation.X;
+        headRotation.X = _playerCamera.GetPitch() - parentPitch;
         _playerHeadPivot.Rotation = headRotation;
     }
 
@@ -587,73 +639,310 @@ public bool IsMounted =>
             visual.Visible = visible;
     }
 
+    private float _locomotionBlend = 0f;
+    private float _locomotionPhase = 0f;
+    private Vector3 _locomotionBaseModelPosition;
+    private Vector3 _locomotionBaseModelRotation;
+    private bool _locomotionBasePoseCaptured = false;
+
     private void UpdateFirstPersonArms(float delta)
     {
-        if (_playerModelParts == null)
+        if (_playerModelParts == null || !IsInstanceValid(_playerModelParts))
             return;
 
-        Vector2 horizontalVelocity =
-            new Vector2(Velocity.X, Velocity.Z);
+        if (!_locomotionBasePoseCaptured)
+        {
+            if (_playerModelRoot != null && IsInstanceValid(_playerModelRoot))
+            {
+                _locomotionBaseModelPosition = _playerModelRoot.Position;
+                _locomotionBaseModelRotation = _playerModelRoot.Rotation;
+            }
+            if (_playerModelRoot != null && IsInstanceValid(_playerModelRoot))
+                _locomotionBasePoseCaptured = true;
+        }
 
-        bool moving =
-            horizontalVelocity.Length() > 0.15f &&
-            IsOnFloor();
+        _sneakBlend = Mathf.MoveToward(
+            _sneakBlend, _isCrouching ? 1f : 0f, delta * 8f);
+
+        if (_playerCamera != null)
+        {
+            if (_cameraMode == 0 && _playerHeadPivot != null &&
+                _playerModelRoot != null)
+            {
+                // First-person camera follows the face pivot every frame.
+                // Since the head belongs to the sneaking upper-body group,
+                // this keeps the view anchored just in front of the face.
+                Vector3 faceFront = _playerHeadPivot.GlobalPosition +
+                    _playerModelRoot.GlobalBasis *
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+                _playerCamera.Position = ToLocal(faceFront);
+            }
+            else
+            {
+                // Third-person camera lowers with the crouched character.
+                Vector3 cameraTarget = _defaultPlayerCameraPosition +
+                                       Vector3.Down * (0.5f * _sneakBlend);
+                _playerCamera.Position = _playerCamera.Position.Lerp(
+                    cameraTarget, Mathf.Clamp(delta * 10f, 0f, 1f));
+            }
+        }
+
+        if (_playerUpperBodyPivot != null &&
+            IsInstanceValid(_playerUpperBodyPivot))
+        {
+            _playerUpperBodyPivot.Position = _upperBodyBasePosition +
+                                             Vector3.Down * (0.5f * _sneakBlend);
+            // A modest forward lean gives the crouch the compact Skyrim-like
+            // silhouette while the pelvis and thigh roots move as one unit.
+            Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
+                                              new Vector3(-0.816f * _sneakBlend, 0f, 0f);
+            _playerUpperBodyPivot.Rotation = new Vector3(
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Y, upperBodyTargetRotation.Y,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Z, upperBodyTargetRotation.Z,
+                    Mathf.Clamp(delta * 10f, 0f, 1f)));
+        }
+
+        Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
+        float speed = worldVelocity.Length();
+        bool grounded = IsOnFloor();
+        bool moving = speed > 0.12f && grounded;
+
+        // Work in the character's own space so forward, backward and strafing
+        // each produce a slightly different gait rather than one fixed swing.
+        Vector3 localDirection = Vector3.Zero;
+        if (speed > 0.001f)
+        {
+            localDirection =
+                _playerModelParts.GlobalTransform.Basis.Inverse() *
+                (worldVelocity / speed);
+            localDirection.Y = 0f;
+            if (localDirection.LengthSquared() > 0.001f)
+                localDirection = localDirection.Normalized();
+        }
+
+        float forwardAmount = -localDirection.Z;
+        float sideAmount = localDirection.X;
+        float sprintAmount = Mathf.Clamp(
+            (speed - WalkSpeed) / Mathf.Max(0.1f, SprintSpeed - WalkSpeed),
+            0f, 1f);
+
+        float targetBlend = _isCrouching
+            ? 1f
+            : (moving ? 1f : (grounded ? 0.35f : 1f));
+        _locomotionBlend = Mathf.MoveToward(
+            _locomotionBlend, targetBlend, delta * (moving ? 5.5f : 4.0f));
 
         if (moving)
         {
-            float speedFactor =
-                Mathf.Clamp(horizontalVelocity.Length() / WalkSpeed, 0.5f, 2f);
+            float cadence = Mathf.Lerp(6.4f, 9.0f, sprintAmount);
+            _locomotionPhase = Mathf.PosMod(
+                _locomotionPhase + delta * cadence, Mathf.Tau);
+            _armAnimationTime = _locomotionPhase;
+        }
 
-            _armAnimationTime += delta * speedFactor * 7f;
+        if (!grounded)
+        {
+            // A small airborne pose gives jumps a little anticipation without
+            // interfering with the player's movement or collision.
+            // Lift the thighs slightly during a jump, then fold the knees
+            // backward so the lower legs tuck beneath the body naturally.
+            float jumpPoseMultiplier = _isCrouchJumping ? 2f : 1f;
+            ApplyLimbRotation(_leftLegParts, 0.42f * jumpPoseMultiplier, 0.02f, -0.12f);
+            ApplyLimbRotation(_rightLegParts, 0.42f * jumpPoseMultiplier, -0.02f, 0.12f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.58f * jumpPoseMultiplier, 0f, 0.12f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.58f * jumpPoseMultiplier, 0f, -0.12f);
+            // A crouch jump doubles the outward arm spread as well as the leg tuck.
+            float jumpArmSpread = _isCrouchJumping ? 0.16f : 0.08f;
+            ApplyLimbRotation(_leftArmParts, 0.38f, 0f, -jumpArmSpread);
+            ApplyLimbRotation(_rightArmParts, 0.38f, 0f, jumpArmSpread);
+            ApplyLimbRotation(_leftForearmParts, 0.22f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.22f, 0f, 0f);
+            UpdateLocomotionBodyPose(0.035f, -0.035f, 0f, delta);
+            return;
+        }
 
-            float swing =
-                Mathf.Sin(_armAnimationTime) * 0.45f;
+        if (moving)
+        {
+            float phaseLeft = _locomotionPhase;
+            float phaseRight = _locomotionPhase + Mathf.Pi;
+            float leftSwing = Mathf.Sin(phaseLeft);
+            float rightSwing = Mathf.Sin(phaseRight);
+            float leftLift = Mathf.Max(0f, Mathf.Cos(phaseLeft));
+            float rightLift = Mathf.Max(0f, Mathf.Cos(phaseRight));
 
-            float leftLegSwing = swing;
-            float rightLegSwing = -swing;
-            float leftArmSwing = -swing;
-            float rightArmSwing = swing;
+            float stride = Mathf.Lerp(0.34f, 0.52f, sprintAmount);
+            float forwardSwingLeft = leftSwing * forwardAmount;
+            float forwardSwingRight = rightSwing * forwardAmount;
 
-            // Upper legs swing like the existing mob walk animation.
-            ApplyLimbSwing(_leftLegParts, leftLegSwing);
-            ApplyLimbSwing(_rightLegParts, rightLegSwing);
+            // A forward walk uses a broad hip swing. Strafing shifts the legs
+            // laterally and adds a little hip yaw so the feet don't look locked
+            // to a single front/back hinge.
+            float sideStride = sideAmount * 0.20f;
+            float legPitchLeft = forwardSwingLeft * stride;
+            float legPitchRight = forwardSwingRight * stride;
+            float legYaw = sideAmount * 0.14f;
+            float legRollLeft = sideStride * leftSwing + sideAmount * 0.035f;
+            float legRollRight = sideStride * rightSwing + sideAmount * 0.035f;
 
-            // Knees bend during the backward part of each leg's stride.
-            ApplyLimbSwing(
-                _leftLowerLegParts,
-                -Mathf.Max(0f, -leftLegSwing) * 0.8f
-            );
-            ApplyLimbSwing(
-                _rightLowerLegParts,
-                -Mathf.Max(0f, -rightLegSwing) * 0.8f
-            );
+            ApplyLimbRotation(
+                _leftLegParts,
+                legPitchLeft,
+                legYaw + sideAmount * leftLift * 0.035f,
+                legRollLeft);
+            ApplyLimbRotation(
+                _rightLegParts,
+                legPitchRight,
+                legYaw - sideAmount * rightLift * 0.035f,
+                legRollRight);
 
-            // Upper arms counter-swing against the legs.
-            ApplyLimbSwing(_leftArmParts, leftArmSwing);
-            ApplyLimbSwing(_rightArmParts, rightArmSwing);
+            // The knee folds most while the foot is travelling forward, then
+            // opens as the leg reaches back to support the next step.
+            float kneeBase = Mathf.Lerp(0.52f, 0.68f, sprintAmount);
+            float leftKnee = kneeBase * leftLift +
+                             Mathf.Max(0f, -forwardSwingLeft) * 0.18f;
+            float rightKnee = kneeBase * rightLift +
+                              Mathf.Max(0f, -forwardSwingRight) * 0.18f;
+            // Lower legs hinge backward from the knee (negative local X).
+            ApplyLimbRotation(_leftLowerLegParts, -leftKnee, 0f, -sideAmount * 0.035f);
+            ApplyLimbRotation(_rightLowerLegParts, -rightKnee, 0f, sideAmount * 0.035f);
 
-            // Elbows flex slightly as the arms swing forward.
-            ApplyLimbSwing(
-                _leftForearmParts,
-                Mathf.Max(0f, leftArmSwing) * 0.3f
-            );
-            ApplyLimbSwing(
-                _rightForearmParts,
-                Mathf.Max(0f, rightArmSwing) * 0.3f
-            );
+            // Arms move opposite the legs. Shoulder roll and yaw add a small
+            // amount of 3D follow-through; elbows remain softly bent.
+            float armAmount = Mathf.Lerp(0.62f, 0.78f, sprintAmount);
+            ApplyLimbRotation(
+                _leftArmParts,
+                -forwardSwingRight * armAmount + sideAmount * 0.06f,
+                -sideAmount * 0.10f,
+                -legRollRight * 0.65f - 0.035f);
+            ApplyLimbRotation(
+                _rightArmParts,
+                -forwardSwingLeft * armAmount - sideAmount * 0.06f,
+                -sideAmount * 0.10f,
+                -legRollLeft * 0.65f + 0.035f);
+
+            float elbowLeft = 0.12f + Mathf.Max(0f, -forwardSwingRight) * 0.28f +
+                              sprintAmount * 0.12f;
+            float elbowRight = 0.12f + Mathf.Max(0f, -forwardSwingLeft) * 0.28f +
+                               sprintAmount * 0.12f;
+            ApplyLimbRotation(_leftForearmParts, elbowLeft, -sideAmount * 0.035f, 0f);
+            ApplyLimbRotation(_rightForearmParts, elbowRight, sideAmount * 0.035f, 0f);
+
+            float bob = (0.012f + sprintAmount * 0.012f) *
+                       (0.5f + 0.5f * Mathf.Cos(_locomotionPhase * 2f));
+            float forwardLean = 0.025f + sprintAmount * 0.055f;
+            float sideLean = -sideAmount * 0.035f +
+                             Mathf.Sin(_locomotionPhase) * sideAmount * 0.018f;
+            UpdateLocomotionBodyPose(bob, forwardLean, sideLean, delta);
         }
         else
         {
-            // Ease every joint back to its authored standing pose.
-            ResetLimbParts(_leftLegParts, delta);
-            ResetLimbParts(_rightLegParts, delta);
-            ResetLimbParts(_leftLowerLegParts, delta);
-            ResetLimbParts(_rightLowerLegParts, delta);
-            ResetLimbParts(_leftArmParts, delta);
-            ResetLimbParts(_rightArmParts, delta);
-            ResetLimbParts(_leftForearmParts, delta);
-            ResetLimbParts(_rightForearmParts, delta);
+            // Subtle idle breathing and relaxed, slightly asymmetrical posture.
+            float breathe = Mathf.Sin((float)Time.GetTicksMsec() * 0.0012f);
+            float idle = 1f - _locomotionBlend;
+            ApplyLimbRotation(_leftLegParts, 0.015f * idle, 0f, 0.008f * idle);
+            ApplyLimbRotation(_rightLegParts, -0.008f * idle, 0f, -0.006f * idle);
+            ApplyLimbRotation(_leftLowerLegParts, 0f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, 0f, 0f, 0f);
+            ApplyLimbRotation(_leftArmParts, 0.025f * breathe, 0f, -0.025f);
+            ApplyLimbRotation(_rightArmParts, 0.025f * breathe, 0f, 0.025f);
+            ApplyLimbRotation(_leftForearmParts, 0.10f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.10f, 0f, 0f);
+            UpdateLocomotionBodyPose(
+                0.003f * breathe, 0f, 0f, delta);
         }
+    }
+
+    private void ApplyLimbRotation(
+        List<(Node3D Node, Vector3 RestRotation)> parts,
+        float pitch,
+        float yaw,
+        float roll)
+    {
+        // Skyrim-inspired sneak stance: knees spread, legs folded, and arms
+        // drawn slightly inward. These are joint rotations, never mesh scaling.
+        if (_sneakBlend > 0f)
+        {
+            if (ReferenceEquals(parts, _leftLegParts))
+            {
+                // Drive the thighs forward and spread the knees for a
+                // deeper, balanced stealth squat.
+                pitch += 1.9f * _sneakBlend;
+                roll -= 0.48f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightLegParts))
+            {
+                pitch += 1.9f * _sneakBlend;
+                roll += 0.48f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftLowerLegParts))
+            {
+                // Keep the shins folded while allowing the normal walk
+                // cycle to continue adding its alternating knee motion.
+                pitch -= 1.9f * _sneakBlend;
+                roll -= 0.12f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightLowerLegParts))
+            {
+                pitch -= 1.9f * _sneakBlend;
+                roll += 0.12f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftArmParts))
+            {
+                // Hold the upper arm farther out to create a wider
+                // balancing posture while sneaking.
+                roll -= 0.416f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _rightArmParts))
+            {
+                roll += 0.416f * _sneakBlend;
+            }
+            else if (ReferenceEquals(parts, _leftForearmParts) ||
+                     ReferenceEquals(parts, _rightForearmParts))
+            {
+                // Bring the forearms forward, as if using them to
+                // counterbalance the low crouched centre of gravity.
+                pitch += 0.55f * _sneakBlend;
+            }
+        }
+
+        foreach (var part in parts)
+        {
+            if (part.Node == null || !IsInstanceValid(part.Node))
+                continue;
+
+            Vector3 target = part.RestRotation +
+                new Vector3(pitch, yaw, roll) * _locomotionBlend;
+            Vector3 current = part.Node.Rotation;
+            current.X = Mathf.LerpAngle(current.X, target.X, 1f);
+            current.Y = Mathf.LerpAngle(current.Y, target.Y, 1f);
+            current.Z = Mathf.LerpAngle(current.Z, target.Z, 1f);
+            part.Node.Rotation = current;
+        }
+    }
+
+    private void UpdateLocomotionBodyPose(
+        float bob,
+        float forwardLean,
+        float sideLean,
+        float delta)
+    {
+        if (_playerModelRoot == null || !IsInstanceValid(_playerModelRoot))
+            return;
+
+        Vector3 targetPosition = _locomotionBaseModelPosition +
+                                 new Vector3(0f, bob, 0f);
+        _playerModelRoot.Position = _playerModelRoot.Position.Lerp(
+            targetPosition, Mathf.Clamp(delta * 10f, 0f, 1f));
+
+        Vector3 targetRotation = _locomotionBaseModelRotation +
+                                 new Vector3(forwardLean, 0f, sideLean);
+        _playerModelRoot.Rotation = new Vector3(
+            Mathf.LerpAngle(_playerModelRoot.Rotation.X, targetRotation.X, delta * 8f),
+            Mathf.LerpAngle(_playerModelRoot.Rotation.Y, targetRotation.Y, delta * 8f),
+            Mathf.LerpAngle(_playerModelRoot.Rotation.Z, targetRotation.Z, delta * 8f));
     }
 
     private void ApplyLimbSwing(
@@ -1789,6 +2078,26 @@ public bool IsMounted =>
     }
 }
 
+    private void UpdateCrouchCollision()
+    {
+        if (_playerCollision == null || _playerCapsule == null)
+            return;
+
+        if (_isCrouching)
+        {
+            _playerCapsule.Height = Mathf.Max(
+                _standingCapsuleHeight - 0.5f,
+                _playerCapsule.Radius * 2f);
+            _playerCollision.Position = _standingCollisionPosition +
+                                        new Vector3(0f, -0.25f, 0f);
+        }
+        else
+        {
+            _playerCapsule.Height = _standingCapsuleHeight;
+            _playerCollision.Position = _standingCollisionPosition;
+        }
+    }
+
     // =========================================================================
     // PHYSICS
     // =========================================================================
@@ -2030,6 +2339,7 @@ if (_isBreaking)
     else
     {
         _hasDoubleJumped = false;
+        _isCrouchJumping = false;
     }
 
     // ---------------------------------------------------------
@@ -2065,6 +2375,16 @@ if (_isBreaking)
 
     _isCrouching =
         Input.IsActionPressed("crouch");
+    UpdateCrouchCollision();
+
+    // Holding crouch briefly on the ground winds up a stronger jump.
+    if (_isCrouching && IsOnFloor())
+        _crouchChargeTime = Mathf.Min(
+            _crouchChargeTime + dt,
+            CrouchJumpChargeDuration
+        );
+    else if (!_isCrouching)
+        _crouchChargeTime = 0f;
 
     _isSprinting =
         Input.IsActionPressed("sprint") &&
@@ -2123,9 +2443,17 @@ if (_isBreaking)
     {
         if (IsOnFloor())
         {
-            velocity.Y =
-                JumpVelocity;
+            bool useCrouchJump =
+                _isCrouching &&
+                _crouchChargeTime >= CrouchJumpChargeDuration;
 
+            // 1.5x jump height requires sqrt(1.5) times the launch velocity.
+            velocity.Y = useCrouchJump
+                ? JumpVelocity * Mathf.Sqrt(1.5f)
+                : JumpVelocity;
+
+            _isCrouchJumping = useCrouchJump;
+            _crouchChargeTime = 0f;
             _hasDoubleJumped = false;
         }
         else if (CanDoubleJump &&
@@ -2197,9 +2525,124 @@ if (_isBreaking)
             velocity += flow * 1.25f;
     }
 
+    // Minecraft-style sneak protection: while crouching on the ground,
+    // shorten horizontal movement until the capsule still has ground below it.
+    ApplySneakEdgeProtection(ref velocity, dt);
+
     Velocity = velocity;
 
     MoveAndSlide();
+}
+
+private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
+{
+    if (!_isCrouching || !IsOnFloor() || delta <= 0f ||
+        _playerCollision == null || _playerCapsule == null)
+        return;
+
+    Vector3 horizontalVelocity = new Vector3(velocity.X, 0f, velocity.Z);
+    float requestedDistance = horizontalVelocity.Length() * delta;
+    if (requestedDistance <= 0.0001f)
+        return;
+
+    Vector3 moveDirection = horizontalVelocity.Normalized();
+    float safeDistance = requestedDistance;
+
+    // Check the actual ground beneath the capsule footprint at the proposed
+    // destination. TestMove only reports collisions along a movement sweep;
+    // it is not a reliable "ground exists underneath" test for an edge.
+    if (!HasSneakGroundSupport(GlobalTransform))
+    {
+        // If the support probes cannot confirm the current footing, fail
+        // safely instead of allowing crouch movement toward an unseen edge.
+        velocity.X = 0f;
+        velocity.Z = 0f;
+        return;
+    }
+
+    Transform3D candidateTransform = GlobalTransform;
+    candidateTransform.Origin += moveDirection * requestedDistance;
+
+    if (!HasSneakGroundSupport(candidateTransform))
+    {
+        float low = 0f;
+        float high = requestedDistance;
+
+        // Binary-search the furthest position that still has ground under
+        // the whole sampled footprint, including diagonal block corners.
+        for (int i = 0; i < 10; i++)
+        {
+            float middle = (low + high) * 0.5f;
+            candidateTransform = GlobalTransform;
+            candidateTransform.Origin += moveDirection * middle;
+
+            if (HasSneakGroundSupport(candidateTransform))
+                low = middle;
+            else
+                high = middle;
+        }
+
+        safeDistance = low;
+    }
+
+    // Leave a small safety margin so the capsule does not balance exactly
+    // on the last supported sample.
+    safeDistance = Mathf.Max(0f, safeDistance - 0.025f);
+    float safeFraction = Mathf.Clamp(safeDistance / requestedDistance, 0f, 1f);
+    velocity.X *= safeFraction;
+    velocity.Z *= safeFraction;
+}
+
+private bool HasSneakGroundSupport(Transform3D playerTransform)
+{
+    if (_playerCollision == null || _playerCapsule == null)
+        return false;
+
+    PhysicsDirectSpaceState3D space = GetWorld3D()?.DirectSpaceState;
+    if (space == null)
+        return false;
+
+    Vector3 capsuleCenter = playerTransform * _playerCollision.Position;
+    float footY = capsuleCenter.Y - (_playerCapsule.Height * 0.5f);
+    float sampleRadius = _playerCapsule.Radius * 0.78f;
+
+    // Nine downward rays cover the centre and the capsule's outer footprint.
+    // Starting slightly above the feet also accommodates small floor steps.
+    Vector3[] sampleOffsets =
+    {
+        Vector3.Zero,
+        new Vector3(sampleRadius, 0f, 0f),
+        new Vector3(-sampleRadius, 0f, 0f),
+        new Vector3(0f, 0f, sampleRadius),
+        new Vector3(0f, 0f, -sampleRadius),
+        new Vector3(sampleRadius * 0.7071f, 0f, sampleRadius * 0.7071f),
+        new Vector3(-sampleRadius * 0.7071f, 0f, sampleRadius * 0.7071f),
+        new Vector3(sampleRadius * 0.7071f, 0f, -sampleRadius * 0.7071f),
+        new Vector3(-sampleRadius * 0.7071f, 0f, -sampleRadius * 0.7071f)
+    };
+
+    foreach (Vector3 offset in sampleOffsets)
+    {
+        Vector3 rayStart = new Vector3(
+            capsuleCenter.X + offset.X,
+            footY + 0.55f,
+            capsuleCenter.Z + offset.Z);
+        Vector3 rayEnd = new Vector3(
+            rayStart.X,
+            footY - 0.4f,
+            rayStart.Z);
+
+        var query = PhysicsRayQueryParameters3D.Create(
+            rayStart,
+            rayEnd,
+            CollisionMask);
+        query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+
+        if (space.IntersectRay(query).Count == 0)
+            return false;
+    }
+
+    return true;
 }
 
 private bool TryGetSafeDismountPosition(

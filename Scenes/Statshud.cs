@@ -366,6 +366,7 @@ public partial class StatsHud : HBoxContainer
 
             pips[i].Texture =
                 GetPipTexture(prefix, fraction);
+
         }
     }
 
