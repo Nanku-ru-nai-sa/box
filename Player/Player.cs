@@ -708,7 +708,25 @@ public bool IsMounted =>
         Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
         float speed = worldVelocity.Length();
         bool grounded = IsOnFloor();
-        bool moving = speed > 0.12f && grounded;
+
+        // Wall-running is an active locomotion state, not an airborne pose.
+        // Keep the same alternating leg/foot cycle running while attached.
+        bool moving = speed > 0.12f && (grounded || _isWallRunning);
+
+        // Roll the view toward the wall, matching Titanfall 2's readable
+        // wall-run camera lean. The camera smooths the transition itself.
+        if (_playerCamera != null)
+        {
+            float wallSide = 0f;
+            if (_isWallRunning)
+            {
+                Vector3 playerRight = GlobalTransform.Basis.X;
+                playerRight.Y = 0f;
+                if (playerRight.LengthSquared() > 0.001f)
+                    wallSide = Mathf.Sign(-_wallRunNormal.Dot(playerRight.Normalized()));
+            }
+            _playerCamera.SetWallRunTilt(_isWallRunning, wallSide);
+        }
 
         // Work in the character's own space so forward, backward and strafing
         // each produce a slightly different gait rather than one fixed swing.
@@ -743,7 +761,7 @@ public bool IsMounted =>
             _armAnimationTime = _locomotionPhase;
         }
 
-        if (!grounded)
+        if (!grounded && !_isWallRunning)
         {
             // A small airborne pose gives jumps a little anticipation without
             // interfering with the player's movement or collision.
