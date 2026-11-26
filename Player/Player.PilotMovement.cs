@@ -5,6 +5,13 @@ using Godot;
 public partial class Player : CharacterBody3D
 {
     private bool _isWallRunning;
+    private bool _isSliding;
+    private float _pilotSlideTime;
+    private float _pilotSlideSpeed;
+    private const float PilotSlideDuration = 0.95f;
+    private const float PilotSlideMinimumSpeed = 4.0f;
+    private const float PilotSlideFriction = 3.8f;
+
     private Vector3 _wallRunNormal = Vector3.Zero;
     private float _wallRunTime;
     private const float PilotWallRunMaxTime = 1.65f;
@@ -17,6 +24,64 @@ public partial class Player : CharacterBody3D
     private Vector3 _mantleTarget;
     private float _mantleTime;
     private const float PilotMantleDuration = 0.30f;
+
+    private void TryStartPilotSlide(ref Vector3 velocity, Vector3 moveDirection)
+    {
+        Vector3 horizontal = new Vector3(velocity.X, 0f, velocity.Z);
+        float speed = horizontal.Length();
+        if (_isSliding || speed < SprintSpeed * 0.78f)
+            return;
+
+        if (horizontal.LengthSquared() < 0.001f)
+            return;
+
+        _isSliding = true;
+        _pilotSlideTime = 0f;
+        _pilotSlideSpeed = speed;
+    }
+
+    private void ApplyPilotSlide(ref Vector3 velocity, Vector3 moveDirection, float delta)
+    {
+        if (!_isSliding)
+            return;
+
+        if (!CanWallClimb || _isInWater || !IsOnFloor())
+        {
+            _isSliding = false;
+            _pilotSlideTime = 0f;
+            return;
+        }
+
+        _pilotSlideTime += delta;
+        _pilotSlideSpeed = Mathf.MoveToward(
+            _pilotSlideSpeed,
+            PilotSlideMinimumSpeed,
+            PilotSlideFriction * delta);
+
+        Vector3 horizontal = new Vector3(velocity.X, 0f, velocity.Z);
+        if (horizontal.LengthSquared() < 0.001f)
+        {
+            _isSliding = false;
+            return;
+        }
+
+        Vector3 slideDirection = horizontal.Normalized();
+        if (moveDirection.LengthSquared() > 0.001f)
+        {
+            Vector3 steerDirection = moveDirection.Normalized();
+            slideDirection = slideDirection.Slerp(steerDirection, 0.12f).Normalized();
+        }
+
+        velocity.X = slideDirection.X * _pilotSlideSpeed;
+        velocity.Z = slideDirection.Z * _pilotSlideSpeed;
+
+        if (_pilotSlideTime >= PilotSlideDuration ||
+            _pilotSlideSpeed <= PilotSlideMinimumSpeed + 0.05f)
+        {
+            _isSliding = false;
+            _pilotSlideTime = 0f;
+        }
+    }
 
     private void ApplyPilotWallRun(ref Vector3 velocity, Vector3 moveDirection, float delta)
     {
