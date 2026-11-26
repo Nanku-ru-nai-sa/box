@@ -703,6 +703,71 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
+    // PILOT HELMET EQUIPMENT
+    // =========================================================================
+
+    private void OnGearSlotInput(InputEvent ev, int slotIndex)
+    {
+        if (!_inventoryOpen ||
+            slotIndex != 0 ||
+            ev is not InputEventMouseButton mb ||
+            !mb.Pressed ||
+            mb.ButtonIndex != MouseButton.Left)
+            return;
+
+        string equippedId = _equipmentPanel?.GetGearSlotItem(slotIndex) ?? "";
+
+        if (_heldSlot.IsEmpty)
+        {
+            if (string.IsNullOrEmpty(equippedId))
+                return;
+
+            _heldSlot.ItemId = equippedId;
+            _heldSlot.Count = 1;
+            _heldSlot.CurrentDurability = 0;
+            _heldSlot.CustomName = "";
+            _equipmentPanel.SetGearSlotItem(slotIndex, "");
+
+            ItemResource removedGear = ItemRegistry.Instance?.GetItem(equippedId);
+            if (removedGear != null)
+                RemoveGearMovement(removedGear);
+
+            _heldFromSlot = -1;
+        }
+        else
+        {
+            ItemResource heldGear = ItemRegistry.Instance?.GetItem(_heldSlot.ItemId);
+            if (heldGear == null ||
+                !heldGear.IsEquippable ||
+                !string.Equals(heldGear.EquipSlot, "Helmet", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!string.IsNullOrEmpty(equippedId))
+            {
+                int remaining = AddItemToInventory(equippedId, 1);
+                if (remaining > 0)
+                    return;
+
+                ItemResource replacedGear = ItemRegistry.Instance?.GetItem(equippedId);
+                if (replacedGear != null)
+                    RemoveGearMovement(replacedGear);
+            }
+
+            _equipmentPanel.SetGearSlotItem(slotIndex, heldGear.ItemId);
+            ApplyGearMovement(heldGear);
+
+            _heldSlot.Count--;
+            if (_heldSlot.Count <= 0)
+                _heldSlot.Clear();
+
+            _heldFromSlot = -1;
+        }
+
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    // =========================================================================
     // ADD ITEM
     // =========================================================================
 
