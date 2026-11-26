@@ -2428,29 +2428,31 @@ if (_isBreaking)
     // HORIZONTAL MOVEMENT
     // ---------------------------------------------------------
 
-    if (direction != Vector3.Zero)
+    // Pilot slide starts when crouch is pressed during a sprint.
+    // It keeps the sprint's momentum instead of immediately switching to
+    // the normal slow crouch speed.
+    if (CanWallClimb &&
+        Input.IsActionJustPressed("crouch") &&
+        Input.IsActionPressed("sprint") &&
+        IsOnFloor())
     {
-        velocity.X =
-            direction.X * moveSpeed;
+        TryStartPilotSlide(ref velocity, direction);
+    }
 
-        velocity.Z =
-            direction.Z * moveSpeed;
+    if (_isSliding)
+    {
+        _isCrouching = true;
+        ApplyPilotSlide(ref velocity, direction, dt);
+    }
+    else if (direction != Vector3.Zero)
+    {
+        velocity.X = direction.X * moveSpeed;
+        velocity.Z = direction.Z * moveSpeed;
     }
     else
     {
-        velocity.X =
-            Mathf.MoveToward(
-                velocity.X,
-                0f,
-                moveSpeed * 10f * dt
-            );
-
-        velocity.Z =
-            Mathf.MoveToward(
-                velocity.Z,
-                0f,
-                moveSpeed * 10f * dt
-            );
+        velocity.X = Mathf.MoveToward(velocity.X, 0f, moveSpeed * 10f * dt);
+        velocity.Z = Mathf.MoveToward(velocity.Z, 0f, moveSpeed * 10f * dt);
     }
 
     // ---------------------------------------------------------
@@ -2472,9 +2474,27 @@ if (_isBreaking)
                 _crouchChargeTime >= CrouchJumpChargeDuration;
 
             // 1.5x jump height requires sqrt(1.5) times the launch velocity.
-            velocity.Y = useCrouchJump
-                ? JumpVelocity * Mathf.Sqrt(1.5f)
-                : JumpVelocity;
+            bool slideJump = _isSliding;
+            velocity.Y = slideJump
+                ? JumpVelocity * 1.22f
+                : (useCrouchJump
+                    ? JumpVelocity * Mathf.Sqrt(1.5f)
+                    : JumpVelocity);
+
+            if (slideJump)
+            {
+                // Keep the slide's horizontal momentum and add a small
+                // forward carry into the Titanfall-style slide jump.
+                Vector3 horizontal = new Vector3(velocity.X, 0f, velocity.Z);
+                if (horizontal.LengthSquared() > 0.01f)
+                {
+                    horizontal *= 1.10f;
+                    velocity.X = horizontal.X;
+                    velocity.Z = horizontal.Z;
+                }
+                _isSliding = false;
+                _pilotSlideTime = 0f;
+            }
 
             _isCrouchJumping = useCrouchJump;
             _crouchChargeTime = 0f;
@@ -2483,9 +2503,9 @@ if (_isBreaking)
         else if (CanDoubleJump &&
                  !_hasDoubleJumped)
         {
-            velocity.Y =
-                JumpVelocity;
-
+            // Pilot double jump: a stronger second impulse while
+            // preserving the horizontal momentum from the first jump.
+            velocity.Y = JumpVelocity * 1.18f;
             _hasDoubleJumped = true;
         }
         else if (_isInWater)
@@ -2566,7 +2586,7 @@ if (_isBreaking)
 
 private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
 {
-    if (!_isCrouching || !IsOnFloor() || delta <= 0f ||
+    if (!_isCrouching || _isSliding || !IsOnFloor() || delta <= 0f ||
         _playerCollision == null || _playerCapsule == null)
         return;
 
