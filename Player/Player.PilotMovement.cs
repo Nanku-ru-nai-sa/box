@@ -88,7 +88,7 @@ public partial class Player : CharacterBody3D
 
         // A jump pressed while facing a climbable ledge starts a short mantle.
         if (!IsOnFloor() &&
-            TryFindPilotWall(out Vector3 wallNormal) &&
+            TryFindPilotMantleWall(out Vector3 wallNormal) &&
             TryFindPilotMantleTarget(wallNormal, out Vector3 target))
         {
             _isWallRunning = false;
@@ -163,6 +163,33 @@ public partial class Player : CharacterBody3D
         }
 
         return false;
+    }
+
+    private bool TryFindPilotMantleWall(out Vector3 wallNormal)
+    {
+        wallNormal = Vector3.Zero;
+        Vector3 forward = -GlobalTransform.Basis.Z;
+        forward.Y = 0f;
+        if (forward.LengthSquared() < 0.001f)
+            return false;
+
+        forward = forward.Normalized();
+        Vector3 origin = GlobalPosition + Vector3.Up * 0.25f;
+        var query = PhysicsRayQueryParameters3D.Create(
+            origin, origin + forward * 1.15f);
+        query.CollisionMask = 3;
+        query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0 || !hit.ContainsKey("normal"))
+            return false;
+
+        Vector3 normal = hit["normal"].AsVector3();
+        if (Mathf.Abs(normal.Y) > 0.25f)
+            return false;
+
+        wallNormal = normal.Normalized();
+        return true;
     }
 
     private bool TryFindPilotMantleTarget(Vector3 wallNormal, out Vector3 target)
