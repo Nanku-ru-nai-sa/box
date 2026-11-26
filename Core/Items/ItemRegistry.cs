@@ -127,12 +127,13 @@ public partial class ItemRegistry : Node
         var helmet = new ItemResource();
         helmet.ItemId = "pilot_helmet";
         helmet.DisplayName = "Pilot Helmet";
-        helmet.Description = "Prototype movement gear. Enables wall running, wall jumps and mantling while equipped.";
+        helmet.Description = "Pilot movement gear. Enables wall running, wall jumps, mantling, double jumps and sprint slides while equipped.";
         helmet.IsEquippable = true;
         helmet.EquipSlot = "Helmet";
         helmet.IsStackable = false;
         helmet.MaxStackSize = 1;
         helmet.GrantsWallClimb = true;
+        helmet.GrantsDoubleJump = true;
         _items[helmet.ItemId] = helmet;
     }
 
