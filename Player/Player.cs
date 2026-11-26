@@ -2436,10 +2436,16 @@ if (_isBreaking)
     }
 
     // ---------------------------------------------------------
+    // PILOT WALL RUN
+    // ---------------------------------------------------------
+
+    ApplyPilotWallRun(ref velocity, direction, dt);
+
+    // ---------------------------------------------------------
     // JUMP
     // ---------------------------------------------------------
 
-    if (Input.IsActionJustPressed("jump"))
+    if (Input.IsActionJustPressed("jump") && !HandlePilotJump(ref velocity))
     {
         if (IsOnFloor())
         {
@@ -2528,6 +2534,12 @@ if (_isBreaking)
     // Minecraft-style sneak protection: while crouching on the ground,
     // shorten horizontal movement until the capsule still has ground below it.
     ApplySneakEdgeProtection(ref velocity, dt);
+
+    if (AdvancePilotMantle(dt))
+    {
+        Velocity = Vector3.Zero;
+        return;
+    }
 
     Velocity = velocity;
 
