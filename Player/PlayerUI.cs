@@ -1047,6 +1047,7 @@ private void OnSlotMouseEntered(int slotIndex)
 
         _equipmentPanel =
             new EquipmentPanel();
+        _equipmentPanel.GearSlotInput += OnGearSlotInput;
 
         float gridW =
             HotbarSize * SlotSize +
