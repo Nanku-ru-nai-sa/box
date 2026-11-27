@@ -709,6 +709,38 @@ public bool IsMounted =>
         float speed = worldVelocity.Length();
         bool grounded = IsOnFloor();
 
+        // Riding uses a stable seated pose instead of the normal walking,
+        // jumping or crouching gait.
+        if (IsMounted)
+        {
+            _sneakBlend = 0f;
+            ApplyLimbRotation(_leftLegParts, 1.28f, 0f, -0.22f);
+            ApplyLimbRotation(_rightLegParts, 1.28f, 0f, 0.22f);
+            ApplyLimbRotation(_leftLowerLegParts, -1.18f, 0f, -0.04f);
+            ApplyLimbRotation(_rightLowerLegParts, -1.18f, 0f, 0.04f);
+            ApplyLimbRotation(_leftArmParts, 0.08f, 0f, -0.025f);
+            ApplyLimbRotation(_rightArmParts, 0.08f, 0f, 0.025f);
+            ApplyLimbRotation(_leftForearmParts, 0.18f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.18f, 0f, 0f);
+            UpdateLocomotionBodyPose(0f, 0f, 0f, delta);
+            return;
+        }
+
+        // Climbing braces the legs against the wall and reaches overhead.
+        if (_isClimbing)
+        {
+            ApplyLimbRotation(_leftLegParts, 0.35f, 0f, -0.10f);
+            ApplyLimbRotation(_rightLegParts, 0.35f, 0f, 0.10f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.55f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.55f, 0f, 0f);
+            ApplyLimbRotation(_leftArmParts, -1.25f, 0f, -0.10f);
+            ApplyLimbRotation(_rightArmParts, -1.25f, 0f, 0.10f);
+            ApplyLimbRotation(_leftForearmParts, -0.35f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, -0.35f, 0f, 0f);
+            UpdateLocomotionBodyPose(0f, 0.015f, 0f, delta);
+            return;
+        }
+
         // Wall-running is an active locomotion state, not an airborne pose.
         // Keep the same alternating leg/foot cycle running while attached.
         bool moving = speed > 0.12f && (grounded || _isWallRunning);
@@ -2306,6 +2338,20 @@ if (_isBreaking)
     // =========================================================
 
     CheckWaterStatus();
+
+    // Climbing is a standard player ability and is not tied to Pilot gear.
+    // Press jump while facing a solid wall to grab it.
+    if (_isClimbing)
+    {
+        HandleClimbing(dt);
+        return;
+    }
+
+    if (Input.IsActionJustPressed("jump") && TryStartClimbing())
+    {
+        HandleClimbing(dt);
+        return;
+    }
 
     Vector3 velocity = Velocity;
 
