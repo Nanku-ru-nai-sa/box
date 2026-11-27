@@ -18,6 +18,15 @@ public partial class PlayerStats : Node
     public float Stamina { get; private set; }
     public float Mana    { get; private set; }
 
+    // Keeps the stamina pips visible during active climbing, even while
+    // the player pauses to hang from a wall.
+    public bool StaminaActivityActive { get; private set; }
+
+    public void SetStaminaActivity(bool active)
+    {
+        StaminaActivityActive = active;
+    }
+
     // Regen rates per second
     [Export] public float HealthRegen  { get; set; } = 0.5f;
     [Export] public float StaminaRegen { get; set; } = 4f;
