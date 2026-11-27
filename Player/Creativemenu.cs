@@ -180,25 +180,79 @@ public partial class CreativeMenu : Panel
     // rather than showing a blank slot.
     private Texture2D GetIcon(ItemResource item)
     {
-        if (_iconCache.TryGetValue(item.ItemId, out var cached)) return cached;
+        if (_iconCache.TryGetValue(item.ItemId, out var cached))
+            return cached;
 
-        // Dedicated bamboo/stick textures take priority over ItemResource.Icon.
+        string textureId = item.ItemId switch
+        {
+            "wheat_seed" => "wheat_seeds",
+            "corn_seed" => "corn_seeds",
+            "tomato_seed" => "tomato_seeds",
+            _ => item.ItemId
+        };
+
         string stickPath = $"res://Assets/Textures/Items/stick/{item.ItemId}.png";
         Texture2D tex = ResourceLoader.Exists(stickPath)
             ? ResourceLoader.Load<Texture2D>(stickPath)
-            : item.Icon;
+            : null;
 
         if (tex == null)
         {
-            string path = $"res://Assets/Textures/Items/{item.ItemId}.png";
-            tex = ResourceLoader.Exists(path) ? ResourceLoader.Load<Texture2D>(path) : null;
+            string itemPath = FindItemTexturePath("res://Assets/Textures/Items", textureId);
+            if (!string.IsNullOrEmpty(itemPath) && ResourceLoader.Exists(itemPath))
+                tex = ResourceLoader.Load<Texture2D>(itemPath);
+        }
+
+        if (tex == null && item.ItemId == "sapling")
+        {
+            const string saplingPath = "res://Assets/Textures/Plants/sapling.png";
+            if (ResourceLoader.Exists(saplingPath))
+                tex = ResourceLoader.Load<Texture2D>(saplingPath);
         }
 
         if (tex == null)
-            tex = ResourceLoader.Load<Texture2D>("res://Assets/Textures/Items/tool/chalk/unknown.png");
+            tex = item.Icon;
+
+        if (tex == null)
+            tex = ResourceLoader.Load<Texture2D>(
+                "res://Assets/Textures/Items/tool/chalk/unknown.png"
+            );
 
         _iconCache[item.ItemId] = tex;
         return tex;
+    }
+
+    private string FindItemTexturePath(string folderPath, string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return "";
+
+        DirAccess dir = DirAccess.Open(folderPath);
+        if (dir == null)
+            return "";
+
+        foreach (string fileName in dir.GetFiles())
+        {
+            if (!fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            if (string.Equals(baseName, itemId, StringComparison.OrdinalIgnoreCase))
+            {
+                string fullPath = $"{folderPath}/{fileName}";
+                if (ResourceLoader.Exists(fullPath))
+                    return fullPath;
+            }
+        }
+
+        foreach (string directoryName in dir.GetDirectories())
+        {
+            string result = FindItemTexturePath($"{folderPath}/{directoryName}", itemId);
+            if (!string.IsNullOrEmpty(result))
+                return result;
+        }
+
+        return "";
     }
 
     private StyleBoxFlat MakePanelStyle(Color bg, Color border, int bw = 2)
