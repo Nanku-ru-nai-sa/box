@@ -2397,7 +2397,7 @@ if (_isBreaking)
             Input.IsActionPressed("sprint");
 
         _isCrouching =
-            (Input.IsActionPressed("crouch") || Input.IsKeyPressed(Key.Shift));
+            (Input.IsActionPressed("crouch") || (Input.IsKeyPressed(Key.Shift) || Input.IsPhysicalKeyPressed(Key.Shift)));
 
         HandleFlyMovement(
             dt,
@@ -2470,7 +2470,7 @@ if (_isBreaking)
     // ---------------------------------------------------------
 
     _isCrouching =
-        (Input.IsActionPressed("crouch") || Input.IsKeyPressed(Key.Shift));
+        (Input.IsActionPressed("crouch") || (Input.IsKeyPressed(Key.Shift) || Input.IsPhysicalKeyPressed(Key.Shift)));
     UpdateCrouchCollision();
 
     // Holding crouch briefly on the ground winds up a stronger jump.
