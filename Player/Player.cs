@@ -2673,9 +2673,9 @@ if (_isBreaking)
             velocity += flow * 1.25f;
     }
 
-    // Minecraft-style sneak protection: while crouching on the ground,
-    // shorten horizontal movement until the capsule still has ground below it.
-    ApplySneakEdgeProtection(ref velocity, dt);
+    // Sneak edge protection is temporarily disabled. Its voxel-floor
+    // probes were incorrectly reducing horizontal velocity to zero on
+    // ordinary ground; restore reliable crouch movement first.
 
     if (AdvancePilotMantle(dt))
     {
