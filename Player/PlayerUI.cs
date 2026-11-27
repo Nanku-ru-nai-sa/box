@@ -1012,6 +1012,37 @@ private void OnSlotMouseEntered(int slotIndex)
             _kilnPanel.Visible = stationId == "kiln";
 
         RefreshStationSlotStyles();
+        CallDeferred(nameof(RefreshInventorySidePanelVisibility));
+    }
+
+    // Keep both side panels and station panels synchronized with inventory state.
+    // CanvasLayers are separate parents, so setting only the child panel Visible
+    // can leave a side panel hidden if its layer was toggled independently.
+    private void RefreshInventorySidePanelVisibility()
+    {
+        bool open = _inventoryOpen;
+
+        if (_craftingLayer != null)
+            _craftingLayer.Visible = open;
+
+        if (_equipmentLayer != null)
+            _equipmentLayer.Visible = open;
+
+        if (_craftingPanel != null)
+            _craftingPanel.Visible = open &&
+                (_activeStation == "default" || _activeStation == "crafter");
+
+        if (_equipmentPanel != null)
+            _equipmentPanel.Visible = open;
+
+        if (_toolBenchPanel != null)
+            _toolBenchPanel.Visible = open && _activeStation == "tool_bench";
+
+        if (_kilnPanel != null)
+            _kilnPanel.Visible = open && _activeStation == "kiln";
+
+        if (_stationTabBar != null)
+            _stationTabBar.Visible = open;
     }
 
     private void RefreshStationSlotStyles()
