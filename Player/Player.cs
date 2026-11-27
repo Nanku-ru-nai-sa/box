@@ -217,7 +217,6 @@ public bool IsMounted =>
         _inventory.SlotCount = TotalSlots;
         AddChild(_inventory);
 
-        CallDeferred(nameof(LoadInventoryFromSave));
 
         _crosshairLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", _crosshairLayer);
@@ -310,6 +309,10 @@ public bool IsMounted =>
         AddChild(_pauseMenu);
 
         BuildChatBar();
+
+        // Load after the inventory UI panels have entered the tree and built
+        // their slot controls, so saved crafting/equipment contents render too.
+        CallDeferred(nameof(LoadInventoryFromSave));
 
         if (GameModeManager.Instance != null)
             GameModeManager.Instance.OnGameModeChanged += OnGameModeChanged;
