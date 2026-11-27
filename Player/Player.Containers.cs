@@ -218,6 +218,8 @@ private void CloseCrateOnly()
     if (_equipmentPanel != null)
         _equipmentPanel.Visible = true;
 
+    CallDeferred(nameof(RefreshInventorySidePanelVisibility));
+
     EndDrag();
 
     Input.MouseMode = Input.MouseModeEnum.Visible;
