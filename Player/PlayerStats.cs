@@ -111,6 +111,19 @@ public partial class PlayerStats : Node
         return true;
     }
 
+    // Continuous stamina drain for activities such as climbing.
+    // Returns false when the drain empties the stamina bar.
+    public bool DrainStamina(float amount)
+    {
+        if (amount <= 0f)
+            return Stamina > 0.001f;
+
+        Stamina = Mathf.Max(0f, Stamina - amount);
+        _staminaRegenTimer = StaminaRegenDelay;
+        EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+        return Stamina > 0.001f;
+    }
+
     // Use mana - returns false if not enough
     public bool UseMana(float amount)
     {
