@@ -880,6 +880,64 @@ public partial class Player : CharacterBody3D
         pickup.GlobalPosition = worldPosition;
     }
 
+    private bool TryThrowTomato()
+    {
+        if (_inventoryOpen || _chatOpen || _creativeMenuOpen || IsMounted)
+            return false;
+
+        InventorySlot handSlot = _inventory.Slots[MainInvSize + _selectedSlot];
+        if (handSlot.IsEmpty || handSlot.ItemId != "tomato")
+            return false;
+
+        handSlot.Count--;
+        if (handSlot.Count <= 0)
+            handSlot.Clear();
+
+        Vector3 forward = -_playerCamera.GlobalTransform.Basis.Z;
+        Vector3 spawnPosition = _playerCamera.GlobalPosition + forward * 0.65f;
+
+        var tomato = new RigidBody3D
+        {
+            Name = "ThrownTomato",
+            Mass = 0.18f,
+            GravityScale = 1.0f,
+            LinearVelocity = forward * 11.5f + Vector3.Up * 1.1f,
+            AngularVelocity = new Vector3(5f, 7f, 3f),
+            ContactMonitor = true,
+            MaxContactsReported = 4
+        };
+
+        var mesh = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 0.13f, Height = 0.26f }
+        };
+        mesh.MaterialOverride = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.9f, 0.12f, 0.08f),
+            Roughness = 0.82f
+        };
+        tomato.AddChild(mesh);
+
+        var collision = new CollisionShape3D
+        {
+            Shape = new SphereShape3D { Radius = 0.13f }
+        };
+        tomato.AddChild(collision);
+
+        tomato.BodyEntered += body =>
+        {
+            if (body is Mob mob && IsInstanceValid(mob) && mob.Health > 0f)
+                mob.TakeDamage(1f, tomato.GlobalPosition, this);
+            tomato.QueueFree();
+        };
+
+        GetTree().CurrentScene.AddChild(tomato);
+        tomato.GlobalPosition = spawnPosition;
+
+        FireChanged();
+        return true;
+    }
+
     private void DropOneItem()
     {
         var gm = GameModeManager.Instance;
@@ -887,9 +945,13 @@ public partial class Player : CharacterBody3D
         if (gm != null && gm.IsStory)
             return;
 
-        var slot = _inventory.Slots[MainInvSize + _selectedSlot];
+        InventorySlot slot = null;
+        if (_inventoryOpen && _hoveredInventorySlotIndex >= 0)
+            slot = GetUiSlot(_hoveredInventorySlotIndex);
+        if (slot == null)
+            slot = _inventory.Slots[MainInvSize + _selectedSlot];
 
-        if (slot.IsEmpty)
+        if (slot == null || slot.IsEmpty)
             return;
 
         string itemId = slot.ItemId;
