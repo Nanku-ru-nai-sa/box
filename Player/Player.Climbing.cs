@@ -50,10 +50,6 @@ public partial class Player
             return false;
         forward = forward.Normalized();
 
-        Vector3 side = GlobalTransform.Basis.X;
-        side.Y = 0f;
-        side = side.LengthSquared() > 0.0001f ? side.Normalized() : Vector3.Right;
-
         // When the player moves sideways, probe around the leading shoulder
         // as well as straight ahead. This lets the grab transfer to the next
         // face of a block instead of treating every corner as a drop-off.
