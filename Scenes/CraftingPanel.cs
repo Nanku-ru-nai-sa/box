@@ -372,6 +372,63 @@ public partial class CraftingPanel : Control
         return (s == null || s.IsEmpty) ? "" : s.ItemId;
     }
 
+    // Save both the hand-crafting grid and the workbench grid. Keeping both
+    // arrays means changing station range or leaving the world cannot discard
+    // ingredients that were already placed into either grid.
+    public Godot.Collections.Dictionary GetSaveData()
+    {
+        return new Godot.Collections.Dictionary
+        {
+            ["grid2"] = SaveSlotArray(_grid2),
+            ["grid3"] = SaveSlotArray(_grid3)
+        };
+    }
+
+    public void LoadSaveData(Godot.Collections.Dictionary data)
+    {
+        if (data == null) return;
+        if (data.ContainsKey("grid2") && data["grid2"].VariantType == Variant.Type.Array)
+            LoadSlotArray(_grid2, data["grid2"].AsGodotArray());
+        if (data.ContainsKey("grid3") && data["grid3"].VariantType == Variant.Type.Array)
+            LoadSlotArray(_grid3, data["grid3"].AsGodotArray());
+        RefreshGridVisuals();
+        UpdateOutput();
+    }
+
+    private static Godot.Collections.Array SaveSlotArray(InventorySlot[] slots)
+    {
+        var saved = new Godot.Collections.Array();
+        foreach (var slot in slots)
+        {
+            saved.Add(new Godot.Collections.Dictionary
+            {
+                ["id"] = slot.IsEmpty ? "" : slot.ItemId,
+                ["count"] = slot.IsEmpty ? 0 : slot.Count,
+                ["durability"] = slot.IsEmpty ? 0 : slot.CurrentDurability,
+                ["custom_name"] = slot.IsEmpty ? "" : slot.CustomName
+            });
+        }
+        return saved;
+    }
+
+    private static void LoadSlotArray(InventorySlot[] target, Godot.Collections.Array saved)
+    {
+        if (saved == null) return;
+        for (int i = 0; i < target.Length; i++)
+        {
+            target[i].Clear();
+            if (i >= saved.Count) continue;
+            var entry = saved[i].AsGodotDictionary();
+            string id = entry.ContainsKey("id") ? (string)entry["id"] : "";
+            int count = entry.ContainsKey("count") ? (int)entry["count"] : 0;
+            if (string.IsNullOrEmpty(id) || count <= 0) continue;
+            target[i].ItemId = id;
+            target[i].Count = count;
+            target[i].CurrentDurability = entry.ContainsKey("durability") ? (int)entry["durability"] : 0;
+            target[i].CustomName = entry.ContainsKey("custom_name") ? (string)entry["custom_name"] : "";
+        }
+    }
+
     public int GetActiveSlotCount() => GridSize * GridSize;
 
     public Panel GetSlotPanel(int i) => i < GetActiveSlotCount() ? _gridSlotPanels[i] : null;

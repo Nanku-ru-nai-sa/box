@@ -18,6 +18,23 @@ public partial class PlayerStats : Node
     public float Stamina { get; private set; }
     public float Mana    { get; private set; }
 
+    // Keeps the stamina pips visible during active climbing, even while
+    // the player pauses to hang from a wall.
+    public bool StaminaActivityActive { get; private set; }
+
+    public void SetStaminaActivity(bool active)
+    {
+        if (StaminaActivityActive == active)
+            return;
+
+        // Stamina cannot recover while hanging from a wall. Start the normal
+        // recovery delay only after the player lets go or runs out.
+        if (StaminaActivityActive && !active)
+            _staminaRegenTimer = StaminaRegenDelay;
+
+        StaminaActivityActive = active;
+    }
+
     // Regen rates per second
     [Export] public float HealthRegen  { get; set; } = 0.5f;
     [Export] public float StaminaRegen { get; set; } = 4f;
@@ -69,15 +86,19 @@ public partial class PlayerStats : Node
             EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
         }
 
-        // Stamina regen (delayed after use)
-        if (_staminaRegenTimer > 0f)
+        // Stamina does not regenerate while attached to a climbing wall.
+        // Once the player lets go, the normal post-use delay is applied.
+        if (!StaminaActivityActive)
         {
-            _staminaRegenTimer -= dt;
-        }
-        else if (Stamina < MaxStamina)
-        {
-            Stamina = Mathf.Min(Stamina + StaminaRegen * dt, MaxStamina);
-            EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+            if (_staminaRegenTimer > 0f)
+            {
+                _staminaRegenTimer -= dt;
+            }
+            else if (Stamina < MaxStamina)
+            {
+                Stamina = Mathf.Min(Stamina + StaminaRegen * dt, MaxStamina);
+                EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+            }
         }
 
         // Mana regen
@@ -109,6 +130,19 @@ public partial class PlayerStats : Node
         _staminaRegenTimer = StaminaRegenDelay;
         EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
         return true;
+    }
+
+    // Continuous stamina drain for activities such as climbing.
+    // Returns false when the drain empties the stamina bar.
+    public bool DrainStamina(float amount)
+    {
+        if (amount <= 0f)
+            return Stamina > 0.001f;
+
+        Stamina = Mathf.Max(0f, Stamina - amount);
+        _staminaRegenTimer = StaminaRegenDelay;
+        EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+        return Stamina > 0.001f;
     }
 
     // Use mana - returns false if not enough
@@ -152,6 +186,7 @@ public partial class PlayerStats : Node
     public void ResetAfterDeath()
 {
 IsDead = false;
+StaminaActivityActive = false;
 
 Health = MaxHealth;
 Stamina = MaxStamina;

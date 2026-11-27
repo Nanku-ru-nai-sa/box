@@ -651,6 +651,46 @@ public partial class ChunkManager : Node3D
         GD.Print("Inventory loaded (including saved tool durability).");
     }
 
+    public void SavePlayerUiState(CraftingPanel craftingPanel, EquipmentPanel equipmentPanel)
+    {
+        DirAccess.MakeDirRecursiveAbsolute(PlayerSaveDirectory);
+        var data = new Godot.Collections.Dictionary();
+        data["crafting"] = craftingPanel?.GetSaveData() ?? new Godot.Collections.Dictionary();
+        data["gear"] = equipmentPanel?.GetGearSaveData() ?? new Godot.Collections.Array();
+
+        string path = PlayerSaveDirectory + "inventory_ui.json";
+        using var file = FileAccess.Open(path, FileAccess.ModeFlags.Write);
+        if (file == null)
+        {
+            GD.PrintErr("Could not save crafting/equipment contents: " + path);
+            return;
+        }
+        file.StoreString(Json.Stringify(data));
+        GD.Print("Crafting grid and equipped gear saved.");
+    }
+
+    public void LoadPlayerUiState(CraftingPanel craftingPanel, EquipmentPanel equipmentPanel)
+    {
+        string path = PlayerSaveDirectory + "inventory_ui.json";
+        if (!FileAccess.FileExists(path)) return;
+        using var file = FileAccess.Open(path, FileAccess.ModeFlags.Read);
+        if (file == null) return;
+
+        var parsed = Json.ParseString(file.GetAsText());
+        if (parsed.VariantType != Variant.Type.Dictionary) return;
+        var data = parsed.AsGodotDictionary();
+
+        if (craftingPanel != null && data.ContainsKey("crafting") &&
+            data["crafting"].VariantType == Variant.Type.Dictionary)
+            craftingPanel.LoadSaveData(data["crafting"].AsGodotDictionary());
+
+        if (equipmentPanel != null && data.ContainsKey("gear") &&
+            data["gear"].VariantType == Variant.Type.Array)
+            equipmentPanel.LoadGearSaveData(data["gear"].AsGodotArray());
+
+        GD.Print("Crafting grid and equipped gear loaded.");
+    }
+
 public void SavePlayerPosition(
     Vector3 position,
     float yaw,

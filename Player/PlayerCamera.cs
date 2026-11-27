@@ -9,6 +9,27 @@ public partial class PlayerCamera : Node3D
 
     private Camera3D _camera;
     private float _pitch = 0f;
+    private float _wallRunRoll = 0f;
+    private float _wallRunRollTarget = 0f;
+    private const float WallRunCameraRoll = 0.24f; // ~13.8 degrees, Titanfall-style lean
+
+    public void SetWallRunTilt(bool attached, float wallSide)
+    {
+        // Invert the previous roll direction: the old sign made the
+        // horizon lean away from the wall from the player's viewpoint.
+        _wallRunRollTarget = attached
+            ? Mathf.Sign(wallSide) * WallRunCameraRoll
+            : 0f;
+    }
+
+    public override void _Process(double delta)
+    {
+        float blend = Mathf.Clamp((float)delta * 9f, 0f, 1f);
+        _wallRunRoll = Mathf.Lerp(_wallRunRoll, _wallRunRollTarget, blend);
+        Vector3 rotation = Rotation;
+        rotation.Z = _wallRunRoll;
+        Rotation = rotation;
+    }
 
     public override void _Ready()
     {
@@ -44,7 +65,7 @@ public partial class PlayerCamera : Node3D
 
             _pitch -= mouseMotion.Relative.Y * sens;
             _pitch = Mathf.Clamp(_pitch, MinPitch, MaxPitch);
-            Rotation = new Vector3(_pitch, 0, 0);
+            Rotation = new Vector3(_pitch, 0, _wallRunRoll);
         }
     }
 
@@ -63,7 +84,7 @@ public float GetPitch()
 public void SetPitch(float pitch)
 {
     _pitch = Mathf.Clamp(pitch, MinPitch, MaxPitch);
-    Rotation = new Vector3(_pitch, 0, 0);
+    Rotation = new Vector3(_pitch, 0, _wallRunRoll);
 }
 
     public Camera3D GetCamera() => _camera;

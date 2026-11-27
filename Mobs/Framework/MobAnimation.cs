@@ -909,12 +909,21 @@ public class MobAnimation
         // a visible flesh section. Hands/lower legs are checked separately.
         bool leftArmBoneVisible = !leftArmFlesh && !loseLeftArm && rng.Randf() >= 0.18f;
         bool rightArmBoneVisible = !rightArmFlesh && !loseRightArm && rng.Randf() >= 0.18f;
-        bool leftHandBoneVisible = !leftHand.Visible && !loseLeftArm && rng.Randf() >= 0.22f;
-        bool rightHandBoneVisible = !rightHand.Visible && !loseRightArm && rng.Randf() >= 0.22f;
+        // A hand bone is a continuation of its upper arm. Never show it
+        // unless the matching upper-arm bone is also present.
+        bool leftHandBoneVisible = leftArmBoneVisible &&
+                                   !leftHand.Visible &&
+                                   !loseLeftArm &&
+                                   rng.Randf() >= 0.22f;
+        bool rightHandBoneVisible = rightArmBoneVisible &&
+                                    !rightHand.Visible &&
+                                    !loseRightArm &&
+                                    rng.Randf() >= 0.22f;
         bool leftLegBoneVisible = !leftLegFlesh && !loseLeftLeg && rng.Randf() >= 0.18f;
         bool rightLegBoneVisible = !rightLegFlesh && !loseRightLeg && rng.Randf() >= 0.18f;
-        // A lower-leg/foot bone is only shown when the upper leg is also
-        // exposed as bone. This prevents isolated floating foot bones.
+
+        // Lower-leg bones are only shown when the upper leg is also exposed
+        // as bone. This prevents isolated floating foot bones.
         bool leftLowerLegBoneVisible = leftLegBoneVisible &&
                                        leftLowerLeg != null &&
                                        !leftLowerLeg.Visible &&
@@ -925,6 +934,29 @@ public class MobAnimation
                                         !rightLowerLeg.Visible &&
                                         !loseRightLeg &&
                                         rng.Randf() >= 0.22f;
+
+        bool leftLowerLegPresent =
+            (leftLowerLeg != null && leftLowerLeg.Visible) ||
+            leftLowerLegBoneVisible;
+        bool rightLowerLegPresent =
+            (rightLowerLeg != null && rightLowerLeg.Visible) ||
+            rightLowerLegBoneVisible;
+
+        // Keep the original crawler frequency: the two independent 10%
+        // full-leg-loss rolls above remain the only way to add a crawler.
+        // If random flesh/bone wounds would otherwise leave an upright undead
+        // with neither lower leg, preserve one lower leg rather than silently
+        // increasing the crawler spawn percentage.
+        if (!IsCrawler && !leftLowerLegPresent && !rightLowerLegPresent)
+        {
+            SetVisible(leftLowerLeg, true);
+            leftLowerLegPresent = leftLowerLeg != null;
+        }
+
+        // Safety net: an undead with no lower-leg section on either side
+        // must never use the upright walking animation.
+        if (!leftLowerLegPresent && !rightLowerLegPresent)
+            IsCrawler = true;
 
         SetVisible(leftArmBone, leftArmBoneVisible);
         SetVisible(leftHandBone, leftHandBoneVisible);

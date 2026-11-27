@@ -2490,7 +2490,16 @@ private void AddQuadCropped(
                     z,
                     FaceDirection.Top,
                     1.0f
-                )
+                ),
+                resource.CanRotate
+                    ? (block.Rotation % 4) switch
+                    {
+                        0 => 2, // North-facing: rotate the top texture toward South.
+                        1 => 1, // East-facing: keep East; do not mirror to West.
+                        2 => 0, // South-facing: rotate the top texture toward North.
+                        _ => 3  // West-facing: keep West; do not mirror to East.
+                    }
+                    : 0
             );
         }
 
@@ -3401,7 +3410,8 @@ private void AddQuadCropped(
 
     private void AddQuad(
         SurfaceTool surface,
-        Vector3[] verts)
+        Vector3[] verts,
+        int uvRotation = 0)
     {
         Vector2[] uvs =
         new Vector2[]
@@ -3411,6 +3421,13 @@ private void AddQuadCropped(
             new Vector2(1, 0),
             new Vector2(0, 0)
         };
+
+        int turns = ((uvRotation % 4) + 4) % 4;
+        for (int i = 0; i < uvs.Length; i++)
+        {
+            for (int turn = 0; turn < turns; turn++)
+                uvs[i] = new Vector2(uvs[i].Y, 1f - uvs[i].X);
+        }
 
         surface.SetUV(uvs[0]);
         surface.AddVertex(verts[0]);

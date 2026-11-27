@@ -703,6 +703,71 @@ public partial class Player : CharacterBody3D
     }
 
     // =========================================================================
+    // PILOT HELMET EQUIPMENT
+    // =========================================================================
+
+    private void OnGearSlotInput(InputEvent ev, int slotIndex)
+    {
+        if (!_inventoryOpen ||
+            slotIndex != 0 ||
+            ev is not InputEventMouseButton mb ||
+            !mb.Pressed ||
+            mb.ButtonIndex != MouseButton.Left)
+            return;
+
+        string equippedId = _equipmentPanel?.GetGearSlotItem(slotIndex) ?? "";
+
+        if (_heldSlot.IsEmpty)
+        {
+            if (string.IsNullOrEmpty(equippedId))
+                return;
+
+            _heldSlot.ItemId = equippedId;
+            _heldSlot.Count = 1;
+            _heldSlot.CurrentDurability = 0;
+            _heldSlot.CustomName = "";
+            _equipmentPanel.SetGearSlotItem(slotIndex, "");
+
+            ItemResource removedGear = ItemRegistry.Instance?.GetItem(equippedId);
+            if (removedGear != null)
+                RemoveGearMovement(removedGear);
+
+            _heldFromSlot = -1;
+        }
+        else
+        {
+            ItemResource heldGear = ItemRegistry.Instance?.GetItem(_heldSlot.ItemId);
+            if (heldGear == null ||
+                !heldGear.IsEquippable ||
+                !string.Equals(heldGear.EquipSlot, "Helmet", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!string.IsNullOrEmpty(equippedId))
+            {
+                int remaining = AddItemToInventory(equippedId, 1);
+                if (remaining > 0)
+                    return;
+
+                ItemResource replacedGear = ItemRegistry.Instance?.GetItem(equippedId);
+                if (replacedGear != null)
+                    RemoveGearMovement(replacedGear);
+            }
+
+            _equipmentPanel.SetGearSlotItem(slotIndex, heldGear.ItemId);
+            ApplyGearMovement(heldGear);
+
+            _heldSlot.Count--;
+            if (_heldSlot.Count <= 0)
+                _heldSlot.Clear();
+
+            _heldFromSlot = -1;
+        }
+
+        FireChanged();
+        UpdateCursorVisual();
+    }
+
+    // =========================================================================
     // ADD ITEM
     // =========================================================================
 
@@ -815,6 +880,70 @@ public partial class Player : CharacterBody3D
         pickup.GlobalPosition = worldPosition;
     }
 
+    private bool TryThrowTomato()
+    {
+        if (_inventoryOpen || _chatOpen || _creativeMenuOpen || IsMounted)
+            return false;
+
+        InventorySlot handSlot = _inventory.Slots[MainInvSize + _selectedSlot];
+        if (handSlot.IsEmpty || handSlot.ItemId != "tomato")
+            return false;
+
+        handSlot.Count--;
+        if (handSlot.Count <= 0)
+            handSlot.Clear();
+
+        Vector3 forward = -_playerCamera.GlobalTransform.Basis.Z;
+        Vector3 spawnPosition = _playerCamera.GlobalPosition + forward * 0.65f;
+
+        var tomato = new RigidBody3D
+        {
+            Name = "ThrownTomato",
+            Mass = 0.18f,
+            GravityScale = 1.0f,
+            LinearVelocity = forward * 11.5f + Vector3.Up * 1.1f,
+            AngularVelocity = new Vector3(5f, 7f, 3f),
+            ContactMonitor = true,
+            MaxContactsReported = 4
+        };
+
+        var mesh = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = 0.13f, Height = 0.26f }
+        };
+        mesh.MaterialOverride = new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.9f, 0.12f, 0.08f),
+            Roughness = 0.82f
+        };
+        tomato.AddChild(mesh);
+
+        var collision = new CollisionShape3D
+        {
+            Shape = new SphereShape3D { Radius = 0.13f }
+        };
+        tomato.AddChild(collision);
+
+        tomato.AddCollisionExceptionWith(this);
+        tomato.BodyEntered += body =>
+        {
+            if (body is Mob mob && IsInstanceValid(mob) && mob.Health > 0f)
+                mob.TakeDamage(1f, tomato.GlobalPosition, this);
+            tomato.QueueFree();
+        };
+
+        GetTree().CurrentScene.AddChild(tomato);
+        tomato.GlobalPosition = spawnPosition;
+        GetTree().CreateTimer(8.0).Timeout += () =>
+        {
+            if (GodotObject.IsInstanceValid(tomato))
+                tomato.QueueFree();
+        };
+
+        FireChanged();
+        return true;
+    }
+
     private void DropOneItem()
     {
         var gm = GameModeManager.Instance;
@@ -822,9 +951,13 @@ public partial class Player : CharacterBody3D
         if (gm != null && gm.IsStory)
             return;
 
-        var slot = _inventory.Slots[MainInvSize + _selectedSlot];
+        InventorySlot slot = null;
+        if (_inventoryOpen && _hoveredInventorySlotIndex >= 0)
+            slot = GetUiSlot(_hoveredInventorySlotIndex);
+        if (slot == null)
+            slot = _inventory.Slots[MainInvSize + _selectedSlot];
 
-        if (slot.IsEmpty)
+        if (slot == null || slot.IsEmpty)
             return;
 
         string itemId = slot.ItemId;
@@ -1031,6 +1164,21 @@ public partial class Player : CharacterBody3D
             return;
 
         cm.LoadInventory(_inventory);
+        cm.LoadPlayerUiState(_craftingPanel, _equipmentPanel);
+
+        // Re-apply movement bonuses from saved equipment (for example the
+        // Pilot Helmet) after the gear slots have been restored.
+        if (_equipmentPanel != null)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                string equippedId = _equipmentPanel.GetGearSlotItem(i);
+                if (string.IsNullOrEmpty(equippedId)) continue;
+                ItemResource gear = ItemRegistry.Instance?.GetItem(equippedId);
+                if (gear != null) ApplyGearMovement(gear);
+            }
+        }
+
         RefreshAllSlotVisuals();
     }
 }
