@@ -2340,6 +2340,7 @@ if (_isBreaking)
     // =========================================================
 
     CheckWaterStatus();
+    _stats?.SetStaminaActivity(_isClimbing);
 
     // Climbing is a standard player ability and is not tied to Pilot gear.
     // Press jump while facing a solid wall to grab it.
