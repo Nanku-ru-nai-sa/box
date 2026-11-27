@@ -12,6 +12,9 @@ public partial class Player : CharacterBody3D
     [Export] public float JumpStaminaCost   { get; set; } = 10f;
 
     private float _gravity = 20f;
+    private float _jumpHoldTime = 0f;
+    private const float JumpHoldDuration = 0.16f;
+    private float _poseSmoothing = 1f;
     private PlayerStats _stats;
     private PlayerCamera _playerCamera;
     private Node3D _playerModelRoot;
@@ -565,11 +568,10 @@ public bool IsMounted =>
         if (_bonesModel != null)
             _bonesModel.Visible = false;
 
-        // In first-person, never render the player's own head or face.
-        // The camera sits just in front of the head, so extreme pitch
-        // angles could otherwise reveal the face from above or below.
+        // Keep the complete head and face visible in first-person. The
+        // camera is moved beyond the front surface so it does not clip inside it.
         if (_playerHeadPivot != null && IsInstanceValid(_playerHeadPivot))
-            _playerHeadPivot.Visible = _cameraMode != 0;
+            _playerHeadPivot.Visible = true;
 
         UpdateCameraModeTransform();
     }
@@ -589,7 +591,7 @@ public bool IsMounted =>
             {
                 Vector3 faceFront = _playerHeadPivot.GlobalPosition +
                     _playerModelRoot.GlobalBasis *
-                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.32f));
 
                 _playerCamera.Position = ToLocal(faceFront);
             }
@@ -649,6 +651,7 @@ public bool IsMounted =>
     {
         if (_playerModelParts == null || !IsInstanceValid(_playerModelParts))
             return;
+        _poseSmoothing = 1f - Mathf.Exp(-delta * 14f);
 
         if (!_locomotionBasePoseCaptured)
         {
@@ -968,9 +971,9 @@ public bool IsMounted =>
             Vector3 target = part.RestRotation +
                 new Vector3(pitch, yaw, roll) * _locomotionBlend;
             Vector3 current = part.Node.Rotation;
-            current.X = Mathf.LerpAngle(current.X, target.X, 1f);
-            current.Y = Mathf.LerpAngle(current.Y, target.Y, 1f);
-            current.Z = Mathf.LerpAngle(current.Z, target.Z, 1f);
+            current.X = Mathf.LerpAngle(current.X, target.X, _poseSmoothing);
+            current.Y = Mathf.LerpAngle(current.Y, target.Y, _poseSmoothing);
+            current.Z = Mathf.LerpAngle(current.Z, target.Z, _poseSmoothing);
             part.Node.Rotation = current;
         }
     }
@@ -2496,15 +2499,19 @@ if (_isBreaking)
         _isCrouching = true;
         ApplyPilotSlide(ref velocity, direction, dt);
     }
-    else if (direction != Vector3.Zero)
-    {
-        velocity.X = direction.X * moveSpeed;
-        velocity.Z = direction.Z * moveSpeed;
-    }
     else
     {
-        velocity.X = Mathf.MoveToward(velocity.X, 0f, moveSpeed * 10f * dt);
-        velocity.Z = Mathf.MoveToward(velocity.Z, 0f, moveSpeed * 10f * dt);
+        // Titanfall-inspired momentum: build speed instead of snapping to it,
+        // and preserve more horizontal drift while airborne for readable arcs.
+        Vector3 horizontalVelocity = new Vector3(velocity.X, 0f, velocity.Z);
+        float acceleration = IsOnFloor() ? 26f : 8.5f;
+        float friction = IsOnFloor() ? 22f : 1.6f;
+        Vector3 targetHorizontal = direction * moveSpeed;
+        horizontalVelocity = direction != Vector3.Zero
+            ? horizontalVelocity.MoveToward(targetHorizontal, acceleration * dt)
+            : horizontalVelocity.MoveToward(Vector3.Zero, friction * dt);
+        velocity.X = horizontalVelocity.X;
+        velocity.Z = horizontalVelocity.Z;
     }
 
     // ---------------------------------------------------------
@@ -2532,6 +2539,7 @@ if (_isBreaking)
                 : (useCrouchJump
                     ? JumpVelocity * Mathf.Sqrt(1.5f)
                     : JumpVelocity);
+            _jumpHoldTime = 0f;
 
             if (slideJump)
             {
@@ -2566,6 +2574,24 @@ if (_isBreaking)
                 JumpVelocity;
         }
     }
+
+    // Holding jump briefly softens gravity near take-off. Releasing jump
+    // immediately restores normal gravity, giving the player control over
+    // short hops and fuller Titanfall-style jumps.
+    if (!IsOnFloor() && velocity.Y > 0f &&
+        Input.IsActionPressed("jump") && _jumpHoldTime < JumpHoldDuration)
+    {
+        float holdStep = Mathf.Min(dt, JumpHoldDuration - _jumpHoldTime);
+        velocity.Y += _gravity * 0.45f * holdStep;
+        _jumpHoldTime += holdStep;
+    }
+    else if (!Input.IsActionPressed("jump") || velocity.Y <= 0f)
+    {
+        _jumpHoldTime = JumpHoldDuration;
+    }
+
+    if (IsOnFloor())
+        _jumpHoldTime = 0f;
 
     // ---------------------------------------------------------
     // GLIDING
