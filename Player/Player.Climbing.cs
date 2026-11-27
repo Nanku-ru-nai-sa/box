@@ -104,7 +104,7 @@ public partial class Player
             return;
         }
 
-        if (Input.IsActionJustPressed("crouch") || Input.IsKeyPressed(Key.Shift))
+        if (Input.IsActionJustPressed("crouch") || (Input.IsKeyPressed(Key.Shift) || Input.IsPhysicalKeyPressed(Key.Shift)))
         {
             ReleaseClimb(false);
             return;
