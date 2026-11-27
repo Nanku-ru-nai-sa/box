@@ -67,7 +67,7 @@ public partial class Player
                 continue;
 
             Vector3 normal = hit["normal"].AsVector3();
-            if (Mathf.Abs(normal.Y) > 0.25f)
+            if (Mathf.Abs(normal.Y) > 0.55f)
                 continue;
 
             wallNormal = normal.Normalized();
@@ -120,12 +120,20 @@ public partial class Player
             "move_left", "move_right", "move_forward", "move_back");
 
         float vertical = -input.Y;
-        Vector3 wallRight = Vector3.Up.Cross(_climbWallNormal);
+
+        // Project world-up onto the wall so movement follows sloped rock
+        // faces instead of pushing the player away from the surface.
+        Vector3 climbUp =
+            Vector3.Up - _climbWallNormal * Vector3.Up.Dot(_climbWallNormal);
+        if (climbUp.LengthSquared() > 0.0001f)
+            climbUp = climbUp.Normalized();
+
+        Vector3 wallRight = climbUp.Cross(_climbWallNormal);
         if (wallRight.LengthSquared() > 0.0001f)
             wallRight = wallRight.Normalized();
 
         Vector3 climbDirection =
-            Vector3.Up * vertical + wallRight * input.X;
+            climbUp * vertical + wallRight * input.X;
 
         if (climbDirection.LengthSquared() > 1f)
             climbDirection = climbDirection.Normalized();
