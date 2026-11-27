@@ -734,6 +734,22 @@ public bool IsMounted =>
             return;
         }
 
+        // Low, forward-leaning slide silhouette with tucked legs and arms
+        // swept back to make the movement state readable in third person.
+        if (_isSliding)
+        {
+            ApplyLimbRotation(_leftLegParts, 1.35f, 0f, -0.18f);
+            ApplyLimbRotation(_rightLegParts, 1.35f, 0f, 0.18f);
+            ApplyLimbRotation(_leftLowerLegParts, -1.15f, 0f, -0.04f);
+            ApplyLimbRotation(_rightLowerLegParts, -1.15f, 0f, 0.04f);
+            ApplyLimbRotation(_leftArmParts, 0.72f, 0f, -0.16f);
+            ApplyLimbRotation(_rightArmParts, 0.72f, 0f, 0.16f);
+            ApplyLimbRotation(_leftForearmParts, -0.35f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, -0.35f, 0f, 0f);
+            UpdateLocomotionBodyPose(0.16f, -0.12f, 0f, delta);
+            return;
+        }
+
         // Climbing braces the legs against the wall and reaches overhead.
         if (_isClimbing)
         {
@@ -741,10 +757,10 @@ public bool IsMounted =>
             ApplyLimbRotation(_rightLegParts, 0.35f, 0f, 0.10f);
             ApplyLimbRotation(_leftLowerLegParts, -0.55f, 0f, 0f);
             ApplyLimbRotation(_rightLowerLegParts, -0.55f, 0f, 0f);
-            ApplyLimbRotation(_leftArmParts, -1.25f, 0f, -0.10f);
-            ApplyLimbRotation(_rightArmParts, -1.25f, 0f, 0.10f);
-            ApplyLimbRotation(_leftForearmParts, -0.35f, 0f, 0f);
-            ApplyLimbRotation(_rightForearmParts, -0.35f, 0f, 0f);
+            ApplyLimbRotation(_leftArmParts, 0.35f, 0f, -0.10f);
+            ApplyLimbRotation(_rightArmParts, 0.35f, 0f, 0.10f);
+            ApplyLimbRotation(_leftForearmParts, -0.55f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, -0.55f, 0f, 0f);
             UpdateLocomotionBodyPose(0f, 0.015f, 0f, delta);
             return;
         }
@@ -2489,8 +2505,7 @@ if (_isBreaking)
     // Pilot slide starts when crouch is pressed during a sprint.
     // It keeps the sprint's momentum instead of immediately switching to
     // the normal slow crouch speed.
-    if (CanWallClimb &&
-        Input.IsActionJustPressed("crouch") &&
+    if (Input.IsActionJustPressed("slide") &&
         Input.IsActionPressed("sprint") &&
         IsOnFloor())
     {
