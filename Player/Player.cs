@@ -593,7 +593,7 @@ public bool IsMounted =>
             if (_playerHeadPivot != null && _playerModelRoot != null)
             {
                 Vector3 faceFront = _playerHeadPivot.GlobalPosition +
-                    _playerModelRoot.GlobalBasis *
+                    _playerHeadPivot.GlobalBasis *
                     new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.32f));
 
                 _playerCamera.Position = ToLocal(faceFront);
@@ -681,7 +681,7 @@ public bool IsMounted =>
                 // Since the head belongs to the sneaking upper-body group,
                 // this keeps the view anchored just in front of the face.
                 Vector3 faceFront = _playerHeadPivot.GlobalPosition +
-                    _playerModelRoot.GlobalBasis *
+                    _playerHeadPivot.GlobalBasis *
                     new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.32f));
                 _playerCamera.Position = ToLocal(faceFront);
             }
