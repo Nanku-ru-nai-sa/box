@@ -2287,6 +2287,32 @@ private void AddQuadCropped(
         shape.Shape = concave;
         newCollisionBody.AddChild(shape);
 
+        // Bamboo stalks stay visually narrow, but occupy a full voxel for
+        // collision so mobs cannot push into the thin mesh and become snagged.
+        for (int x = 0; x < SIZE; x++)
+        {
+            for (int y = 0; y < HEIGHT; y++)
+            {
+                for (int z = 0; z < SIZE; z++)
+                {
+                    string blockId = _blocks[x, y, z].BlockId;
+                    if (blockId != "bamboo" &&
+                        blockId != "big_bamboo" &&
+                        blockId != "bamboo_stick")
+                        continue;
+
+                    var bambooCollider = new CollisionShape3D();
+                    bambooCollider.Shape = new BoxShape3D { Size = Vector3.One };
+                    bambooCollider.Position = new Vector3(
+                        x + 0.5f,
+                        y + 0.5f,
+                        z + 0.5f
+                    );
+                    newCollisionBody.AddChild(bambooCollider);
+                }
+            }
+        }
+
         GetParent().AddChild(
             newCollisionBody
         );
