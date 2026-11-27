@@ -272,14 +272,18 @@ public partial class Player : CharacterBody3D
                 (InputEvent ev) =>
                     OnHotbarInvSlotInput(ev, idx);
 
-            slot.MouseEntered +=
-                () =>
-                    OnSlotMouseEntered(
-                        MainInvSize + idx
-                    );
+            slot.MouseEntered += () =>
+            {
+                _hoveredInventorySlotIndex = MainInvSize + idx;
+                OnSlotMouseEntered(MainInvSize + idx);
+            };
 
             slot.MouseExited += () =>
+            {
+                if (_hoveredInventorySlotIndex == MainInvSize + idx)
+                    _hoveredInventorySlotIndex = -1;
                 _invTooltip?.HideTooltip();
+            };
 
             slot.MouseFilter =
                 Control.MouseFilterEnum.Stop;
