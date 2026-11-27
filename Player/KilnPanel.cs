@@ -176,14 +176,71 @@ public partial class KilnPanel : Control
 
     private static Texture2D GetIcon(string itemId)
     {
-        // Prefer the dedicated item art for bamboo/stick variants.
+        if (string.IsNullOrWhiteSpace(itemId))
+            return null;
+
         string stickPath = $"res://Assets/Textures/Items/stick/{itemId}.png";
-        if (ResourceLoader.Exists(stickPath)) return ResourceLoader.Load<Texture2D>(stickPath);
+        if (ResourceLoader.Exists(stickPath))
+            return ResourceLoader.Load<Texture2D>(stickPath);
 
-        string itemPath = $"res://Assets/Textures/Items/{itemId}.png";
-        if (ResourceLoader.Exists(itemPath)) return ResourceLoader.Load<Texture2D>(itemPath);
+        string textureId = itemId switch
+        {
+            "wheat_seed" => "wheat_seeds",
+            "corn_seed" => "corn_seeds",
+            "tomato_seed" => "tomato_seeds",
+            _ => itemId
+        };
 
-        string blockPath = $"res://Assets/Textures/Blocks/{itemId}.png";
-        return ResourceLoader.Exists(blockPath) ? ResourceLoader.Load<Texture2D>(blockPath) : null;
+        string itemPath = FindItemTexturePath("res://Assets/Textures/Items", textureId);
+        if (!string.IsNullOrEmpty(itemPath) && ResourceLoader.Exists(itemPath))
+            return ResourceLoader.Load<Texture2D>(itemPath);
+
+        if (itemId == "sapling")
+        {
+            const string saplingPath = "res://Assets/Textures/Plants/sapling.png";
+            if (ResourceLoader.Exists(saplingPath))
+                return ResourceLoader.Load<Texture2D>(saplingPath);
+        }
+
+        Texture2D resourceIcon = ItemRegistry.Instance?.GetItem(itemId)?.Icon;
+        if (resourceIcon != null)
+            return resourceIcon;
+
+        return ResourceLoader.Load<Texture2D>(
+            "res://Assets/Textures/Items/tool/chalk/unknown.png"
+        );
+    }
+
+    private static string FindItemTexturePath(string folderPath, string itemId)
+    {
+        if (string.IsNullOrWhiteSpace(itemId))
+            return "";
+
+        DirAccess dir = DirAccess.Open(folderPath);
+        if (dir == null)
+            return "";
+
+        foreach (string fileName in dir.GetFiles())
+        {
+            if (!fileName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string baseName = System.IO.Path.GetFileNameWithoutExtension(fileName);
+            if (string.Equals(baseName, itemId, StringComparison.OrdinalIgnoreCase))
+            {
+                string fullPath = $"{folderPath}/{fileName}";
+                if (ResourceLoader.Exists(fullPath))
+                    return fullPath;
+            }
+        }
+
+        foreach (string directoryName in dir.GetDirectories())
+        {
+            string result = FindItemTexturePath($"{folderPath}/{directoryName}", itemId);
+            if (!string.IsNullOrEmpty(result))
+                return result;
+        }
+
+        return "";
     }
 }
