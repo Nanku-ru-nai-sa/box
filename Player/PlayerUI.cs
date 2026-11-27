@@ -989,6 +989,36 @@ private void OnSlotMouseEntered(int slotIndex)
             _kilnPanel.Visible = stationId == "kiln";
 
         RefreshStationSlotStyles();
+        CallDeferred(nameof(RefreshInventorySidePanelVisibility));
+    }
+
+    // Reassert visibility from the current inventory/station state. This avoids
+    // stale Visible values when inventory and station UI open in the same frame.
+    private void RefreshInventorySidePanelVisibility()
+    {
+        bool inventoryVisible = _inventoryOpen;
+
+        if (_craftingLayer != null)
+            _craftingLayer.Visible = inventoryVisible;
+
+        if (_equipmentLayer != null)
+            _equipmentLayer.Visible = inventoryVisible;
+
+        if (_craftingPanel != null)
+            _craftingPanel.Visible = inventoryVisible &&
+                (_activeStation == "default" || _activeStation == "crafter");
+
+        if (_equipmentPanel != null)
+            _equipmentPanel.Visible = inventoryVisible;
+
+        if (_toolBenchPanel != null)
+            _toolBenchPanel.Visible = inventoryVisible && _activeStation == "tool_bench";
+
+        if (_kilnPanel != null)
+            _kilnPanel.Visible = inventoryVisible && _activeStation == "kiln";
+
+        if (_stationTabBar != null)
+            _stationTabBar.Visible = inventoryVisible;
     }
 
     private void RefreshStationSlotStyles()
