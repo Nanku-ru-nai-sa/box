@@ -2511,8 +2511,7 @@ if (_isBreaking)
     // Press C while sprinting to start a slide.
     // It keeps the sprint's momentum instead of immediately switching to
     // the normal slow crouch speed.
-    if (CanWallClimb &&
-        Input.IsActionJustPressed("slide") &&
+    if (Input.IsActionJustPressed("slide") &&
         Input.IsActionPressed("sprint") &&
         IsOnFloor())
     {
