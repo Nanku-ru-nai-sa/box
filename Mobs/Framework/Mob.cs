@@ -225,6 +225,11 @@ private float _stepTargetY = 0f;
     private Vector3 _homePosition;
 
     private bool _hasLanded = false;
+    private bool _fallDamageTracking = false;
+    private float _fallStartY = 0f;
+    private const float FallSafeDistance = 3f;
+    private const float VoidDamagePerSecond = 4f;
+
 
     private Node3D _player;
 
@@ -1890,6 +1895,8 @@ private void RollAppearance()
         float dt =
             (float)delta;
 
+        UpdateMobFallAndVoidDamage(dt);
+
         if (UpdateDayDespawn(dt))
             return;
 
@@ -2198,6 +2205,44 @@ private void RollAppearance()
             Velocity = velocity;
 
         MoveAndSlide();
+    }
+
+
+    private void UpdateMobFallAndVoidDamage(float dt)
+    {
+        if (IsMounted)
+        {
+            _fallDamageTracking = false;
+            return;
+        }
+
+        // Bedrock is generated from Y=0 upward; below Y=0 is the void.
+        if (GlobalPosition.Y < 0f)
+            TakeDamage(VoidDamagePerSecond * dt);
+
+        if (!IsOnFloor())
+        {
+            if (!_fallDamageTracking)
+            {
+                _fallDamageTracking = true;
+                _fallStartY = GlobalPosition.Y;
+            }
+            else
+            {
+                _fallStartY = Mathf.Max(_fallStartY, GlobalPosition.Y);
+            }
+            return;
+        }
+
+        if (_fallDamageTracking)
+        {
+            float distanceFallen = Mathf.Max(0f, _fallStartY - GlobalPosition.Y);
+            int damage = Mathf.Max(0, Mathf.CeilToInt(distanceFallen - FallSafeDistance));
+            if (damage > 0)
+                TakeDamage(damage);
+        }
+
+        _fallDamageTracking = false;
     }
 
 
