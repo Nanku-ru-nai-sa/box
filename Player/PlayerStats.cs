@@ -24,6 +24,14 @@ public partial class PlayerStats : Node
 
     public void SetStaminaActivity(bool active)
     {
+        if (StaminaActivityActive == active)
+            return;
+
+        // Stamina cannot recover while hanging from a wall. Start the normal
+        // recovery delay only after the player lets go or runs out.
+        if (StaminaActivityActive && !active)
+            _staminaRegenTimer = StaminaRegenDelay;
+
         StaminaActivityActive = active;
     }
 
@@ -78,15 +86,19 @@ public partial class PlayerStats : Node
             EmitSignal(SignalName.HealthChanged, Health, MaxHealth);
         }
 
-        // Stamina regen (delayed after use)
-        if (_staminaRegenTimer > 0f)
+        // Stamina does not regenerate while attached to a climbing wall.
+        // Once the player lets go, the normal post-use delay is applied.
+        if (!StaminaActivityActive)
         {
-            _staminaRegenTimer -= dt;
-        }
-        else if (Stamina < MaxStamina)
-        {
-            Stamina = Mathf.Min(Stamina + StaminaRegen * dt, MaxStamina);
-            EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+            if (_staminaRegenTimer > 0f)
+            {
+                _staminaRegenTimer -= dt;
+            }
+            else if (Stamina < MaxStamina)
+            {
+                Stamina = Mathf.Min(Stamina + StaminaRegen * dt, MaxStamina);
+                EmitSignal(SignalName.StaminaChanged, Stamina, MaxStamina);
+            }
         }
 
         // Mana regen
@@ -174,6 +186,7 @@ public partial class PlayerStats : Node
     public void ResetAfterDeath()
 {
 IsDead = false;
+StaminaActivityActive = false;
 
 Health = MaxHealth;
 Stamina = MaxStamina;
