@@ -2354,6 +2354,11 @@ private void RollAppearance()
 
         if (IsMovementBlocked(direction))
         {
+            bool bambooAhead = IsBambooVoxelBlocking(
+                direction,
+                Mathf.Max(StepCheckDistance, 0.15f)
+            );
+
             // A player is a physical body. When the undead reaches
             // contact distance, stop pushing sideways around them and
             // hold position facing them so the attack state can connect.
@@ -2369,8 +2374,10 @@ private void RollAppearance()
                 return;
             }
 
-            // Try walking up one normal block.
-            if (TryStepUp(direction))
+            // Bamboo is visually narrow, but mobs should route around its
+            // entire occupied voxel instead of trying to squeeze through it.
+            // Do not step over it using the physical thin-shape collision.
+            if (!bambooAhead && TryStepUp(direction))
             {
                 // We stepped successfully.
                 velocity.X =
@@ -2493,6 +2500,9 @@ private void RollAppearance()
                 0.15f
             );
 
+        if (IsBambooVoxelBlocking(direction, checkDistance))
+            return true;
+
         Transform3D testTransform =
             GlobalTransform;
 
@@ -2508,8 +2518,76 @@ private void RollAppearance()
 
 
     // =========================================================
-    // AUTOMATIC STEP UP
+    // BAMBOO VOXEL NAVIGATION
     // =========================================================
+    // Bamboo models are intentionally narrow. For mob steering only,
+    // treat the whole grid cell as occupied so mobs choose a route around
+    // the stalk rather than walking into its thin physical collision.
+    // No block model, dimensions, collision shape, or registry data changes.
+    // =========================================================
+
+    private bool IsBambooVoxelBlocking(Vector3 direction, float distance)
+    {
+        ChunkManager world = ChunkManager.Instance;
+        if (world == null)
+            return false;
+
+        direction.Y = 0f;
+        if (direction.LengthSquared() < 0.0001f)
+            return false;
+
+        direction = direction.Normalized();
+
+        Vector3 bodyCenter = GlobalPosition +
+            direction * distance +
+            new Vector3(_adultCollisionPosition.X, 0f, _adultCollisionPosition.Z);
+
+        float halfX = _collisionBuilt ? _adultCollisionSize.X * 0.42f : 0.2f;
+        float halfZ = _collisionBuilt ? _adultCollisionSize.Z * 0.42f : 0.2f;
+        float feetY = GlobalPosition.Y +
+            (_collisionBuilt ? _adultCollisionPosition.Y - _adultCollisionSize.Y * 0.5f : 0.05f);
+        float topY = GlobalPosition.Y +
+            (_collisionBuilt ? _adultCollisionPosition.Y + _adultCollisionSize.Y * 0.5f : 1.5f);
+
+        float[] xOffsets = { -halfX, 0f, halfX };
+        float[] zOffsets = { -halfZ, 0f, halfZ };
+
+        int minY = Mathf.FloorToInt(feetY + 0.05f);
+        int maxY = Mathf.FloorToInt(Mathf.Max(feetY + 0.05f, topY - 0.05f));
+
+        for (int y = minY; y <= maxY; y++)
+        {
+            foreach (float xOffset in xOffsets)
+            {
+                foreach (float zOffset in zOffsets)
+                {
+                    Vector3 sample = new Vector3(
+                        bodyCenter.X + xOffset,
+                        y + 0.5f,
+                        bodyCenter.Z + zOffset
+                    );
+
+                    BlockState block = world.GetBlockAtWorld(new Vector3I(
+                        Mathf.FloorToInt(sample.X),
+                        Mathf.FloorToInt(sample.Y),
+                        Mathf.FloorToInt(sample.Z)
+                    ));
+
+                    if (block.BlockId == "bamboo" ||
+                        block.BlockId == "big_bamboo" ||
+                        block.BlockId == "bamboo_stick")
+                        return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+
+    // =========================================================
+    // AUTOMATIC STEP UP
+    // ============================================================
     //
     // We do NOT raycast for a floor and teleport onto it.
     //
@@ -2797,6 +2875,10 @@ return true;
 
         if (!IsMovementBlocked(direction))
             return true;
+
+        // A narrow bamboo mesh must still count as a full navigation obstacle.
+        if (IsBambooVoxelBlocking(direction, Mathf.Max(StepCheckDistance, 0.15f)))
+            return false;
 
         return TryStepTestOnly(direction);
     }
