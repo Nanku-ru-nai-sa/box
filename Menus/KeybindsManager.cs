@@ -48,7 +48,7 @@ public partial class KeybindsManager : Node
 
         ["jump"]                 = Key.Space,
         ["sprint"]               = Key.Z,
-        ["crouch"]               = Key.Ctrl,
+        ["crouch"]               = Key.Shift,
 
         ["toggle_inventory"]     = Key.Tab,
         ["drop_item"]            = Key.Q,
@@ -302,19 +302,20 @@ public partial class KeybindsManager : Node
                 continue;
             }
 
-            Key key = defaultKey;
+            // Sneak is deliberately Shift-only. Ignore any older saved
+            // Ctrl crouch binding so existing keybinds.json files migrate.
+            Key key = action == "crouch"
+                ? Key.Shift
+                : defaultKey;
 
-            if (parsed != null &&
+            if (action != "crouch" &&
+                parsed != null &&
                 parsed.ContainsKey(action))
             {
-                key =
-                    (Key)(int)parsed[action];
+                key = (Key)(int)parsed[action];
             }
 
-            SetAction(
-                action,
-                key
-            );
+            SetAction(action, key);
         }
     }
 }
