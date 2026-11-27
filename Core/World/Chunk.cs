@@ -2491,7 +2491,15 @@ private void AddQuadCropped(
                     FaceDirection.Top,
                     1.0f
                 ),
-                resource.CanRotate ? (block.Rotation + 2) % 4 : 0
+                resource.CanRotate
+                    ? (block.Rotation % 4) switch
+                    {
+                        0 => 2, // North-facing: rotate the top texture toward South.
+                        1 => 1, // East-facing: keep East; do not mirror to West.
+                        2 => 0, // South-facing: rotate the top texture toward North.
+                        _ => 3  // West-facing: keep West; do not mirror to East.
+                    }
+                    : 0
             );
         }
 
