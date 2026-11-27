@@ -924,6 +924,7 @@ public partial class Player : CharacterBody3D
         };
         tomato.AddChild(collision);
 
+        tomato.AddCollisionExceptionWith(this);
         tomato.BodyEntered += body =>
         {
             if (body is Mob mob && IsInstanceValid(mob) && mob.Health > 0f)
@@ -933,6 +934,11 @@ public partial class Player : CharacterBody3D
 
         GetTree().CurrentScene.AddChild(tomato);
         tomato.GlobalPosition = spawnPosition;
+        GetTree().CreateTimer(8.0).Timeout += () =>
+        {
+            if (GodotObject.IsInstanceValid(tomato))
+                tomato.QueueFree();
+        };
 
         FireChanged();
         return true;
