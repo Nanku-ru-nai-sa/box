@@ -2397,7 +2397,7 @@ if (_isBreaking)
             Input.IsActionPressed("sprint");
 
         _isCrouching =
-            (Input.IsActionPressed("crouch") || (Input.IsKeyPressed(Key.Shift) || Input.IsPhysicalKeyPressed(Key.Shift)));
+            Input.IsActionPressed("crouch");
 
         HandleFlyMovement(
             dt,
@@ -2470,7 +2470,7 @@ if (_isBreaking)
     // ---------------------------------------------------------
 
     _isCrouching =
-        (Input.IsActionPressed("crouch") || (Input.IsKeyPressed(Key.Shift) || Input.IsPhysicalKeyPressed(Key.Shift)));
+        Input.IsActionPressed("crouch");
     UpdateCrouchCollision();
 
     // Holding crouch briefly on the ground winds up a stronger jump.
@@ -2773,6 +2773,8 @@ private bool HasSneakGroundSupport(Transform3D playerTransform)
         new Vector3(-sampleRadius * 0.7071f, 0f, -sampleRadius * 0.7071f)
     };
 
+    int supportedSamples = 0;
+
     foreach (Vector3 offset in sampleOffsets)
     {
         Vector3 rayStart = new Vector3(
@@ -2790,11 +2792,14 @@ private bool HasSneakGroundSupport(Transform3D playerTransform)
             CollisionMask);
         query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
 
-        if (space.IntersectRay(query).Count == 0)
-            return false;
+        if (space.IntersectRay(query).Count > 0)
+            supportedSamples++;
     }
 
-    return true;
+    // A majority of the capsule footprint must remain over solid ground.
+    // Requiring all nine rays made ordinary crouch movement stop entirely
+    // on uneven voxel terrain and at tiny gaps between adjacent blocks.
+    return supportedSamples >= 5;
 }
 
 private bool TryGetSafeDismountPosition(
