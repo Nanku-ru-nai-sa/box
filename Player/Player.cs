@@ -735,7 +735,7 @@ public bool IsMounted =>
             ApplyLimbRotation(_rightArmParts, 0.28f, 0f, 0.08f);
             ApplyLimbRotation(_leftForearmParts, 0.38f, 0f, 0f);
             ApplyLimbRotation(_rightForearmParts, 0.38f, 0f, 0f);
-            UpdateLocomotionBodyPose(-0.10f, 0.025f, 0f, delta);
+            UpdateLocomotionBodyPose(0f, 0.025f, 0f, delta);
             return;
         }
 
@@ -2397,7 +2397,7 @@ if (_isBreaking)
             Input.IsActionPressed("sprint");
 
         _isCrouching =
-            Input.IsActionPressed("crouch");
+            (Input.IsActionPressed("crouch") || Input.IsKeyPressed(Key.Shift));
 
         HandleFlyMovement(
             dt,
@@ -2470,7 +2470,7 @@ if (_isBreaking)
     // ---------------------------------------------------------
 
     _isCrouching =
-        Input.IsActionPressed("crouch");
+        (Input.IsActionPressed("crouch") || Input.IsKeyPressed(Key.Shift));
     UpdateCrouchCollision();
 
     // Holding crouch briefly on the ground winds up a stronger jump.
@@ -2506,7 +2506,7 @@ if (_isBreaking)
     // HORIZONTAL MOVEMENT
     // ---------------------------------------------------------
 
-    // Pilot slide starts when crouch is pressed during a sprint.
+    // Press C while sprinting to start a slide.
     // It keeps the sprint's momentum instead of immediately switching to
     // the normal slow crouch speed.
     if (CanWallClimb &&
