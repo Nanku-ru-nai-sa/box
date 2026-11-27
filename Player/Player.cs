@@ -646,6 +646,7 @@ public bool IsMounted =>
 
     private float _locomotionBlend = 0f;
     private float _locomotionPhase = 0f;
+    private float _climbAnimationPhase = 0f;
     private Vector3 _locomotionBaseModelPosition;
     private Vector3 _locomotionBaseModelRotation;
     private bool _locomotionBasePoseCaptured = false;
@@ -670,7 +671,7 @@ public bool IsMounted =>
         _sneakBlend = IsMounted
             ? 0f
             : Mathf.MoveToward(
-                _sneakBlend, _isCrouching ? 1f : 0f, delta * 8f);
+                _sneakBlend, (_isCrouching || _isSliding) ? 1f : 0f, delta * 8f);
 
         if (_playerCamera != null)
         {
@@ -700,19 +701,6 @@ public bool IsMounted =>
         {
             _playerUpperBodyPivot.Position = _upperBodyBasePosition +
                                              Vector3.Down * (0.5f * _sneakBlend);
-            // A modest forward lean gives the crouch the compact Skyrim-like
-            // silhouette while the pelvis and thigh roots move as one unit.
-            Vector3 upperBodyTargetRotation = _upperBodyBaseRotation +
-                                              new Vector3(-0.816f * _sneakBlend, 0f, 0f);
-            _playerUpperBodyPivot.Rotation = new Vector3(
-                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, upperBodyTargetRotation.X,
-                    Mathf.Clamp(delta * 10f, 0f, 1f)),
-                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Y, upperBodyTargetRotation.Y,
-                    Mathf.Clamp(delta * 10f, 0f, 1f)),
-                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Z, upperBodyTargetRotation.Z,
-                    Mathf.Clamp(delta * 10f, 0f, 1f)));
-        }
-
         Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
         float speed = worldVelocity.Length();
         bool grounded = IsOnFloor();
@@ -738,30 +726,39 @@ public bool IsMounted =>
         // swept back to make the movement state readable in third person.
         if (_isSliding)
         {
-            ApplyLimbRotation(_leftLegParts, 1.35f, 0f, -0.18f);
-            ApplyLimbRotation(_rightLegParts, 1.35f, 0f, 0.18f);
-            ApplyLimbRotation(_leftLowerLegParts, -1.15f, 0f, -0.04f);
-            ApplyLimbRotation(_rightLowerLegParts, -1.15f, 0f, 0.04f);
-            ApplyLimbRotation(_leftArmParts, 0.72f, 0f, -0.16f);
-            ApplyLimbRotation(_rightArmParts, 0.72f, 0f, 0.16f);
-            ApplyLimbRotation(_leftForearmParts, -0.35f, 0f, 0f);
-            ApplyLimbRotation(_rightForearmParts, -0.35f, 0f, 0f);
-            UpdateLocomotionBodyPose(0.16f, -0.12f, 0f, delta);
+            _locomotionBlend = Mathf.MoveToward(_locomotionBlend, 1f, delta * 12f);
+            ApplyLimbRotation(_leftLegParts, 0.92f, 0f, -0.10f);
+            ApplyLimbRotation(_rightLegParts, 0.92f, 0f, 0.10f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.92f, 0f, -0.02f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.92f, 0f, 0.02f);
+            ApplyLimbRotation(_leftArmParts, 0.28f, 0f, -0.08f);
+            ApplyLimbRotation(_rightArmParts, 0.28f, 0f, 0.08f);
+            ApplyLimbRotation(_leftForearmParts, 0.38f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.38f, 0f, 0f);
+            UpdateLocomotionBodyPose(-0.10f, 0.025f, 0f, delta);
             return;
         }
 
-        // Climbing braces the legs against the wall and reaches overhead.
+        // BOTW-style climbing alternates a reaching hand with the opposite
+        // foot searching for a foothold, then exchanges sides.
         if (_isClimbing)
         {
-            ApplyLimbRotation(_leftLegParts, 0.35f, 0f, -0.10f);
-            ApplyLimbRotation(_rightLegParts, 0.35f, 0f, 0.10f);
-            ApplyLimbRotation(_leftLowerLegParts, -0.55f, 0f, 0f);
-            ApplyLimbRotation(_rightLowerLegParts, -0.55f, 0f, 0f);
-            ApplyLimbRotation(_leftArmParts, 0.35f, 0f, -0.10f);
-            ApplyLimbRotation(_rightArmParts, 0.35f, 0f, 0.10f);
-            ApplyLimbRotation(_leftForearmParts, -0.55f, 0f, 0f);
-            ApplyLimbRotation(_rightForearmParts, -0.55f, 0f, 0f);
-            UpdateLocomotionBodyPose(0f, 0.015f, 0f, delta);
+            _locomotionBlend = Mathf.MoveToward(_locomotionBlend, 1f, delta * 10f);
+            float climbRate = Velocity.Length() > 0.08f ? 3.6f : 1.25f;
+            _climbAnimationPhase = Mathf.PosMod(_climbAnimationPhase + delta * climbRate, Mathf.Tau);
+            float leftReach = Mathf.Sin(_climbAnimationPhase);
+            float rightReach = Mathf.Sin(_climbAnimationPhase + Mathf.Pi);
+            float leftLift = Mathf.Max(0f, Mathf.Cos(_climbAnimationPhase));
+            float rightLift = Mathf.Max(0f, Mathf.Cos(_climbAnimationPhase + Mathf.Pi));
+            ApplyLimbRotation(_leftArmParts, 0.62f + leftReach * 0.48f, 0f, -0.10f);
+            ApplyLimbRotation(_rightArmParts, 0.62f + rightReach * 0.48f, 0f, 0.10f);
+            ApplyLimbRotation(_leftForearmParts, 0.48f + leftLift * 0.30f, 0f, 0f);
+            ApplyLimbRotation(_rightForearmParts, 0.48f + rightLift * 0.30f, 0f, 0f);
+            ApplyLimbRotation(_leftLegParts, 0.22f + rightReach * 0.30f, 0f, -0.14f);
+            ApplyLimbRotation(_rightLegParts, 0.22f + leftReach * 0.30f, 0f, 0.14f);
+            ApplyLimbRotation(_leftLowerLegParts, -0.38f - rightLift * 0.58f, 0f, 0f);
+            ApplyLimbRotation(_rightLowerLegParts, -0.38f - leftLift * 0.58f, 0f, 0f);
+            UpdateLocomotionBodyPose(0.018f * Mathf.Sin(_climbAnimationPhase * 2f), 0f, 0f, delta);
             return;
         }
 
@@ -937,7 +934,7 @@ public bool IsMounted =>
     {
         // Skyrim-inspired sneak stance: knees spread, legs folded, and arms
         // drawn slightly inward. These are joint rotations, never mesh scaling.
-        if (_sneakBlend > 0f)
+        if (_sneakBlend > 0f && !_isSliding)
         {
             if (ReferenceEquals(parts, _leftLegParts))
             {
@@ -1011,12 +1008,19 @@ public bool IsMounted =>
         _playerModelRoot.Position = _playerModelRoot.Position.Lerp(
             targetPosition, Mathf.Clamp(delta * 10f, 0f, 1f));
 
-        Vector3 targetRotation = _locomotionBaseModelRotation +
-                                 new Vector3(forwardLean, 0f, sideLean);
-        _playerModelRoot.Rotation = new Vector3(
-            Mathf.LerpAngle(_playerModelRoot.Rotation.X, targetRotation.X, delta * 8f),
-            Mathf.LerpAngle(_playerModelRoot.Rotation.Y, targetRotation.Y, delta * 8f),
-            Mathf.LerpAngle(_playerModelRoot.Rotation.Z, targetRotation.Z, delta * 8f));
+        // Keep the model root upright so movement lean cannot shift the
+        // whole character around the capsule when the player stops.
+        _playerModelRoot.Rotation = _locomotionBaseModelRotation;
+        if (_playerUpperBodyPivot != null && IsInstanceValid(_playerUpperBodyPivot))
+        {
+            Vector3 targetUpperRotation = _upperBodyBaseRotation +
+                new Vector3(-0.816f * _sneakBlend + forwardLean, 0f, sideLean);
+            float blend = 1f - Mathf.Exp(-delta * 12f);
+            _playerUpperBodyPivot.Rotation = new Vector3(
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.X, targetUpperRotation.X, blend),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Y, targetUpperRotation.Y, blend),
+                Mathf.LerpAngle(_playerUpperBodyPivot.Rotation.Z, targetUpperRotation.Z, blend));
+        }
     }
 
     private void ApplyLimbSwing(
