@@ -2538,33 +2538,42 @@ private void RollAppearance()
 
         direction = direction.Normalized();
 
+        Vector3 collisionSize = _adultCollisionSize;
+        Vector3 collisionPosition = _adultCollisionPosition;
+
+        // Use the live dimensions so baby mobs are checked at their scaled size.
+        if (_modelCollision?.Shape is BoxShape3D collisionBox)
+        {
+            collisionSize = collisionBox.Size;
+            collisionPosition = _modelCollision.Position;
+        }
+
         Vector3 bodyCenter = GlobalPosition +
             direction * distance +
-            new Vector3(_adultCollisionPosition.X, 0f, _adultCollisionPosition.Z);
+            new Vector3(collisionPosition.X, 0f, collisionPosition.Z);
 
-        float halfX = _collisionBuilt ? _adultCollisionSize.X * 0.42f : 0.2f;
-        float halfZ = _collisionBuilt ? _adultCollisionSize.Z * 0.42f : 0.2f;
+        float halfX = _collisionBuilt ? collisionSize.X * 0.42f : 0.2f;
+        float halfZ = _collisionBuilt ? collisionSize.Z * 0.42f : 0.2f;
         float feetY = GlobalPosition.Y +
-            (_collisionBuilt ? _adultCollisionPosition.Y - _adultCollisionSize.Y * 0.5f : 0.05f);
+            (_collisionBuilt ? collisionPosition.Y - collisionSize.Y * 0.5f : 0.05f);
         float topY = GlobalPosition.Y +
-            (_collisionBuilt ? _adultCollisionPosition.Y + _adultCollisionSize.Y * 0.5f : 1.5f);
-
-        float[] xOffsets = { -halfX, 0f, halfX };
-        float[] zOffsets = { -halfZ, 0f, halfZ };
+            (_collisionBuilt ? collisionPosition.Y + collisionSize.Y * 0.5f : 1.5f);
 
         int minY = Mathf.FloorToInt(feetY + 0.05f);
         int maxY = Mathf.FloorToInt(Mathf.Max(feetY + 0.05f, topY - 0.05f));
 
+        // Nine footprint samples catch the whole voxel without allocating arrays
+        // every physics frame.
         for (int y = minY; y <= maxY; y++)
         {
-            foreach (float xOffset in xOffsets)
+            for (int xSample = -1; xSample <= 1; xSample++)
             {
-                foreach (float zOffset in zOffsets)
+                for (int zSample = -1; zSample <= 1; zSample++)
                 {
                     Vector3 sample = new Vector3(
-                        bodyCenter.X + xOffset,
+                        bodyCenter.X + xSample * halfX,
                         y + 0.5f,
-                        bodyCenter.Z + zOffset
+                        bodyCenter.Z + zSample * halfZ
                     );
 
                     BlockState block = world.GetBlockAtWorld(new Vector3I(
