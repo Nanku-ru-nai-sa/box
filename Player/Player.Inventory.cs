@@ -1096,6 +1096,21 @@ public partial class Player : CharacterBody3D
             return;
 
         cm.LoadInventory(_inventory);
+        cm.LoadPlayerUiState(_craftingPanel, _equipmentPanel);
+
+        // Re-apply movement bonuses from saved equipment (for example the
+        // Pilot Helmet) after the gear slots have been restored.
+        if (_equipmentPanel != null)
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                string equippedId = _equipmentPanel.GetGearSlotItem(i);
+                if (string.IsNullOrEmpty(equippedId)) continue;
+                ItemResource gear = ItemRegistry.Instance?.GetItem(equippedId);
+                if (gear != null) ApplyGearMovement(gear);
+            }
+        }
+
         RefreshAllSlotVisuals();
     }
 }
