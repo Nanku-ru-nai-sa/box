@@ -45,7 +45,7 @@ public partial class Player : CharacterBody3D
         if (!_isSliding)
             return;
 
-        if (!CanWallClimb || _isInWater || !IsOnFloor())
+        if (_isInWater || !IsOnFloor())
         {
             _isSliding = false;
             _pilotSlideTime = 0f;
