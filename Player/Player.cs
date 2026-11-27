@@ -682,7 +682,7 @@ public bool IsMounted =>
                 // this keeps the view anchored just in front of the face.
                 Vector3 faceFront = _playerHeadPivot.GlobalPosition +
                     _playerModelRoot.GlobalBasis *
-                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.12f));
+                    new Vector3(0f, 0f, -(_playerHeadHalfDepth + 0.32f));
                 _playerCamera.Position = ToLocal(faceFront);
             }
             else
