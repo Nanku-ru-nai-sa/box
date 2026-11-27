@@ -2490,7 +2490,8 @@ private void AddQuadCropped(
                     z,
                     FaceDirection.Top,
                     1.0f
-                )
+                ),
+                resource.CanRotate ? block.Rotation : 0
             );
         }
 
@@ -3401,7 +3402,8 @@ private void AddQuadCropped(
 
     private void AddQuad(
         SurfaceTool surface,
-        Vector3[] verts)
+        Vector3[] verts,
+        int uvRotation = 0)
     {
         Vector2[] uvs =
         new Vector2[]
@@ -3411,6 +3413,13 @@ private void AddQuadCropped(
             new Vector2(1, 0),
             new Vector2(0, 0)
         };
+
+        int turns = ((uvRotation % 4) + 4) % 4;
+        for (int i = 0; i < uvs.Length; i++)
+        {
+            for (int turn = 0; turn < turns; turn++)
+                uvs[i] = new Vector2(uvs[i].Y, 1f - uvs[i].X);
+        }
 
         surface.SetUV(uvs[0]);
         surface.AddVertex(verts[0]);
