@@ -387,8 +387,10 @@ public partial class CraftingPanel : Control
     public void LoadSaveData(Godot.Collections.Dictionary data)
     {
         if (data == null) return;
-        if (data.ContainsKey("grid2")) LoadSlotArray(_grid2, data["grid2"].AsGodotArray());
-        if (data.ContainsKey("grid3")) LoadSlotArray(_grid3, data["grid3"].AsGodotArray());
+        if (data.ContainsKey("grid2") && data["grid2"].VariantType == Variant.Type.Array)
+            LoadSlotArray(_grid2, data["grid2"].AsGodotArray());
+        if (data.ContainsKey("grid3") && data["grid3"].VariantType == Variant.Type.Array)
+            LoadSlotArray(_grid3, data["grid3"].AsGodotArray());
         RefreshGridVisuals();
         UpdateOutput();
     }
