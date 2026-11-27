@@ -36,7 +36,7 @@ public partial class Player
         return true;
     }
 
-    private bool TryGetClimbSurface(out Vector3 wallNormal)
+    private bool TryGetClimbSurface(out Vector3 wallNormal, Vector3 preferredDirection = default)
     {
         wallNormal = Vector3.Zero;
 
@@ -50,28 +50,50 @@ public partial class Player
             return false;
         forward = forward.Normalized();
 
-        // Probe at the torso, shoulders and upper body. A valid climbing
-        // surface must be close and close to vertical, not a floor or ceiling.
-        float[] probeHeights = { 0.15f, 0.65f, 1.05f };
-        foreach (float height in probeHeights)
+        Vector3 side = GlobalTransform.Basis.X;
+        side.Y = 0f;
+        side = side.LengthSquared() > 0.0001f ? side.Normalized() : Vector3.Right;
+
+        // When the player moves sideways, probe around the leading shoulder
+        // as well as straight ahead. This lets the grab transfer to the next
+        // face of a block instead of treating every corner as a drop-off.
+        var directions = new System.Collections.Generic.List<Vector3>();
+        if (preferredDirection.LengthSquared() > 0.01f)
         {
-            Vector3 from = GlobalPosition + Vector3.Up * height;
-            Vector3 to = from + forward * ClimbGrabDistance;
+            preferredDirection.Y = 0f;
+            preferredDirection = preferredDirection.Normalized();
+            directions.Add((forward + preferredDirection * 1.35f).Normalized());
+            directions.Add(preferredDirection);
+            directions.Add(forward);
+        }
+        else
+        {
+            directions.Add(forward);
+        }
 
-            var query = PhysicsRayQueryParameters3D.Create(
-                from, to, CollisionMask);
-            query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
+        float[] probeHeights = { 0.15f, 0.65f, 1.05f };
+        foreach (Vector3 probeDirection in directions)
+        {
+            foreach (float height in probeHeights)
+            {
+                Vector3 from = GlobalPosition + Vector3.Up * height;
+                Vector3 to = from + probeDirection * ClimbGrabDistance;
 
-            Godot.Collections.Dictionary hit = space.IntersectRay(query);
-            if (hit.Count == 0)
-                continue;
+                var query = PhysicsRayQueryParameters3D.Create(
+                    from, to, CollisionMask);
+                query.Exclude = new Godot.Collections.Array<Rid> { GetRid() };
 
-            Vector3 normal = hit["normal"].AsVector3();
-            if (Mathf.Abs(normal.Y) > 0.55f)
-                continue;
+                Godot.Collections.Dictionary hit = space.IntersectRay(query);
+                if (hit.Count == 0)
+                    continue;
 
-            wallNormal = normal.Normalized();
-            return true;
+                Vector3 normal = hit["normal"].AsVector3();
+                if (Mathf.Abs(normal.Y) > 0.55f)
+                    continue;
+
+                wallNormal = normal.Normalized();
+                return true;
+            }
         }
 
         return false;
@@ -92,12 +114,17 @@ public partial class Player
             return;
         }
 
-        if (!TryGetClimbSurface(out Vector3 currentNormal))
+        Vector2 input = Input.GetVector(
+            "move_left", "move_right", "move_forward", "move_back");
+        Vector3 preferredSide = GlobalTransform.Basis.X * Mathf.Sign(input.X);
+        if (Mathf.Abs(input.X) < 0.05f)
+            preferredSide = Vector3.Zero;
+
+        if (!TryGetClimbSurface(out Vector3 currentNormal, preferredSide))
         {
             // If the player was moving upward and reached the top edge,
             // give a small outward/upward boost to help them get over it.
-            Vector2 edgeInput = Input.GetVector(
-                "move_left", "move_right", "move_forward", "move_back");
+            Vector2 edgeInput = input;
 
             _isClimbing = false;
             if (-edgeInput.Y > 0.1f)
@@ -115,9 +142,6 @@ public partial class Player
 
         _climbWallNormal = currentNormal;
         LookAt(GlobalPosition - _climbWallNormal, Vector3.Up);
-
-        Vector2 input = Input.GetVector(
-            "move_left", "move_right", "move_forward", "move_back");
 
         float vertical = -input.Y;
 
