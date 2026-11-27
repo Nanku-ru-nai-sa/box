@@ -3369,6 +3369,7 @@ if (key.Keycode == Key.Escape)
 
             cm.Call("SaveModifiedChunks");
             cm.SaveInventory(_inventory);
+            cm.SavePlayerUiState(_craftingPanel, _equipmentPanel);
 
             cm.SavePlayerPosition(
                 GlobalPosition,
@@ -3702,6 +3703,7 @@ if (key.Keycode == Key.Escape)
         {
             chunkManager.SaveModifiedChunks();
             chunkManager.SaveInventory(_inventory);
+            chunkManager.SavePlayerUiState(_craftingPanel, _equipmentPanel);
             chunkManager.SavePlayerPosition(
                 GlobalPosition,
                 Rotation.Y,
@@ -4422,9 +4424,8 @@ if (key.Keycode == Key.Escape)
     public void SaveInventoryFromPauseMenu(
         ChunkManager cm)
     {
-        cm.SaveInventory(
-            _inventory
-        );
+        cm.SaveInventory(_inventory);
+        cm.SavePlayerUiState(_craftingPanel, _equipmentPanel);
 
         cm.SavePlayerPosition(
             GlobalPosition,
