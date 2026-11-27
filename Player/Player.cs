@@ -661,8 +661,10 @@ public bool IsMounted =>
                 _locomotionBasePoseCaptured = true;
         }
 
-        _sneakBlend = Mathf.MoveToward(
-            _sneakBlend, _isCrouching ? 1f : 0f, delta * 8f);
+        _sneakBlend = IsMounted
+            ? 0f
+            : Mathf.MoveToward(
+                _sneakBlend, _isCrouching ? 1f : 0f, delta * 8f);
 
         if (_playerCamera != null)
         {
@@ -2349,7 +2351,10 @@ if (_isBreaking)
 
     if (Input.IsActionJustPressed("jump") && TryStartClimbing())
     {
-        HandleClimbing(dt);
+        // Do not process the same jump press as a wall-jump release on the
+        // frame the player first grabs the wall.
+        Velocity = Vector3.Zero;
+        MoveAndSlide();
         return;
     }
 
