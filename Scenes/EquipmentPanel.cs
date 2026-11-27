@@ -48,6 +48,24 @@ public partial class EquipmentPanel : Control
         }
     }
 
+    public Godot.Collections.Array GetGearSaveData()
+    {
+        var saved = new Godot.Collections.Array();
+        foreach (string itemId in _gearItemIds)
+            saved.Add(itemId ?? "");
+        return saved;
+    }
+
+    public void LoadGearSaveData(Godot.Collections.Array saved)
+    {
+        if (saved == null) return;
+        for (int i = 0; i < _gearItemIds.Length; i++)
+        {
+            string itemId = i < saved.Count ? (string)saved[i] : "";
+            SetGearSlotItem(i, itemId);
+        }
+    }
+
     private PlayerStats _stats;
     private Label _healthLabel;
     private Label _staminaLabel;
