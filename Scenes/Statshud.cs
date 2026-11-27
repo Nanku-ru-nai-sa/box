@@ -270,6 +270,17 @@ public partial class StatsHud : HBoxContainer
         if (group == null)
             return;
 
+        // Keep the BOTW-style stamina pips visible for the whole time the
+        // player is attached to a climbing surface, including while hanging.
+        if (ReferenceEquals(group, _staminaGroup) &&
+            _stats != null &&
+            _stats.StaminaActivityActive)
+        {
+            fadeTimer = FadeDelay;
+            SetGroupAlpha(group, 1f);
+            return;
+        }
+
         // ============================================================
         // PLAYER STATS SETTING ON
         // ============================================================
