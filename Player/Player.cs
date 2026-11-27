@@ -3097,6 +3097,13 @@ public override void _UnhandledInput(InputEvent @event)
             // Left mouse: break blocks.
             if (mb.ButtonIndex == MouseButton.Left)
             {
+                if (mb.Pressed && TryThrowTomato())
+                {
+                    _isBreaking = false;
+                    ResetBreak();
+                    return;
+                }
+
                 _isBreaking = mb.Pressed;
 
                 if (mb.Pressed)
