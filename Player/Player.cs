@@ -2505,7 +2505,8 @@ if (_isBreaking)
     // Pilot slide starts when crouch is pressed during a sprint.
     // It keeps the sprint's momentum instead of immediately switching to
     // the normal slow crouch speed.
-    if (Input.IsActionJustPressed("slide") &&
+    if (CanWallClimb &&
+        Input.IsActionJustPressed("slide") &&
         Input.IsActionPressed("sprint") &&
         IsOnFloor())
     {
