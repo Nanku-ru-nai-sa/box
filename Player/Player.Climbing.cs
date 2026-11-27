@@ -79,10 +79,15 @@ public partial class Player
     private void HandleClimbing(float delta)
     {
         // Jump kicks away from the wall; crouch deliberately lets go.
-        if (Input.IsActionJustPressed("jump") ||
-            Input.IsActionJustPressed("crouch"))
+        if (Input.IsActionJustPressed("jump"))
         {
             ReleaseClimb(true);
+            return;
+        }
+
+        if (Input.IsActionJustPressed("crouch"))
+        {
+            ReleaseClimb(false);
             return;
         }
 
