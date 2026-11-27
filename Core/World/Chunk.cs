@@ -2491,7 +2491,7 @@ private void AddQuadCropped(
                     FaceDirection.Top,
                     1.0f
                 ),
-                resource.CanRotate ? (4 - block.Rotation) % 4 : 0
+                resource.CanRotate ? (block.Rotation + 2) % 4 : 0
             );
         }
 
