@@ -2516,6 +2516,7 @@ if (_isBreaking)
     if (_isSliding)
     {
         _isCrouching = true;
+        UpdateCrouchCollision();
         ApplyPilotSlide(ref velocity, direction, dt);
     }
     else
