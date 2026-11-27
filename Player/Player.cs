@@ -839,8 +839,8 @@ public bool IsMounted =>
 
         var item = ItemRegistry.Instance?.GetItem(itemId);
 
-        if (tex == null)
-            tex = item?.Icon;
+        // Dedicated item textures are resolved before custom resource icons.
+        // This keeps world/block artwork out of inventory UI.
 
         if (tex == null)
         {
@@ -895,20 +895,11 @@ public bool IsMounted =>
                 tex = ResourceLoader.Load<Texture2D>(plantPath);
         }
 
+        // Use a custom icon only after searching the Items/ and Plants/ folders.
         if (tex == null)
-        {
-            string blockPath =
-                $"res://Assets/Textures/Blocks/{itemId}.png";
+            tex = item?.Icon;
 
-            if (ResourceLoader.Exists(blockPath))
-            {
-                tex =
-                    ResourceLoader.Load<Texture2D>(
-                        blockPath
-                    );
-            }
-        }
-
+        // Never substitute a world block texture for an item icon.
         if (tex == null)
         {
             if (_unknownItemIconTex == null)
@@ -3106,6 +3097,9 @@ if (key.Keycode == Key.Escape)
             Input.MouseMode =
                 Input.MouseModeEnum.Captured;
         }
+
+        // Re-apply visibility after deferred UI parenting and station changes.
+        CallDeferred(nameof(RefreshInventorySidePanelVisibility));
     }
 
     private void CheckWaterStatus()
