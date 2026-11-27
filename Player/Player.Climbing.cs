@@ -28,6 +28,7 @@ public partial class Player
 
         _isClimbing = true;
         _climbWallNormal = normal;
+        _stats.SetStaminaActivity(true);
 
         // Face the surface so left/right movement follows its plane.
         LookAt(GlobalPosition - normal, Vector3.Up);
