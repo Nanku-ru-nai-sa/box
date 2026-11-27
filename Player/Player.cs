@@ -701,6 +701,8 @@ public bool IsMounted =>
         {
             _playerUpperBodyPivot.Position = _upperBodyBasePosition +
                                              Vector3.Down * (0.5f * _sneakBlend);
+        }
+
         Vector3 worldVelocity = new Vector3(Velocity.X, 0f, Velocity.Z);
         float speed = worldVelocity.Length();
         bool grounded = IsOnFloor();
@@ -2705,10 +2707,8 @@ private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
     // it is not a reliable "ground exists underneath" test for an edge.
     if (!HasSneakGroundSupport(GlobalTransform))
     {
-        // If the support probes cannot confirm the current footing, fail
-        // safely instead of allowing crouch movement toward an unseen edge.
-        velocity.X = 0f;
-        velocity.Z = 0f;
+        // If this terrain does not provide reliable probe hits, leave normal
+        // movement alone rather than trapping the player in place.
         return;
     }
 
