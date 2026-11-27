@@ -1100,9 +1100,6 @@ public bool IsMounted =>
         var item = ItemRegistry.Instance?.GetItem(itemId);
 
         if (tex == null)
-            tex = item?.Icon;
-
-        if (tex == null)
         {
             string itemTexturePath =
                 FindItemTexturePath(
@@ -1155,20 +1152,11 @@ public bool IsMounted =>
                 tex = ResourceLoader.Load<Texture2D>(plantPath);
         }
 
+        // Use a custom ItemResource icon only after dedicated item-art lookup.
         if (tex == null)
-        {
-            string blockPath =
-                $"res://Assets/Textures/Blocks/{itemId}.png";
+            tex = item?.Icon;
 
-            if (ResourceLoader.Exists(blockPath))
-            {
-                tex =
-                    ResourceLoader.Load<Texture2D>(
-                        blockPath
-                    );
-            }
-        }
-
+        // Inventory slots must never use a block's world texture.
         if (tex == null)
         {
             if (_unknownItemIconTex == null)
@@ -3529,6 +3517,9 @@ if (key.Keycode == Key.Escape)
     {
         _inventoryOpen =
             !_inventoryOpen;
+
+        // Apply visibility after deferred panel parenting / proximity updates.
+        CallDeferred(nameof(RefreshInventorySidePanelVisibility));
 
         if (_stationTabBar != null)
             _stationTabBar.Visible = _inventoryOpen;
