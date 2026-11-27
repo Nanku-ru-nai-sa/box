@@ -5,6 +5,7 @@ using System.Collections.Generic;
 public partial class Player : CharacterBody3D
 {
     private const float WorkbenchPanelWidth = 271f;
+    private int _hoveredInventorySlotIndex = -1;
     // =========================================================================
     // HOTBAR HUD
     // =========================================================================
@@ -48,7 +49,16 @@ public partial class Player : CharacterBody3D
             int idx = i;
 
             slot.MouseEntered += () =>
+            {
+                _hoveredInventorySlotIndex = MainInvSize + idx;
                 OnHudHotbarSlotMouseEntered(idx);
+            };
+
+            slot.MouseExited += () =>
+            {
+                if (_hoveredInventorySlotIndex == MainInvSize + idx)
+                    _hoveredInventorySlotIndex = -1;
+            };
 
             slot.MouseExited += () =>
                 _hotbarTooltip?.HideTooltip();
@@ -156,7 +166,16 @@ public partial class Player : CharacterBody3D
 
             slot.MouseEntered +=
                 () =>
+                {
+                    _hoveredInventorySlotIndex = idx;
                     OnSlotMouseEntered(idx);
+                };
+
+            slot.MouseExited += () =>
+            {
+                if (_hoveredInventorySlotIndex == idx)
+                    _hoveredInventorySlotIndex = -1;
+            };
 
             slot.MouseFilter =
                 Control.MouseFilterEnum.Stop;
