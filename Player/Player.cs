@@ -12,6 +12,12 @@ public partial class Player : CharacterBody3D
     [Export] public float JumpStaminaCost   { get; set; } = 10f;
 
     private float _gravity = 20f;
+    private bool _fallDamageTracking = false;
+    private float _fallStartY = 0f;
+    private float _voidDamageTimer = 0f;
+    private const float FallSafeDistance = 3f;
+    private const float VoidDamagePerSecond = 4f;
+
     private float _jumpHoldTime = 0f;
     private const float JumpHoldDuration = 0.16f;
     private float _poseSmoothing = 1f;
@@ -2223,6 +2229,8 @@ public bool IsMounted =>
         _stats.IsDead)
         return;
 
+    UpdatePlayerFallAndVoidDamage(dt);
+
     if (_chatOpen)
     return;
 
@@ -2685,6 +2693,57 @@ if (_isBreaking)
     Velocity = velocity;
 
     MoveAndSlide();
+}
+
+private void UpdatePlayerFallAndVoidDamage(float dt)
+{
+    if (_isFlying || IsMounted)
+    {
+        _fallDamageTracking = false;
+        _voidDamageTimer = 0f;
+        return;
+    }
+
+    // The bedrock layer occupies Y=0 through Y=3 in normal worlds.
+    // Being below Y=0 means the player has fallen through the bottom.
+    if (GlobalPosition.Y < 0f)
+    {
+        _voidDamageTimer += dt;
+        while (_voidDamageTimer >= 1f)
+        {
+            _voidDamageTimer -= 1f;
+            TakeDamage(VoidDamagePerSecond);
+        }
+    }
+    else
+    {
+        _voidDamageTimer = 0f;
+    }
+
+    bool grounded = IsOnFloor();
+    if (!grounded)
+    {
+        if (!_fallDamageTracking)
+        {
+            _fallDamageTracking = true;
+            _fallStartY = GlobalPosition.Y;
+        }
+        else
+        {
+            _fallStartY = Mathf.Max(_fallStartY, GlobalPosition.Y);
+        }
+        return;
+    }
+
+    if (_fallDamageTracking)
+    {
+        float distanceFallen = Mathf.Max(0f, _fallStartY - GlobalPosition.Y);
+        int damage = Mathf.Max(0, Mathf.CeilToInt(distanceFallen - FallSafeDistance));
+        if (damage > 0)
+            TakeDamage(damage);
+    }
+
+    _fallDamageTracking = false;
 }
 
 private void ApplySneakEdgeProtection(ref Vector3 velocity, float delta)
