@@ -1142,7 +1142,7 @@ if (overlay != null)
         {
             var light = new OmniLight3D
             {
-                Name = "BlockLight",
+                Name = $"BlockLight_{_blockLights.Count}",
                 LightColor = new Color(1.0f, 0.72f, 0.42f),
                 LightEnergy = 1.35f,
                 OmniRange = Mathf.Clamp(source.LightLevel * 0.65f, 2.0f, 12.0f),
