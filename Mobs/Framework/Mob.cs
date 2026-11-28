@@ -2362,7 +2362,8 @@ private void RollAppearance()
             // A player is a physical body. When the undead reaches
             // contact distance, stop pushing sideways around them and
             // hold position facing them so the attack state can connect.
-            if (_state == State.Chase &&
+            if (!bambooAhead &&
+                _state == State.Chase &&
                 _hostileTarget != null &&
                 IsInstanceValid(_hostileTarget) &&
                 GetFlatDistance(GlobalPosition, _hostileTarget.GlobalPosition)
