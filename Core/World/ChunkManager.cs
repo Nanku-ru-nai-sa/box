@@ -547,42 +547,66 @@ public partial class ChunkManager : Node3D
         int savedCount = 0;
         foreach (var kvp in _chunks)
         {
-            var mods = kvp.Value.GetModifications();
-            if (mods.Count == 0) continue;
-
-            string fileName = $"{SaveDirectory}chunk_{kvp.Key.X}_{kvp.Key.Y}_{kvp.Key.Z}.json";
-            var saveData = new Godot.Collections.Dictionary();
-
-            foreach (var mod in mods)
-            {
-                string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
-                var savedFeatures = new Godot.Collections.Array();
-                if (mod.Value.Features != null)
-                {
-                    foreach (string feature in mod.Value.Features)
-                        savedFeatures.Add(feature);
-                }
-
-                var blockData = new Godot.Collections.Dictionary
-                {
-                    ["id"] = mod.Value.BlockId,
-                    ["mask"] = (int)mod.Value.BitMask,
-                    ["rotation"] = (int)mod.Value.Rotation,
-                    ["liquid_level"] = (int)mod.Value.LiquidLevel,
-                    ["liquid_falling"] = mod.Value.LiquidFalling,
-                    ["liquid_source"] = mod.Value.LiquidSource,
-                    ["features"] = savedFeatures
-                };
-                saveData[key] = blockData;
-            }
-
-            var json = Json.Stringify(saveData);
-            using var file = FileAccess.Open(fileName, FileAccess.ModeFlags.Write);
-            file.StoreString(json);
-            savedCount++;
+            if (SaveChunkModifications(kvp.Key, kvp.Value))
+                savedCount++;
         }
 
         GD.Print($"Saved {savedCount} modified chunks");
+    }
+
+    // Streaming can unload chunks before the player manually saves or exits.
+    // Persist each modified chunk before freeing it so re-enabled streaming
+    // never discards player-built changes, crops, containers, or other edits.
+    private bool SaveChunkModifications(Vector3I chunkPosition, Chunk chunk)
+    {
+        if (chunk == null)
+            return false;
+
+        var mods = chunk.GetModifications();
+        if (mods == null || mods.Count == 0)
+            return false;
+
+        DirAccess.MakeDirRecursiveAbsolute(SaveDirectory);
+
+        string fileName =
+            $"{SaveDirectory}chunk_{chunkPosition.X}_{chunkPosition.Y}_{chunkPosition.Z}.json";
+
+        var saveData = new Godot.Collections.Dictionary();
+
+        foreach (var mod in mods)
+        {
+            string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
+            var savedFeatures = new Godot.Collections.Array();
+
+            if (mod.Value.Features != null)
+            {
+                foreach (string feature in mod.Value.Features)
+                    savedFeatures.Add(feature);
+            }
+
+            var blockData = new Godot.Collections.Dictionary
+            {
+                ["id"] = mod.Value.BlockId,
+                ["mask"] = (int)mod.Value.BitMask,
+                ["rotation"] = (int)mod.Value.Rotation,
+                ["liquid_level"] = (int)mod.Value.LiquidLevel,
+                ["liquid_falling"] = mod.Value.LiquidFalling,
+                ["liquid_source"] = mod.Value.LiquidSource,
+                ["features"] = savedFeatures
+            };
+
+            saveData[key] = blockData;
+        }
+
+        using var file = FileAccess.Open(fileName, FileAccess.ModeFlags.Write);
+        if (file == null)
+        {
+            GD.PrintErr($"Could not save modified chunk {chunkPosition}: {fileName}");
+            return false;
+        }
+
+        file.StoreString(Json.Stringify(saveData));
+        return true;
     }
 
     public void SaveInventory(Inventory inventory)
@@ -999,6 +1023,14 @@ public Vector2? LoadPlayerLook()
     private void UnloadChunk(Vector3I chunkPos)
     {
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk)) return;
+
+        // Never discard modified world data during distance-based unloading.
+        if (chunk.GetModifications().Count > 0 &&
+            !SaveChunkModifications(chunkPos, chunk))
+        {
+            return;
+        }
+
         chunk.QueueFree();
         _chunks.Remove(chunkPos);
 
