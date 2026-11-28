@@ -85,6 +85,15 @@ public partial class Chunk : Node3D
     {
         ChunkPosition = chunkPosition;
 
+        // Spread background grass ticks across time instead of letting all
+        // chunks fire their timer on the same frame.
+        uint tickHash = unchecked(
+            (uint)(chunkPosition.X * 73856093 ^
+                   chunkPosition.Y * 19349663 ^
+                   chunkPosition.Z * 83492791)
+        );
+        _randomTickTimer = (tickHash % 250u) / 1000f;
+
         GlobalPosition = new Vector3(
             chunkPosition.X * SIZE,
             chunkPosition.Y * HEIGHT,
@@ -1095,6 +1104,8 @@ if (overlay != null)
         }
 
         IsGenerated = true;
+        _isDirty = false;
+        _meshRebuildCooldown = MeshRebuildMinInterval;
     }
 
     // Recreate dynamic point lights from blocks in this chunk.
