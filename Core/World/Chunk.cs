@@ -31,8 +31,11 @@ public partial class Chunk : Node3D
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
 
     private float _randomTickTimer = 0f;
-    private const float RandomTickInterval = 0.03f;
-    private const int RandomTicksPerInterval = 10;
+    // Grass spread is a background world simulation, not a per-frame
+    // mechanic. A small number of samples at a slower interval prevents
+    // every loaded chunk from doing hundreds of random block lookups/sec.
+    private const float RandomTickInterval = 0.25f;
+    private const int RandomTicksPerInterval = 1;
 
     private float _meshRebuildCooldown = 0f;
     private const float MeshRebuildMinInterval = 0.1f;
@@ -432,8 +435,13 @@ public partial class Chunk : Node3D
 
         if (_randomTickTimer >= RandomTickInterval)
         {
-            _randomTickTimer = 0f;
-            RandomTick();
+            _randomTickTimer -= RandomTickInterval;
+
+            if (_chunkManager == null ||
+                _chunkManager.IsChunkWithinSimulationDistance(ChunkPosition))
+            {
+                RandomTick();
+            }
         }
     }
 
