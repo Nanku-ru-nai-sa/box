@@ -861,7 +861,7 @@ public partial class Chunk : Node3D
                     BlockState block =
                         _blocks[x, y, z];
 
-                    if (block.IsAir())
+                    if (block.IsAir() || string.IsNullOrEmpty(block.BlockId))
                         continue;
 
                     if (!blockResourceCache.TryGetValue(
