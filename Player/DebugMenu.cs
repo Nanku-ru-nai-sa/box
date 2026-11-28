@@ -398,6 +398,18 @@ public partial class DebugMenu : CanvasLayer
             );
 
         // ========================================================
+        // PERFORMANCE SNAPSHOT
+        // ========================================================
+
+        ChunkManager chunkManager =
+            GetTree().Root.FindChild("ChunkManager", true, false) as ChunkManager;
+
+        int loadedChunks = chunkManager?.LoadedChunkCount ?? 0;
+        int queuedChunks = chunkManager?.PendingChunkCount ?? 0;
+        int mobCount = GetTree().GetNodesInGroup("mobs").Count;
+        int fps = Engine.GetFramesPerSecond();
+
+        // ========================================================
         // DISPLAY
         // ========================================================
 
@@ -431,6 +443,12 @@ public partial class DebugMenu : CanvasLayer
 
             "SEASON LOCK\n" +
             $"{lockState}\n\n" +
+
+            "PERFORMANCE\n" +
+            $"FPS:         {fps}\n" +
+            $"Chunks:      {loadedChunks} loaded / {queuedChunks} queued\n" +
+            $"Mobs:        {mobCount}\n\n" +
+
             "TEST CONTROLS\n" +
             "Use the buttons below or keyboard shortcuts.";
 
