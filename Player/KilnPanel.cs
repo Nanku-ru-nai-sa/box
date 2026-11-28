@@ -182,8 +182,7 @@ public partial class KilnPanel : Control
             return;
         }
 
-        Vector2I textureSize = texture.GetSize();
-        Vector2 sourceSize = new Vector2(textureSize.X, textureSize.Y);
+        Vector2 sourceSize = texture.GetSize();
         const float maxIconSize = SlotSize - 8f;
 
         float maxScale = Mathf.Min(
