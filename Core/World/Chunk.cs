@@ -31,8 +31,13 @@ public partial class Chunk : Node3D
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
 
     private float _randomTickTimer = 0f;
-    private const float RandomTickInterval = 0.03f;
-    private const int RandomTicksPerInterval = 10;
+    // Grass spreading is a slow world simulation, not a per-frame task.
+    // ChunkManager enables ticks only inside the nearby simulation radius.
+    private const float RandomTickInterval = 1.0f;
+    private const int RandomTicksPerInterval = 3;
+    private bool _randomTicksEnabled = false;
+
+    private bool _lightsDirty = true;
 
     private float _meshRebuildCooldown = 0f;
     private const float MeshRebuildMinInterval = 0.1f;
@@ -96,6 +101,10 @@ public partial class Chunk : Node3D
 
     public void SetBlock(int x, int y, int z, BlockState block)
     {
+        BlockState oldBlock = _blocks[x, y, z];
+        if (IsGenerated)
+            MarkLightsDirtyIfNeeded(oldBlock, block);
+
         _blocks[x, y, z] = block;
         _isDirty = true;
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
@@ -331,6 +340,10 @@ public partial class Chunk : Node3D
         if (!IsInBounds(x, y, z))
             return;
 
+        BlockState oldBlock = _blocks[x, y, z];
+        if (IsGenerated)
+            MarkLightsDirtyIfNeeded(oldBlock, block);
+
         _blocks[x, y, z] = block;
 
         // Natural growth must persist just like player changes.
@@ -400,6 +413,28 @@ public partial class Chunk : Node3D
         );
     }
 
+    public void SetRandomTicksEnabled(bool enabled)
+    {
+        _randomTicksEnabled = enabled;
+        if (!enabled)
+            _randomTickTimer = 0f;
+    }
+
+    private bool IsLightEmitting(BlockState state)
+    {
+        if (state.IsAir())
+            return false;
+
+        BlockResource resource = BlockRegistry.Instance?.GetBlock(state.BlockId);
+        return resource != null && resource.LightLevel > 0;
+    }
+
+    private void MarkLightsDirtyIfNeeded(BlockState oldState, BlockState newState)
+    {
+        if (IsLightEmitting(oldState) || IsLightEmitting(newState))
+            _lightsDirty = true;
+    }
+
     public void MarkDirty()
     {
         _isDirty = true;
@@ -428,12 +463,15 @@ public partial class Chunk : Node3D
         if (!IsGenerated)
             return;
 
-        _randomTickTimer += (float)delta;
-
-        if (_randomTickTimer >= RandomTickInterval)
+        if (_randomTicksEnabled)
         {
-            _randomTickTimer = 0f;
-            RandomTick();
+            _randomTickTimer += (float)delta;
+
+            if (_randomTickTimer >= RandomTickInterval)
+            {
+                _randomTickTimer = 0f;
+                RandomTick();
+            }
         }
     }
 
@@ -1011,10 +1049,9 @@ if (overlay != null)
             }
         }
 
-        if (arrayMesh.GetSurfaceCount() > 0)
-        {
-            _meshInstance.Mesh = arrayMesh;
-        }
+        // Assign even an empty mesh so removing the last visible block
+        // cannot leave stale geometry behind.
+        _meshInstance.Mesh = arrayMesh.GetSurfaceCount() > 0 ? arrayMesh : null;
 
         // Always rebuild both collision systems.
         // This also removes an old plant target body after
@@ -1029,7 +1066,11 @@ if (overlay != null)
             plantTargetMesh
         );
 
-        RebuildBlockLights();
+        if (_lightsDirty)
+        {
+            RebuildBlockLights();
+            _lightsDirty = false;
+        }
 
         IsGenerated = true;
     }
@@ -2259,7 +2300,13 @@ private void AddQuadCropped(
         var faces = mesh.GetFaces();
 
         if (faces.Length < 3)
+        {
+            if (_collisionBody != null && IsInstanceValid(_collisionBody))
+                _collisionBody.QueueFree();
+
+            _collisionBody = null;
             return;
+        }
 
         var newCollisionBody =
             new StaticBody3D();
