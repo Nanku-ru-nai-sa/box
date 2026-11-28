@@ -66,7 +66,7 @@ public partial class Chunk : Node3D
     {
         _meshInstance = new MeshInstance3D();
         AddChild(_meshInstance);
-
+        SetProcess(false);
     }
 
     public void SetChunkManager(ChunkManager chunkManager)
@@ -110,6 +110,7 @@ public partial class Chunk : Node3D
 
         _blocks[x, y, z] = block;
         _isDirty = true;
+        SetProcess(true);
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
 
         NotifyLiquidAt(x, y, z, block);
@@ -325,6 +326,7 @@ public partial class Chunk : Node3D
 
         _modifiedBlocks = mods;
         _isDirty = true;
+        SetProcess(true);
     }
 
     private bool IsInBounds(int x, int y, int z)
@@ -353,6 +355,7 @@ public partial class Chunk : Node3D
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
 
         _isDirty = true;
+        SetProcess(true);
         NotifyLiquidAt(x, y, z, block);
     }
 
@@ -422,6 +425,8 @@ public partial class Chunk : Node3D
         _isDirty = false;
         _meshInstance.Mesh = null;
         _lightsDirty = true;
+        if (!_randomTicksEnabled)
+            SetProcess(false);
     }
 
     public void SetRandomTicksEnabled(bool enabled)
@@ -429,6 +434,8 @@ public partial class Chunk : Node3D
         _randomTicksEnabled = enabled;
         if (!enabled)
             _randomTickTimer = 0f;
+
+        SetProcess(enabled || _isDirty);
     }
 
     private bool IsLightEmitting(BlockState state)
@@ -449,11 +456,13 @@ public partial class Chunk : Node3D
     public void MarkDirty()
     {
         _isDirty = true;
+        SetProcess(true);
     }
 
     public void RequestRebuild()
     {
         _isDirty = true;
+        SetProcess(true);
     }
 
     public override void _Process(double delta)
@@ -484,6 +493,9 @@ public partial class Chunk : Node3D
                 RandomTick();
             }
         }
+
+        if (!_isDirty && !_randomTicksEnabled)
+            SetProcess(false);
     }
 
     private const float FlowerOnSpreadChance = 0.12f;
@@ -1090,6 +1102,7 @@ if (overlay != null)
 
         IsGenerated = true;
         _isDirty = false;
+        SetProcess(_randomTicksEnabled);
     }
 
     // Recreate dynamic point lights from blocks in this chunk.
