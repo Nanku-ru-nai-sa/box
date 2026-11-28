@@ -24,6 +24,9 @@ public partial class MobSpawner : Node3D
     public int MaxSpawnAttemptsPerTick = 5;
 
     [Export]
+    public int MaxTotalWorldMobs = 100;
+
+    [Export]
     public bool SpawnAutomatically = true;
 
 
@@ -201,6 +204,11 @@ public partial class MobSpawner : Node3D
 
     private void TrySpawnMobs()
     {
+        int totalMobCount = GetTree().GetNodesInGroup("mobs").Count;
+        int globalSlots = Mathf.Max(0, MaxTotalWorldMobs - totalMobCount);
+        if (globalSlots <= 0)
+            return;
+
         int attempts = 0;
 
         while (
@@ -271,6 +279,10 @@ public partial class MobSpawner : Node3D
                     groupSize,
                     availableSlots
                 );
+
+            // Keep the total population bounded even when many different
+            // species each have their own per-definition world cap.
+            groupSize = Mathf.Min(groupSize, globalSlots);
 
             if (groupSize <= 0)
                 continue;
