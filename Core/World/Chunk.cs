@@ -416,6 +416,14 @@ public partial class Chunk : Node3D
         );
     }
 
+    public void MarkGeneratedEmpty()
+    {
+        IsGenerated = true;
+        _isDirty = false;
+        _meshInstance.Mesh = null;
+        _lightsDirty = true;
+    }
+
     public void SetRandomTicksEnabled(bool enabled)
     {
         _randomTicksEnabled = enabled;
@@ -1081,6 +1089,7 @@ if (overlay != null)
         }
 
         IsGenerated = true;
+        _isDirty = false;
     }
 
     // Recreate dynamic point lights from blocks in this chunk.
