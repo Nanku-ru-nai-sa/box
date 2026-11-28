@@ -47,7 +47,7 @@ public partial class Chunk : Node3D
     // Grass spread is a background world simulation, not a per-frame
     // mechanic. A small number of samples at a slower interval prevents
     // every loaded chunk from doing hundreds of random block lookups/sec.
-    private const float RandomTickInterval = 0.25f;
+    private const float RandomTickInterval = 0.1f;
     private const int RandomTicksPerInterval = 1;
 
     private float _meshRebuildCooldown = 0f;
@@ -93,7 +93,7 @@ public partial class Chunk : Node3D
                    chunkPosition.Y * 19349663 ^
                    chunkPosition.Z * 83492791)
         );
-        _randomTickTimer = (tickHash % 250u) / 1000f;
+        _randomTickTimer = (tickHash % 100u) / 1000f;
 
         GlobalPosition = new Vector3(
             chunkPosition.X * SIZE,
