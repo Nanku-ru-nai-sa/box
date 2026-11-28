@@ -106,19 +106,22 @@ public partial class ChunkManager : Node3D
     [Export] public int RockProbeDepth = 24;        // how far below the surface to check for a vein before giving up on that column
 
     public bool IsInitialLoadComplete { get; private set; } = false;
+    public int InitialLoadTargetCount { get; private set; }
+    public int InitialLoadedChunkCount => Mathf.Max(0, InitialLoadTargetCount - _initialChunksPending.Count);
 [Signal] public delegate void WorldReadyEventHandler();
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
     private List<Vector3I> _chunksToLoad = new();
-    // Mirrors _chunksToLoad's contents for O(1) "is this queued already"
-    // checks. UpdateChunks() re-scans up to ~15x15x17 candidate positions
-    // every time the player crosses a chunk boundary - with streaming
-    // re-enabled that happens constantly, so the old List.Contains() (an
-    // O(n) scan repeated thousands of times) would have reintroduced the
-    // exact stutter this whole pass is meant to remove.
     private HashSet<Vector3I> _chunksToLoadSet = new();
+    private readonly HashSet<Vector3I> _initialChunksPending = new();
+    private int _chunkLoadQueueIndex = 0;
     private Vector3I _lastPlayerChunk = new Vector3I(999, 999, 999);
     private Node3D _player;
+
+    private const int InitialLoadHorizontalRadius = 2;
+    private const int InitialLoadVerticalRadius = 1;
+    private const int SimulationHorizontalRadius = 4;
+    private const int SimulationVerticalRadius = 2;
 
     // How much time (in milliseconds) LoadChunk work is allowed to eat per
     // frame, instead of a flat "load N chunks" count. A flat count either
@@ -449,55 +452,55 @@ public partial class ChunkManager : Node3D
             if (_player == null) return;
         }
 
-        // TEMP (per request): streaming-on-move disabled again while
-        // testing the new time-budgeted loader in isolation - only the
-        // initial set of chunks loaded at spawn will exist, same as
-        // before. The budgeted loop below still runs (it's what performs
-        // the initial load), just nothing re-triggers UpdateChunks() as
-        // you walk around yet. Uncomment this block once you're ready to
-        // test streaming again:
-        // Vector3I currentPlayerChunk = WorldToChunk(_player.GlobalPosition);
-        // if (currentPlayerChunk != _lastPlayerChunk)
-        // {
-        //     _lastPlayerChunk = currentPlayerChunk;
-        //     UpdateChunks();
-        // }
+        // Keep the chunk window centered on the player. New chunks are
+        // prioritized by distance, so the player can keep moving while the
+        // outer world streams in behind them.
+        Vector3I currentPlayerChunk = WorldToChunk(_player.GlobalPosition);
+        if (currentPlayerChunk != _lastPlayerChunk)
+            UpdateChunks();
 
-        // Time-budgeted chunk loading: keep pulling from the queue (closest
-        // first, see UpdateChunks' sort) until either the queue is empty or
-        // we've spent our millisecond budget for this frame. This replaces
-        // the old flat "load N chunks" cap - expensive chunks (lots of
-        // cave/ore/tree generation) no longer stutter, and cheap chunks
-        // (mostly air) no longer waste frame time sitting under an
-        // artificially low count cap.
         double msBudget = IsInitialLoadComplete ? ChunkMsBudgetStreaming : ChunkMsBudgetInitial;
         var sw = Stopwatch.StartNew();
 
-        while (_chunksToLoad.Count > 0 && sw.Elapsed.TotalMilliseconds < msBudget)
+        while (_chunkLoadQueueIndex < _chunksToLoad.Count &&
+               sw.Elapsed.TotalMilliseconds < msBudget)
         {
-            Vector3I chunkPos = _chunksToLoad[0];
-            _chunksToLoad.RemoveAt(0);
+            Vector3I chunkPos = _chunksToLoad[_chunkLoadQueueIndex++];
+
             _chunksToLoadSet.Remove(chunkPos);
 
-            // Skip chunks entirely above the world height cap (pure air, nothing generates there)
             int chunkBottomY = chunkPos.Y * Chunk.HEIGHT;
             if (chunkBottomY >= 288) continue;
 
-            // Skip chunks entirely below Y=0 (nothing generates below bedrock)
             int chunkTopY = (chunkPos.Y + 1) * Chunk.HEIGHT;
             if (chunkTopY <= 0) continue;
 
             if (!_chunks.ContainsKey(chunkPos))
                 LoadChunk(chunkPos);
+
+            _initialChunksPending.Remove(chunkPos);
+
+            if (!IsInitialLoadComplete &&
+                _initialChunksPending.Count == 0 &&
+                _chunks.Count > 0)
+            {
+                IsInitialLoadComplete = true;
+                EmitSignal(SignalName.WorldReady);
+                GD.Print($"World spawn area ready! Loaded {_chunks.Count} chunks; background streaming continues.");
+                break;
+            }
         }
 
-        if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
+        // Advance an index instead of removing item zero (which shifts the
+        // entire remaining list every time a chunk is loaded).
+        if (_chunkLoadQueueIndex >= _chunksToLoad.Count)
         {
-            IsInitialLoadComplete = true;
-            EmitSignal(SignalName.WorldReady);
-            GD.Print("World ready!");
+            _chunksToLoad.Clear();
+            _chunkLoadQueueIndex = 0;
+            _chunksToLoadSet.Clear();
         }
     }
+
     // Chunk/terrain data is keyed to the active world ONLY - the world's
     // blocks are shared ground truth for anyone in that world, not
     // character-specific. Falls back to "world1" if somehow no world is
@@ -867,60 +870,96 @@ public Vector2? LoadPlayerLook()
             ? WorldToChunk(_player.GlobalPosition)
             : Vector3I.Zero;
 
-        GD.Print($"UpdateChunks - player chunk: {playerChunk}");
+        _lastPlayerChunk = playerChunk;
+
+        _chunksToLoad.Clear();
+        _chunksToLoadSet.Clear();
+        _chunkLoadQueueIndex = 0;
+
+        if (!IsInitialLoadComplete)
+            _initialChunksPending.Clear();
+
+        InitialLoadTargetCount = 0;
+
+        int minY = Mathf.Max(0, playerChunk.Y - VerticalRenderDistance);
+        int maxY = Mathf.Min(17, playerChunk.Y + VerticalRenderDistance);
 
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
             for (int z = -RenderDistance; z <= RenderDistance; z++)
             {
-                // Vertical loading centered on the PLAYER's current chunk Y
-                // (clamped so it never goes below world chunk Y=0), instead
-                // of always loading a fixed 0-to-VerticalRenderDistance
-                // range. This is what makes vertical chunks follow the
-                // player as they go up/down, rather than always loading
-                // near the bottom of the world regardless of where the
-                // player actually is - which was cutting the world off
-                // right around water level before.
-                int minY = Mathf.Max(0, playerChunk.Y - VerticalRenderDistance);
-                int maxY = playerChunk.Y + VerticalRenderDistance;
+                int horizontalDistanceSquared = x * x + z * z;
+                float horizontalRadius = Mathf.Max(1, RenderDistance);
+                float verticalRadius = Mathf.Max(1, VerticalRenderDistance);
 
                 for (int y = minY; y <= maxY; y++)
                 {
+                    int dy = y - playerChunk.Y;
+
+                    float normalizedDistance =
+                        horizontalDistanceSquared / (horizontalRadius * horizontalRadius) +
+                        (dy * dy) / (verticalRadius * verticalRadius);
+
+                    if (normalizedDistance > 1f)
+                        continue;
+
                     Vector3I chunkPos = new Vector3I(
                         playerChunk.X + x,
                         y,
                         playerChunk.Z + z
                     );
 
-                    if (!_chunks.ContainsKey(chunkPos) && _chunksToLoadSet.Add(chunkPos))
+                    bool isInitialCore =
+                        Mathf.Abs(x) <= InitialLoadHorizontalRadius &&
+                        Mathf.Abs(z) <= InitialLoadHorizontalRadius &&
+                        Mathf.Abs(dy) <= InitialLoadVerticalRadius;
+
+                    if (isInitialCore)
+                        InitialLoadTargetCount++;
+
+                    if (_chunks.ContainsKey(chunkPos))
+                        continue;
+
+                    if (_chunksToLoadSet.Add(chunkPos))
+                    {
                         _chunksToLoad.Add(chunkPos);
+
+                        if (!IsInitialLoadComplete && isInitialCore)
+                            _initialChunksPending.Add(chunkPos);
+                    }
                 }
             }
         }
 
-        // Load chunks closest to the player first so you don't fall into
-        // the void waiting for distant chunks to finish.
         _chunksToLoad.Sort((a, b) =>
         {
-            float distA = (a - playerChunk).LengthSquared();
-            float distB = (b - playerChunk).LengthSquared();
+            Vector3I da = a - playerChunk;
+            Vector3I db = b - playerChunk;
+            float distA = da.X * da.X + da.Z * da.Z + da.Y * da.Y * 1.5f;
+            float distB = db.X * db.X + db.Z * db.Z + db.Y * db.Y * 1.5f;
             return distA.CompareTo(distB);
         });
 
         var toUnload = new List<Vector3I>();
+        float unloadHorizontalRadius = RenderDistance + 1f;
+        float unloadVerticalRadius = VerticalRenderDistance + 1f;
+
         foreach (var pos in _chunks.Keys)
         {
-            int dx = Mathf.Abs(pos.X - playerChunk.X);
-            int dz = Mathf.Abs(pos.Z - playerChunk.Z);
-            int dy = Mathf.Abs(pos.Y - playerChunk.Y);
-            if (dx > RenderDistance + 1 || dz > RenderDistance + 1 || dy > VerticalRenderDistance + 1)
+            int dx = pos.X - playerChunk.X;
+            int dz = pos.Z - playerChunk.Z;
+            int dy = pos.Y - playerChunk.Y;
+
+            float normalizedDistance =
+                (dx * dx + dz * dz) / (unloadHorizontalRadius * unloadHorizontalRadius) +
+                (dy * dy) / (unloadVerticalRadius * unloadVerticalRadius);
+
+            if (normalizedDistance > 1f)
                 toUnload.Add(pos);
         }
 
         foreach (var pos in toUnload)
             UnloadChunk(pos);
-
-        GD.Print($"Total chunks: {_chunks.Count}");
     }
 
     private void LoadChunk(Vector3I chunkPos)
@@ -2328,6 +2367,21 @@ public Vector3 GetWorldSpawnPosition()
         _liquidManager.Enqueue(worldPos + new Vector3I(0, -1, 0));
         _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, 1));
         _liquidManager.Enqueue(worldPos + new Vector3I(0, 0, -1));
+    }
+
+    public bool IsChunkWithinSimulationDistance(Vector3I chunkPosition)
+    {
+        if (_player == null || !GodotObject.IsInstanceValid(_player))
+            return false;
+
+        Vector3I playerChunk = WorldToChunk(_player.GlobalPosition);
+        int dx = chunkPosition.X - playerChunk.X;
+        int dz = chunkPosition.Z - playerChunk.Z;
+        int dy = Mathf.Abs(chunkPosition.Y - playerChunk.Y);
+
+        return dx * dx + dz * dz <=
+                   SimulationHorizontalRadius * SimulationHorizontalRadius &&
+               dy <= SimulationVerticalRadius;
     }
 
     public BlockState GetBlockAtWorld(Vector3I worldPos)
