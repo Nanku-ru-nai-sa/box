@@ -107,7 +107,7 @@ public partial class ChunkManager : Node3D
 
     public bool IsInitialLoadComplete { get; private set; } = false;
     public int LoadedChunkCount => _chunks.Count;
-    public int PendingChunkCount => _chunksToLoad.Count;
+    public int PendingChunkCount => _chunksToLoad.Count - _chunkLoadQueueIndex;
 [Signal] public delegate void WorldReadyEventHandler();
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
@@ -115,6 +115,7 @@ public partial class ChunkManager : Node3D
     // without allocating a Node, 4096-block array, mesh, or collision body.
     private HashSet<Vector3I> _knownEmptyChunks = new();
     private List<Vector3I> _chunksToLoad = new();
+    private int _chunkLoadQueueIndex = 0;
     // Mirrors _chunksToLoad's contents for O(1) "is this queued already"
     // checks. UpdateChunks() re-scans up to ~15x15x17 candidate positions
     // every time the player crosses a chunk boundary - with streaming
@@ -475,10 +476,10 @@ public partial class ChunkManager : Node3D
         double msBudget = IsInitialLoadComplete ? ChunkMsBudgetStreaming : ChunkMsBudgetInitial;
         var sw = Stopwatch.StartNew();
 
-        while (_chunksToLoad.Count > 0 && sw.Elapsed.TotalMilliseconds < msBudget)
+        while (_chunkLoadQueueIndex < _chunksToLoad.Count &&
+               sw.Elapsed.TotalMilliseconds < msBudget)
         {
-            Vector3I chunkPos = _chunksToLoad[0];
-            _chunksToLoad.RemoveAt(0);
+            Vector3I chunkPos = _chunksToLoad[_chunkLoadQueueIndex++];
             _chunksToLoadSet.Remove(chunkPos);
 
             // Skip chunks entirely above the world height cap (pure air, nothing generates there)
@@ -493,7 +494,13 @@ public partial class ChunkManager : Node3D
                 LoadChunk(chunkPos);
         }
 
-        if (!IsInitialLoadComplete && _chunksToLoad.Count == 0 && _chunks.Count > 0)
+        if (_chunkLoadQueueIndex >= _chunksToLoad.Count)
+        {
+            _chunksToLoad.Clear();
+            _chunkLoadQueueIndex = 0;
+        }
+
+        if (!IsInitialLoadComplete && PendingChunkCount == 0 && _chunks.Count > 0)
         {
             IsInitialLoadComplete = true;
             EmitSignal(SignalName.WorldReady);
@@ -871,6 +878,15 @@ public Vector2? LoadPlayerLook()
 
         GD.Print($"UpdateChunks - player chunk: {playerChunk}");
         _lastPlayerChunk = playerChunk;
+
+        // Compact work already consumed since the previous update. Keeping a
+        // cursor avoids List.RemoveAt(0) shifting thousands of pending entries
+        // for every chunk loaded during the initial world build.
+        if (_chunkLoadQueueIndex > 0)
+        {
+            _chunksToLoad.RemoveRange(0, _chunkLoadQueueIndex);
+            _chunkLoadQueueIndex = 0;
+        }
 
         // Discard queued chunks that no longer belong to the desired area.
         // A fast-moving player should not leave obsolete generation jobs
