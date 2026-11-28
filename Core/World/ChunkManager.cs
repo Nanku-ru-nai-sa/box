@@ -108,6 +108,16 @@ public partial class ChunkManager : Node3D
     public bool IsInitialLoadComplete { get; private set; } = false;
     public int InitialLoadTargetCount { get; private set; }
     public int InitialLoadedChunkCount => Mathf.Max(0, InitialLoadTargetCount - _initialChunksPending.Count);
+    public int LoadedChunkCount => _chunks.Count;
+    public int PendingChunkCount => Mathf.Max(0, _chunksToLoad.Count - _chunkLoadQueueIndex);
+    public float LastChunkLoadMilliseconds { get; private set; }
+    public float AverageChunkLoadMilliseconds =>
+        _chunkLoadSampleCount > 0
+            ? (float)(_chunkLoadTimeTotalMilliseconds / _chunkLoadSampleCount)
+            : 0f;
+
+    private double _chunkLoadTimeTotalMilliseconds;
+    private int _chunkLoadSampleCount;
 [Signal] public delegate void WorldReadyEventHandler();
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
@@ -496,7 +506,15 @@ public partial class ChunkManager : Node3D
             if (chunkTopY <= 0) continue;
 
             if (!_chunks.ContainsKey(chunkPos))
+            {
+                var chunkLoadTimer = Stopwatch.StartNew();
                 LoadChunk(chunkPos);
+                chunkLoadTimer.Stop();
+
+                LastChunkLoadMilliseconds = (float)chunkLoadTimer.Elapsed.TotalMilliseconds;
+                _chunkLoadTimeTotalMilliseconds += LastChunkLoadMilliseconds;
+                _chunkLoadSampleCount++;
+            }
 
             _initialChunksPending.Remove(chunkPos);
 
