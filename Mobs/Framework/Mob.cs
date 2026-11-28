@@ -238,6 +238,8 @@ private float _stepTargetY = 0f;
     // their expensive physics/AI/animation work is disabled.
     private float _distanceLodTimer = 0f;
     private bool _pausedForDistance = false;
+    private uint _distanceLodOriginalCollisionLayer;
+    private uint _distanceLodOriginalCollisionMask;
     private const float MobSimulationSleepDistanceSquared = 64f * 64f;
     private const float MobSimulationWakeDistanceSquared = 56f * 56f;
 
@@ -1936,12 +1938,20 @@ private void RollAppearance()
         {
             _pausedForDistance = true;
             Velocity = Vector3.Zero;
+
+            _distanceLodOriginalCollisionLayer = CollisionLayer;
+            _distanceLodOriginalCollisionMask = CollisionMask;
+            CollisionLayer = 0;
+            CollisionMask = 0;
+
             SetPhysicsProcess(false);
         }
         else if (_pausedForDistance &&
                  distanceSquared < MobSimulationWakeDistanceSquared)
         {
             _pausedForDistance = false;
+            CollisionLayer = _distanceLodOriginalCollisionLayer;
+            CollisionMask = _distanceLodOriginalCollisionMask;
             SetPhysicsProcess(true);
         }
     }
