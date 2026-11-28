@@ -1081,14 +1081,11 @@ public Vector2? LoadPlayerLook()
 
     private bool IsNaturalSpringSpot(int worldX, int worldY, int worldZ)
     {
-        // Require solid rock immediately above and below so springs form
-        // inside enclosed cave spaces rather than on the open landscape.
-        if (GetDensity(worldX, worldY + 1, worldZ) <= 0f ||
-            GetDensity(worldX, worldY - 1, worldZ) <= 0f)
-            return false;
-
-        // Stable coordinate hash: the same world seed always places springs
-        // in the same locations, without relying on runtime random numbers.
+        // Roll the extremely rare coordinate hash FIRST. This method is
+        // queried for every air voxel in the underground water band, but
+        // only one in 65,536 positions can ever become a spring. Checking
+        // neighboring terrain noise before this roll wasted two expensive
+        // density evaluations on virtually every candidate.
         unchecked
         {
             uint hash = (uint)(worldX * 73856093) ^
@@ -1096,8 +1093,13 @@ public Vector2? LoadPlayerLook()
                         (uint)(worldZ * 83492791) ^
                         (uint)Seed;
 
-            return hash % 65536u == 0u;
+            if (hash % 65536u != 0u)
+                return false;
         }
+
+        // Springs form only inside enclosed rock pockets.
+        return GetDensity(worldX, worldY + 1, worldZ) > 0f &&
+               GetDensity(worldX, worldY - 1, worldZ) > 0f;
     }
 
     private float GetDensity(int worldX, int worldY, int worldZ)
@@ -1611,8 +1613,6 @@ public Vector3 GetWorldSpawnPosition()
                 int trueSurfaceY = GetSurfaceHeight(worldX, worldZ);
                 int topsoilDepth = GetTopsoilDepth(worldX, worldZ);
 
-                int approxSurface = -1;
-
                 for (int y = 0; y < Chunk.HEIGHT; y++)
                 {
                     int worldY = chunkPos.Y * Chunk.HEIGHT + y;
@@ -1688,35 +1688,33 @@ public Vector3 GetWorldSpawnPosition()
                     }
                     else
                     {
-                        bool aboveIsAir = GetDensity(worldX, worldY + 1, worldZ) <= 0f;
+                        // Only the top six blocks of the true terrain
+                        // surface can become topsoil. Older code performed
+                        // several extra 3D-noise samples for EVERY solid
+                        // underground voxel, then rejected cave walls with
+                        // this same test afterward. Skip those samples up
+                        // front for the overwhelming majority of blocks.
+                        bool isRealSurface = worldY >= trueSurfaceY - 6;
                         bool nearSurface = false;
-
                         int depthToAir = 0;
-                        // Scan far enough up to catch the deepest possible
-                        // topsoil depth this world could roll (was a fixed
-                        // +5 - now tracks MaxTopsoilDepth so raising that
-                        // in the Inspector doesn't silently truncate).
-                        int depthScanRange = Mathf.Max(5, MaxTopsoilDepth);
-                        for (int checkY = worldY; checkY <= worldY + depthScanRange; checkY++)
+
+                        if (isRealSurface)
                         {
-                            if (GetDensity(worldX, checkY, worldZ) <= 0f)
+                            int depthScanRange = Mathf.Max(5, MaxTopsoilDepth);
+
+                            // We already know this voxel is solid, so begin
+                            // at the block above it instead of sampling the
+                            // current voxel's density a second time.
+                            for (int checkY = worldY + 1; checkY <= worldY + depthScanRange; checkY++)
                             {
-                                depthToAir = checkY - worldY;
-                                nearSurface = true;
-                                break;
+                                if (GetDensity(worldX, checkY, worldZ) <= 0f)
+                                {
+                                    depthToAir = checkY - worldY;
+                                    nearSurface = true;
+                                    break;
+                                }
                             }
                         }
-
-                        if (approxSurface < 0 && aboveIsAir)
-                            approxSurface = worldY;
-
-                        // Only treat this as "the ground surface" if it's
-                        // actually near the real top of the column. Without
-                        // this check, a stone block sitting right next to a
-                        // cave air pocket 40 blocks underground would also
-                        // count as "near surface" and get coated in dirt -
-                        // which is exactly what was happening before.
-                        bool isRealSurface = worldY >= trueSurfaceY - 6;
 
                         if (nearSurface && depthToAir <= topsoilDepth && isRealSurface)
                         {
