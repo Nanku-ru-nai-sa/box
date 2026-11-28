@@ -36,6 +36,13 @@ public partial class MobSpawner : Node3D
 
     private float _spawnTimer;
 
+    [ExportGroup("Simulation")]
+    [Export] public float ActiveSimulationRadius = 64f;
+    [Export] public float SimulationCheckInterval = 0.5f;
+
+    private float _simulationCheckTimer;
+    private Node3D _simulationPlayer;
+
     private string[] DefinitionPaths =
         Array.Empty<string>();
 
@@ -132,6 +139,8 @@ public partial class MobSpawner : Node3D
 
     public override void _Process(double delta)
     {
+        UpdateMobSimulation(delta);
+
         if (!SpawnAutomatically)
             return;
 
@@ -156,6 +165,35 @@ public partial class MobSpawner : Node3D
         TrySpawnMobs();
     }
 
+
+    private void UpdateMobSimulation(double delta)
+    {
+        _simulationCheckTimer += (float)delta;
+        if (_simulationCheckTimer < Mathf.Max(0.1f, SimulationCheckInterval))
+            return;
+
+        _simulationCheckTimer = 0f;
+
+        if (_simulationPlayer == null || !IsInstanceValid(_simulationPlayer))
+            _simulationPlayer = GetTree().GetFirstNodeInGroup("player") as Node3D;
+
+        if (_simulationPlayer == null)
+            return;
+
+        float activeRadius = Mathf.Max(8f, ActiveSimulationRadius);
+        float activeRadiusSquared = activeRadius * activeRadius;
+
+        foreach (Node node in GetTree().GetNodesInGroup("mobs"))
+        {
+            if (node is not Mob mob || !IsInstanceValid(mob))
+                continue;
+
+            float distanceSquared =
+                mob.GlobalPosition.DistanceSquaredTo(_simulationPlayer.GlobalPosition);
+
+            mob.SetDistantSimulationPaused(distanceSquared > activeRadiusSquared);
+        }
+    }
 
     // ---------------------------------------------------------
     // AUTOMATIC SPAWN
