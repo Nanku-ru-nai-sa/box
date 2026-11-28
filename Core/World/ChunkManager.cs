@@ -223,6 +223,16 @@ public partial class ChunkManager : Node3D
     // one chunk in that column is loaded, and get cleaned up (via
     // _columnRefCount) once the last chunk in a column unloads, so they
     // don't grow forever as the player explores.
+    private struct TerrainColumnData
+    {
+        public float HeightCenter;
+        public float MountainT;
+        public float MountainFactor;
+        public float Chaos;
+        public float AreaBonus;
+    }
+
+    private Dictionary<Vector2I, TerrainColumnData> _terrainColumnCache = new();
     private Dictionary<Vector2I, int> _surfaceHeightCache = new();
     private Dictionary<Vector2I, int> _topsoilDepthCache = new();
     private Dictionary<Vector2I, int> _columnRefCount = new();
@@ -1131,6 +1141,7 @@ public Vector2? LoadPlayerLook()
                         var worldColKey = new Vector2I(baseX + dx, baseZ + dz);
                         _surfaceHeightCache.Remove(worldColKey);
                         _topsoilDepthCache.Remove(worldColKey);
+                        _terrainColumnCache.Remove(worldColKey);
                     }
                 }
             }
@@ -1294,129 +1305,64 @@ public Vector2? LoadPlayerLook()
     // mechanism is ported faithfully, but every constant below is
     // rebuilt for our world, and pushed further ("amplify") than a
     // straight 1:1 shrink of beta's numbers would give you.
-    private float GetNormalDensity(int worldX, int worldY, int worldZ)
+    private TerrainColumnData GetTerrainColumnData(int worldX, int worldZ)
     {
-        // ---- 1. Height center (per-column heightmap) ----
-        float depthSample = _depthNoise.GetNoise2D(worldX, worldZ); // -1..1
+        var key = new Vector2I(worldX, worldZ);
+        if (_terrainColumnCache.TryGetValue(key, out TerrainColumnData cached))
+            return cached;
 
-        // Power-curve the noise before using it: values near the middle of
-        // the -1..1 range get pulled closer to 0 (flat, at water level),
-        // while only the noise that's already near the extremes keeps
-        // real elevation. This widens flat/playable land near water level
-        // without lowering how tall the tallest hills/mountains can still
-        // get at strong noise values (pow(1, x) == 1, so the max is
-        // untouched either way).
-        //
-        // Exponent dropped 2.4 -> 1.3. At 2.4 this was too aggressive: it
-        // didn't just flatten the MIDDLE of the range, it made almost
-        // every value near-zero (land) EXCEPT the values already close to
-        // the extreme, which stayed close to the extreme. That's a
-        // bimodal split with barely anything in between - so wherever
-        // water did form, it jumped straight to near-max depth instead of
-        // gradually sloping down from the shoreline, which is why it was
-        // showing up as deep trenches ~2 chunks down instead of normal
-        // shallow lakes/coastline at the surface. 1.3 still flattens the
-        // middle somewhat (bigger flat land area than doing nothing at
-        // all) but leaves a real gradient in between, so dips slope down
-        // gradually into shallow water before reaching real depth.
+        float depthSample = _depthNoise.GetNoise2D(worldX, worldZ);
         float depthShaped = Mathf.Sign(depthSample) * Mathf.Pow(Mathf.Abs(depthSample), 1.3f);
-
-        // Dips gentler than rises, like beta - brought back down from the
-        // last change (0.75 -> 0.55) now that the gentler power curve
-        // above is doing the real work of letting water actually form;
-        // 0.75 combined with the old steep curve is what was making dips
-        // plunge straight to nearly their max depth instead of grading in
-        // gradually.
         float depth = depthShaped < 0f ? depthShaped * 0.55f : depthShaped;
-        const float heightCenterSwing = 46f; // how many blocks the height center can rise/dip from the LAND baseline (below) - pushed up from beta's real ~12-below/4-above blocks for a bigger, "amplified" range
 
-        // Land bias: a positive baseline shift so typical/flat noise
-        // generates dry land instead of landing exactly at WaterLevel.
-        // Lowered again (8f -> 3f) per request - the plains/beach area
-        // should sit close to water level itself, not noticeably elevated
-        // above it, so the transition reads as water -> beach -> flat
-        // grass -> rising into hills, instead of a visible "step up" onto
-        // the plains. This also naturally makes it EASIER for a spot to
-        // dip below WaterLevel into a real lake/pond (less bias to
-        // overcome to cross below sea level), which is what keeps lakes
-        // showing through instead of the lower plains swallowing them -
-        // this and the dip-strength/curve-exponent knobs above are what
-        // to retune if you want more or less water later.
+        const float heightCenterSwing = 46f;
         const float landBiasAboveWater = 3f;
         float heightCenter = WaterLevel + landBiasAboveWater + depth * heightCenterSwing;
 
-        // ---- Plains buffer between beach and mountains ----
-        // Requested: a stretch of calm, flat, buildable land between the
-        // coastline and where real mountains start, instead of hills
-        // rising right up out of the sand. heightCenter itself already
-        // tells us "how elevated is this column's general area" (it's
-        // WaterLevel+landBias right at the coast, and rises the further
-        // inland/into hill-country the depth noise says a spot is) - so
-        // it doubles as a stand-in for "roughly how far this is from the
-        // coast" without needing a separate distance-to-coastline pass.
-        //
-        // mountainFactor blends from 0 (right at the flat coastal
-        // baseline - plains) to 1 (comfortably elevated - full mountains
-        // allowed), and gates shapeAmplitude/cliffs/overhangs below. The
-        // gate band (flatBaseline+6 to flatBaseline+20) is tuned to
-        // roughly approximate the requested ~2 chunks (32 blocks) of
-        // calm terrain near a typical coastline, though because this
-        // rides on a noise field rather than a true measured distance,
-        // it won't be an exact 32-block guarantee everywhere - some
-        // stretches of coast will get a bit more buffer, some a bit
-        // less. A precise, uniform distance would need a proper
-        // distance-to-coast pass, which is a bigger change - this gets
-        // the requested feel without that complexity.
         float flatBaseline = WaterLevel + landBiasAboveWater;
         float mountainGateStart = flatBaseline + 6f;
         float mountainGateEnd = flatBaseline + 20f;
-        float mountainT = Mathf.Clamp((heightCenter - mountainGateStart) / (mountainGateEnd - mountainGateStart), 0f, 1f);
-        mountainT = mountainT * mountainT * (3f - 2f * mountainT); // smoothstep
-        // Plains areas still get a SMALL amount of shape variance (15%)
-        // for gentle, natural-looking undulation - not perfectly
-        // billiard-table flat - just nowhere near full mountain force.
+        float mountainT = Mathf.Clamp(
+            (heightCenter - mountainGateStart) / (mountainGateEnd - mountainGateStart),
+            0f,
+            1f
+        );
+        mountainT = mountainT * mountainT * (3f - 2f * mountainT);
         float mountainFactor = Mathf.Lerp(0.15f, 1f, mountainT);
 
-        // ---- Alpha Mountains vs Beta Mountains areas ----
-        // "Area" here instead of "biome" - a large, slow-moving region
-        // selector (independent of temp/humid biome noise) that decides
-        // whether a given stretch of the map is a normal Alpha Mountains
-        // area or an amplified Beta Mountains area. Beta areas push real
-        // mountain peaks up an extra ~2 chunks (32 blocks) higher than
-        // Alpha - everything else (plains buffer, water, cliffs/overhang
-        // character) is identical between the two.
-        //
-        // areaBonus is scaled by mountainT (not mountainFactor's 0.15
-        // floor) so it ONLY affects genuine mountain zones - the plains
-        // buffer next to the coast stays exactly as flat in a Beta
-        // Mountains area as it does in an Alpha one; only the mountains
-        // themselves get taller.
         float mountainAreaSample = _mountainAreaNoise.GetNoise2D(worldX, worldZ);
         bool isBetaMountainsArea = mountainAreaSample > 0.2f;
-        const float betaMountainsBonus = 32f; // ~2 chunks, per request
+        const float betaMountainsBonus = 32f;
         float areaBonus = isBetaMountainsArea ? betaMountainsBonus * mountainT : 0f;
         heightCenter += areaBonus;
 
-        // ---- 2. Biome chaos ----
-        // Reuses the same temp/humid noise GetBiome() samples, so hot+wet
-        // areas get chaotic, broken terrain and cold/dry areas stay calmer.
         float temp = _biomeTemp.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
         float humid = _biomeHumid.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
-        // STILL CAPPING, HERE'S WHY: raising the floor last time (0.5 ->
-        // 1.1) helped but didn't fully fix it, because chaos was still
-        // DIVIDING the height falloff rate below (calmness / chaos). Even
-        // at the 1.1 floor, that's still ~27% weaker than the 1.5
-        // best-case - so mountain height was still silently varying by
-        // biome, just by a smaller margin than before. Anywhere not both
-        // hot AND wet was still capped below full potential.
-        //
-        // Real fix: chaos no longer touches the height falloff rate at
-        // all (that now uses a fixed best-case constant below, so every
-        // biome gets full, consistent mountain-height potential). chaos
-        // is kept only as a small additive roughness bonus instead - hot
-        // and wet areas get a bit of extra bumpiness, but nowhere gets
-        // its overall height ceiling silently reduced anymore.
         float chaos = Mathf.Clamp(1.5f - Mathf.Pow(1f - humid * temp, 4f), 1.1f, 1.5f);
+
+        var result = new TerrainColumnData
+        {
+            HeightCenter = heightCenter,
+            MountainT = mountainT,
+            MountainFactor = mountainFactor,
+            Chaos = chaos,
+            AreaBonus = areaBonus
+        };
+
+        _terrainColumnCache[key] = result;
+        return result;
+    }
+
+    private float GetNormalDensity(int worldX, int worldY, int worldZ)
+    {
+        // These values depend only on X/Z. Cache them once per world column
+        // instead of recalculating four 2D noise fields for every voxel.
+        TerrainColumnData column = GetTerrainColumnData(worldX, worldZ);
+        float heightCenter = column.HeightCenter;
+        float mountainT = column.MountainT;
+        float mountainFactor = column.MountainFactor;
+        float chaos = column.Chaos;
+        float areaBonus = column.AreaBonus;
 
         // ---- 3. Lower/upper/main blend ----
         // "Main" now varies with Y too (not just per-column), so the same
