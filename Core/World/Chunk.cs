@@ -40,6 +40,7 @@ public partial class Chunk : Node3D
     private ChunkManager _chunkManager;
     private bool _isDirty = false;
     private bool _lightsDirty = true;
+    private bool _collisionDirty = true;
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
 
     private float _randomTickTimer = 0f;
@@ -123,6 +124,8 @@ public partial class Chunk : Node3D
         BlockState previous = _blocks[x, y, z];
         if (GetBlockLightLevel(previous) != GetBlockLightLevel(block))
             _lightsDirty = true;
+        if (CollisionGeometryChanged(previous, block))
+            _collisionDirty = true;
 
         _blocks[x, y, z] = block;
         _isDirty = true;
@@ -292,6 +295,10 @@ public partial class Chunk : Node3D
     {
         if (IsInBounds(x, y, z))
         {
+            BlockState previous = _blocks[x, y, z];
+            if (CollisionGeometryChanged(previous, block))
+                _collisionDirty = true;
+
             _blocks[x, y, z] = block;
             _isDirty = true;
             _modifiedBlocks[new Vector3I(x, y, z)] = block;
@@ -316,10 +323,15 @@ public partial class Chunk : Node3D
         int z,
         BlockState block)
     {
-        if (IsGenerated &&
-            GetBlockLightLevel(_blocks[x, y, z]) != GetBlockLightLevel(block))
+        if (IsGenerated)
         {
-            _lightsDirty = true;
+            BlockState previous = _blocks[x, y, z];
+
+            if (GetBlockLightLevel(previous) != GetBlockLightLevel(block))
+                _lightsDirty = true;
+
+            if (CollisionGeometryChanged(previous, block))
+                _collisionDirty = true;
         }
 
         _blocks[x, y, z] = block;
@@ -354,7 +366,10 @@ public partial class Chunk : Node3D
         }
 
         if (mods.Count > 0)
+        {
             _lightsDirty = true;
+            _collisionDirty = true;
+        }
 
         _modifiedBlocks = mods;
         _isDirty = true;
@@ -376,8 +391,11 @@ public partial class Chunk : Node3D
         if (!IsInBounds(x, y, z))
             return;
 
-        if (GetBlockLightLevel(_blocks[x, y, z]) != GetBlockLightLevel(block))
+        BlockState previous = _blocks[x, y, z];
+        if (GetBlockLightLevel(previous) != GetBlockLightLevel(block))
             _lightsDirty = true;
+        if (CollisionGeometryChanged(previous, block))
+            _collisionDirty = true;
 
         _blocks[x, y, z] = block;
 
@@ -715,6 +733,72 @@ public partial class Chunk : Node3D
         }
 
         return false;
+    }
+
+    private static BlockResource GetCollisionResource(BlockState state)
+    {
+        if (state.IsAir() || string.IsNullOrEmpty(state.BlockId))
+            return null;
+
+        return BlockRegistry.Instance?.GetBlock(state.BlockId);
+    }
+
+    private static bool HasSolidCollision(BlockState state, BlockResource resource)
+    {
+        if (state.IsAir() || resource == null)
+            return false;
+
+        if (resource.IsLiquid || resource.IsCross || resource.IsFlatGround)
+            return false;
+
+        if (resource.IsCustomShape)
+            return resource.IsSolid;
+
+        return true;
+    }
+
+    private static bool HasPlantTarget(BlockState state, BlockResource resource)
+    {
+        if (state.IsAir() || resource == null)
+            return false;
+
+        return (resource.IsLiquid && resource.IsLiquidSource) ||
+               resource.IsCross ||
+               resource.IsFlatGround ||
+               (resource.IsCustomShape && !resource.IsSolid);
+    }
+
+    // Liquid level/falling changes and visual-only features do not alter
+    // collision geometry. Avoid rebuilding expensive trimesh collision for
+    // those updates (especially flowing water).
+    private static bool CollisionGeometryChanged(BlockState previous, BlockState next)
+    {
+        if (previous.BlockId == next.BlockId &&
+            previous.BitMask == next.BitMask &&
+            previous.Rotation == next.Rotation)
+            return false;
+
+        BlockResource previousResource = GetCollisionResource(previous);
+        BlockResource nextResource = GetCollisionResource(next);
+
+        bool previousSolid = HasSolidCollision(previous, previousResource);
+        bool nextSolid = HasSolidCollision(next, nextResource);
+
+        if (previousSolid != nextSolid)
+            return true;
+
+        bool previousTarget = HasPlantTarget(previous, previousResource);
+        bool nextTarget = HasPlantTarget(next, nextResource);
+
+        if (previousTarget != nextTarget)
+            return true;
+
+        if (!previousSolid && !nextSolid)
+            return false;
+
+        return previous.BlockId != next.BlockId ||
+               previous.BitMask != next.BitMask ||
+               previous.Rotation != next.Rotation;
     }
 
     private static int GetBlockLightLevel(BlockState state)
