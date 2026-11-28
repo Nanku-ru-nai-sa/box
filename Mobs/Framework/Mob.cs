@@ -49,6 +49,7 @@ public partial class Mob : CharacterBody3D
     private bool _mountedJumpRequested = false;
     private float _mountedJumpVelocity = 6f;
     private ChunkManager _liquidWorld;
+    private bool _distantSimulationPaused = false;
 
 
     // =========================================================
@@ -1004,6 +1005,34 @@ private void RollAppearance()
     // =========================================================
     // SET SLEEPING
     // =========================================================
+
+    // Distant mobs remain in the world and in save data, but grounded mobs
+    // outside the active simulation radius do not run their full AI/animation
+    // physics loop. The spawner periodically wakes them as the player returns.
+    public void SetDistantSimulationPaused(bool paused)
+    {
+        if (_distantSimulationPaused == paused)
+            return;
+
+        if (paused)
+        {
+            // Never freeze a mob in midair, during knockback, stepping, riding,
+            // despawning, or breeding. Those states need their normal updates.
+            if (!_hasLanded || !IsOnFloor() || IsMounted ||
+                _knockbackTimer > 0f || _stepTimer > 0f ||
+                _isDayDespawning || _isBreeding ||
+                _mountedJumpRequested || _health <= 0f)
+                return;
+
+            Velocity = Vector3.Zero;
+            _distantSimulationPaused = true;
+            SetPhysicsProcess(false);
+            return;
+        }
+
+        _distantSimulationPaused = false;
+        SetPhysicsProcess(true);
+    }
 
     public void SetSleeping(
         bool sleeping)
