@@ -1518,15 +1518,34 @@ public Vector2? LoadPlayerLook()
 
     private int GetSurfaceHeight(int worldX, int worldZ, int searchTop = 288, int searchBottom = 0)
     {
-        // Only the common default-range call (the one GenerateChunk and
-        // the decoration passes actually use) is cache-eligible - a
-        // custom search range means a different answer, so that path
-        // always does the real scan uncached.
+        // Only the common default-range call (the one GenerateChunk and the
+        // decoration passes actually use) is cache-eligible.
         bool cacheable = searchTop == 288 && searchBottom == 0;
         var key = new Vector2I(worldX, worldZ);
 
         if (cacheable && _surfaceHeightCache.TryGetValue(key, out int cached))
             return cached;
+
+        // Flat and One Block worlds have exact, noise-free height answers.
+        // Normal terrain is hard-capped at Y=208 (including the maximum
+        // 32-block Beta Mountains bonus), so scanning above Y=207 wastes
+        // density samples. Sky Islands retains its full 288-block search.
+        if (cacheable && WorldType == WorldGenType.Flat)
+        {
+            int flatHeight = FlatGroundHeight;
+            _surfaceHeightCache[key] = flatHeight;
+            return flatHeight;
+        }
+
+        if (cacheable && WorldType == WorldGenType.OneBlock)
+        {
+            int oneBlockHeight = (worldX == 8 && worldZ == 8) ? OneBlockHeight : 0;
+            _surfaceHeightCache[key] = oneBlockHeight;
+            return oneBlockHeight;
+        }
+
+        if (cacheable && WorldType == WorldGenType.Normal)
+            searchTop = Mathf.Min(searchTop, 207);
 
         int result = searchBottom;
         for (int y = searchTop; y >= searchBottom; y--)
@@ -1630,9 +1649,11 @@ public Vector3 GetWorldSpawnPosition()
     private void GenerateChunk(Chunk chunk, Vector3I chunkPos)
     {
         const int bedrockHeight = 4;
-        const int waterFloor = WaterLevel - MaxOceanDepthBelowSeaLevel; // non-solid pockets below this Y stay dry air instead of flooding - this is what keeps deep caves from turning into giant underground lakes
+        const int waterFloor = WaterLevel - MaxOceanDepthBelowSeaLevel; // non-solid pockets below this Y stay dry air instead of flooding
+        int depthScanRange = Mathf.Max(5, MaxTopsoilDepth);
 
         for (int x = 0; x < Chunk.SIZE; x++)
+
         {
             for (int z = 0; z < Chunk.SIZE; z++)
             {
@@ -1649,9 +1670,8 @@ public Vector3 GetWorldSpawnPosition()
                 int trueSurfaceY = GetSurfaceHeight(worldX, worldZ);
                 int topsoilDepth = GetTopsoilDepth(worldX, worldZ);
 
-                int approxSurface = -1;
-
                 for (int y = 0; y < Chunk.HEIGHT; y++)
+
                 {
                     int worldY = chunkPos.Y * Chunk.HEIGHT + y;
                     float density = GetDensity(worldX, worldY, worldZ);
@@ -1726,37 +1746,28 @@ public Vector3 GetWorldSpawnPosition()
                     }
                     else
                     {
-                        bool aboveIsAir = GetDensity(worldX, worldY + 1, worldZ) <= 0f;
+                        // Most blocks are deep underground. Only run the
+                        // expensive vertical "find air above" scan near the
+                        // actual terrain surface; caves and deep rock go
+                        // straight to underground classification.
+                        bool isRealSurface = worldY >= trueSurfaceY - 6;
                         bool nearSurface = false;
-
                         int depthToAir = 0;
-                        // Scan far enough up to catch the deepest possible
-                        // topsoil depth this world could roll (was a fixed
-                        // +5 - now tracks MaxTopsoilDepth so raising that
-                        // in the Inspector doesn't silently truncate).
-                        int depthScanRange = Mathf.Max(5, MaxTopsoilDepth);
-                        for (int checkY = worldY; checkY <= worldY + depthScanRange; checkY++)
+
+                        if (isRealSurface)
                         {
-                            if (GetDensity(worldX, checkY, worldZ) <= 0f)
+                            for (int checkY = worldY; checkY <= worldY + depthScanRange; checkY++)
                             {
-                                depthToAir = checkY - worldY;
-                                nearSurface = true;
-                                break;
+                                if (GetDensity(worldX, checkY, worldZ) <= 0f)
+                                {
+                                    depthToAir = checkY - worldY;
+                                    nearSurface = true;
+                                    break;
+                                }
                             }
                         }
 
-                        if (approxSurface < 0 && aboveIsAir)
-                            approxSurface = worldY;
-
-                        // Only treat this as "the ground surface" if it's
-                        // actually near the real top of the column. Without
-                        // this check, a stone block sitting right next to a
-                        // cave air pocket 40 blocks underground would also
-                        // count as "near surface" and get coated in dirt -
-                        // which is exactly what was happening before.
-                        bool isRealSurface = worldY >= trueSurfaceY - 6;
-
-                        if (nearSurface && depthToAir <= topsoilDepth && isRealSurface)
+                        if (nearSurface && depthToAir <= topsoilDepth)
                         {
                             // Flat AND One Block worlds always use Plains,
                             // skipping the usual temp/humid/beach biome
