@@ -922,14 +922,17 @@ public partial class Chunk : Node3D
         var cutoutSurfaces =
             new Dictionary<Texture2D, SurfaceTool>();
 
-        // Separate invisible collision geometry used ONLY for raycasting
-        // at cross/plant blocks.
-        var plantTargetSurface =
-            new SurfaceTool();
+        // Collision meshes only need rebuilding when a block's collision
+        // shape/target changed. Liquid level updates and visual overlays can
+        // rebuild the render mesh without touching physics geometry.
+        bool rebuildCollision = _collisionDirty;
 
-        plantTargetSurface.Begin(
-            Mesh.PrimitiveType.Triangles
-        );
+        SurfaceTool plantTargetSurface = null;
+        if (rebuildCollision)
+        {
+            plantTargetSurface = new SurfaceTool();
+            plantTargetSurface.Begin(Mesh.PrimitiveType.Triangles);
+        }
 
         bool hasPlantTargets = false;
         var blockResourceCache = new Dictionary<string, BlockResource>();
@@ -985,7 +988,7 @@ public partial class Chunk : Node3D
 
                         // Springs are selectable/breakable even though liquids
                         // themselves do not create normal solid collision.
-                        if (resource.IsLiquidSource)
+                        if (rebuildCollision && resource.IsLiquidSource)
                         {
                             AddPlantTargetCube(
                                 plantTargetSurface,
@@ -1008,14 +1011,17 @@ public partial class Chunk : Node3D
                         );
 
                         // Invisible full-block target.
-                        AddPlantTargetCube(
-                            plantTargetSurface,
-                            x,
-                            y,
-                            z
-                        );
+                        if (rebuildCollision)
+                        {
+                            AddPlantTargetCube(
+                                plantTargetSurface,
+                                x,
+                                y,
+                                z
+                            );
 
-                        hasPlantTargets = true;
+                            hasPlantTargets = true;
+                        }
                     }
                     else if (resource.IsFlatGround)
                     {
@@ -1041,14 +1047,17 @@ public partial class Chunk : Node3D
                         }
 
                         // Invisible target so flat-ground plants/items can be clicked.
-                        AddPlantTargetCube(
-                            plantTargetSurface,
-                            x,
-                            y,
-                            z
-                        );
+                        if (rebuildCollision)
+                        {
+                            AddPlantTargetCube(
+                                plantTargetSurface,
+                                x,
+                                y,
+                                z
+                            );
 
-                        hasPlantTargets = true;
+                            hasPlantTargets = true;
+                        }
                     }
                     else if (resource.IsCustomShape)
                     {
@@ -1068,7 +1077,7 @@ public partial class Chunk : Node3D
 
                         // Non-solid custom shapes (such as torches) still
                         // need a selectable target, without blocking movement.
-                        if (!resource.IsSolid)
+                        if (!resource.IsSolid && rebuildCollision)
                         {
                             AddPlantTargetCube(
                                 plantTargetSurface,
@@ -1145,10 +1154,10 @@ public partial class Chunk : Node3D
         }
 
         var arrayMesh = new ArrayMesh();
-        var solidOnlyMesh = new ArrayMesh();
-        var plantTargetMesh = new ArrayMesh();
+        var solidOnlyMesh = rebuildCollision ? new ArrayMesh() : null;
+        var plantTargetMesh = rebuildCollision ? new ArrayMesh() : null;
 
-        if (hasPlantTargets)
+        if (rebuildCollision && hasPlantTargets)
         {
             plantTargetSurface.GenerateNormals();
 
@@ -1171,7 +1180,8 @@ public partial class Chunk : Node3D
         {
             kvp.Value.GenerateNormals();
             kvp.Value.Commit(arrayMesh);
-            kvp.Value.Commit(solidOnlyMesh);
+            if (rebuildCollision)
+                kvp.Value.Commit(solidOnlyMesh);
 
             int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
@@ -1192,18 +1202,15 @@ public partial class Chunk : Node3D
             ? arrayMesh
             : null;
 
-        // Always rebuild both collision systems.
-        // This also removes an old plant target body after
-        // the last plant in a chunk is broken.
-        CallDeferred(
-            "BuildCollision",
-            solidOnlyMesh
-        );
-
-        CallDeferred(
-            "BuildPlantTargetCollision",
-            plantTargetMesh
-        );
+        if (rebuildCollision)
+        {
+            // Rebuild both collision systems together. Calling the plant
+            // target builder with an empty mesh also removes a stale target
+            // after the last plant in a chunk is broken.
+            CallDeferred("BuildCollision", solidOnlyMesh);
+            CallDeferred("BuildPlantTargetCollision", plantTargetMesh);
+            _collisionDirty = false;
+        }
 
         if (_lightsDirty)
         {
