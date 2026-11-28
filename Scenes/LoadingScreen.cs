@@ -43,8 +43,10 @@ public partial class LoadingScreen : Node
             GD.Print($"LoadingScreen: Found ChunkManager. IsInitialLoadComplete={cm.IsInitialLoadComplete}");
             int rd  = cm.RenderDistance;
             int vrd = cm.VerticalRenderDistance;
-            _expectedChunks = (rd * 2 + 1) * (rd * 2 + 1) * (vrd * 2 + 1);
-            GD.Print($"LoadingScreen: Expecting ~{_expectedChunks} chunks.");
+            _expectedChunks = cm.InitialLoadTargetCount > 0
+                ? cm.InitialLoadTargetCount
+                : (rd * 2 + 1) * (rd * 2 + 1) * (vrd * 2 + 1);
+            GD.Print($"LoadingScreen: Waiting for {_expectedChunks} nearby spawn chunks; distant chunks will stream in after entry.");
 
             cm.WorldReady += OnWorldReady;
 
@@ -125,7 +127,9 @@ public partial class LoadingScreen : Node
             var cm = FindChunkManager();
             if (cm != null && _expectedChunks > 0)
             {
-                int loaded = CountLoadedChunks(cm);
+                int loaded = cm.InitialLoadTargetCount > 0
+                    ? cm.InitialLoadedChunkCount
+                    : CountLoadedChunks(cm);
                 float pct  = Mathf.Clamp((float)loaded / _expectedChunks * 100f, 0f, 99f);
                 _progressBar.Value   = pct;
                 _progressLabel.Text  = $"Chunks: {loaded} / {_expectedChunks}";
