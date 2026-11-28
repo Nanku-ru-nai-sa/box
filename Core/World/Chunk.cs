@@ -840,6 +840,7 @@ public partial class Chunk : Node3D
         );
 
         bool hasPlantTargets = false;
+        var blockResourceCache = new Dictionary<string, BlockResource>();
         List<(Vector3 Position, int LightLevel)> lightSources =
             _lightsDirty ? new List<(Vector3 Position, int LightLevel)>() : null;
 
@@ -855,10 +856,13 @@ public partial class Chunk : Node3D
                     if (block.IsAir())
                         continue;
 
-                    BlockResource resource =
-                        BlockRegistry.Instance.GetBlock(
-                            block.BlockId
-                        );
+                    if (!blockResourceCache.TryGetValue(
+                            block.BlockId,
+                            out BlockResource resource))
+                    {
+                        resource = BlockRegistry.Instance.GetBlock(block.BlockId);
+                        blockResourceCache[block.BlockId] = resource;
+                    }
 
                     if (resource == null)
                         continue;
@@ -1015,21 +1019,23 @@ public partial class Chunk : Node3D
                             z
                         );
 
-                        var overlay =
-    OverlayRegistry.Instance?
-        .GetOverlayFromBlockState(block);
+                        if (block.Features != null && block.Features.Length > 0)
+                        {
+                            var overlay =
+                                OverlayRegistry.Instance?.GetOverlayFromBlockState(block);
 
-if (overlay != null)
-{
-    AddOverlayFaces(
-        cutoutSurfaces,
-        overlay.OverlayTexture,
-        resource,
-        x,
-        y,
-        z
-    );
-}
+                            if (overlay != null)
+                            {
+                                AddOverlayFaces(
+                                    cutoutSurfaces,
+                                    overlay.OverlayTexture,
+                                    resource,
+                                    x,
+                                    y,
+                                    z
+                                );
+                            }
+                        }
                     }
                     else
                     {
