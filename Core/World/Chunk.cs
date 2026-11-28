@@ -498,7 +498,9 @@ public partial class Chunk : Node3D
 
         if (_randomTickTimer >= RandomTickInterval)
         {
-            _randomTickTimer -= RandomTickInterval;
+            // Preserve each chunk's phase offset without trying to catch up
+            // on every missed tick after a long frame.
+            _randomTickTimer %= RandomTickInterval;
 
             if (_chunkManager == null ||
                 _chunkManager.IsChunkWithinSimulationDistance(ChunkPosition))
