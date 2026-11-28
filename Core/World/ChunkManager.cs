@@ -399,7 +399,14 @@ public partial class ChunkManager : Node3D
         }
 
         if (_player != null)
-            _player.GlobalPosition = new Vector3(8, 120, 8); // sits just above sea level (WaterLevel=100) within the new 0-288 world height range
+        {
+            // Restore the saved position BEFORE queuing the initial chunks.
+            // Otherwise the loader builds a full spawn bubble at the default
+            // origin, then has to throw that queue away and start again at
+            // the saved location after the loading screen restores the player.
+            Vector3? savedPosition = LoadPlayerPosition();
+            _player.GlobalPosition = savedPosition ?? new Vector3(8, 120, 8);
+        }
 
         if (_player == null)
             GD.Print("ChunkManager: No player found");
