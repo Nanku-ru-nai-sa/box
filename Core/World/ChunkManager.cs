@@ -128,6 +128,11 @@ public partial class ChunkManager : Node3D
     private const double ChunkMsBudgetStreaming = 6.0;   // per frame once the world is already loaded and the player is just walking around
     private const double ChunkMsBudgetInitial   = 40.0;  // per frame during the initial load screen - higher because there's a loading screen covering it anyway
 
+    // Random block simulation is limited to the nearby area. Distant chunks
+    // remain rendered/loaded, but do not spend CPU repeatedly sampling grass.
+    private const int ActiveSimulationDistance = 4;
+    private const int ActiveSimulationVerticalDistance = 2;
+
     private const int WaterLevel = 100;
     private const int MaxOceanDepthBelowSeaLevel = 20; // how far below sea level natural water basins are allowed to go; anything carved out deeper than this (i.e. caves) stays dry instead of flooding
 
@@ -449,19 +454,13 @@ public partial class ChunkManager : Node3D
             if (_player == null) return;
         }
 
-        // TEMP (per request): streaming-on-move disabled again while
-        // testing the new time-budgeted loader in isolation - only the
-        // initial set of chunks loaded at spawn will exist, same as
-        // before. The budgeted loop below still runs (it's what performs
-        // the initial load), just nothing re-triggers UpdateChunks() as
-        // you walk around yet. Uncomment this block once you're ready to
-        // test streaming again:
-        // Vector3I currentPlayerChunk = WorldToChunk(_player.GlobalPosition);
-        // if (currentPlayerChunk != _lastPlayerChunk)
-        // {
-        //     _lastPlayerChunk = currentPlayerChunk;
-        //     UpdateChunks();
-        // }
+        // Keep the loaded area centered on the player as they cross chunk
+        // boundaries. UpdateChunks prunes stale queued work and unloads chunks
+        // that have moved outside the view distance.
+        Vector3I currentPlayerChunk = WorldToChunk(_player.GlobalPosition);
+        if (currentPlayerChunk != _lastPlayerChunk)
+            UpdateChunks();
+
 
         // Time-budgeted chunk loading: keep pulling from the queue (closest
         // first, see UpdateChunks' sort) until either the queue is empty or
@@ -868,6 +867,22 @@ public Vector2? LoadPlayerLook()
             : Vector3I.Zero;
 
         GD.Print($"UpdateChunks - player chunk: {playerChunk}");
+        _lastPlayerChunk = playerChunk;
+
+        // Discard queued chunks that no longer belong to the desired area.
+        // A fast-moving player should not leave obsolete generation jobs
+        // queued behind them.
+        for (int i = _chunksToLoad.Count - 1; i >= 0; i--)
+        {
+            Vector3I queued = _chunksToLoad[i];
+            if (Mathf.Abs(queued.X - playerChunk.X) > RenderDistance ||
+                Mathf.Abs(queued.Z - playerChunk.Z) > RenderDistance ||
+                Mathf.Abs(queued.Y - playerChunk.Y) > VerticalRenderDistance)
+            {
+                _chunksToLoad.RemoveAt(i);
+                _chunksToLoadSet.Remove(queued);
+            }
+        }
 
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
@@ -920,7 +935,18 @@ public Vector2? LoadPlayerLook()
         foreach (var pos in toUnload)
             UnloadChunk(pos);
 
+        // Rendering distance and active simulation distance are separate.
+        foreach (var pair in _chunks)
+            pair.Value.SetRandomTicksEnabled(IsWithinActiveSimulationRange(pair.Key, playerChunk));
+
         GD.Print($"Total chunks: {_chunks.Count}");
+    }
+
+    private bool IsWithinActiveSimulationRange(Vector3I chunkPos, Vector3I playerChunk)
+    {
+        return Mathf.Abs(chunkPos.X - playerChunk.X) <= ActiveSimulationDistance &&
+               Mathf.Abs(chunkPos.Z - playerChunk.Z) <= ActiveSimulationDistance &&
+               Mathf.Abs(chunkPos.Y - playerChunk.Y) <= ActiveSimulationVerticalDistance;
     }
 
     private void LoadChunk(Vector3I chunkPos)
@@ -931,6 +957,8 @@ public Vector2? LoadPlayerLook()
         chunk.SetChunkManager(this);
         AddChild(chunk);
         chunk.Initialize(chunkPos);
+        Vector3I playerChunk = _player != null ? WorldToChunk(_player.GlobalPosition) : chunkPos;
+        chunk.SetRandomTicksEnabled(IsWithinActiveSimulationRange(chunkPos, playerChunk));
         GenerateChunk(chunk, chunkPos);
         LoadChunkModifications(chunk, chunkPos);
 
@@ -957,9 +985,58 @@ public Vector2? LoadPlayerLook()
         _columnRefCount[columnKey] = _columnRefCount.GetValueOrDefault(columnKey, 0) + 1;
     }
 
+    private bool SaveChunkModifications(Vector3I chunkPos, Chunk chunk)
+    {
+        var mods = chunk.GetModifications();
+        if (mods.Count == 0)
+            return true;
+
+        DirAccess.MakeDirRecursiveAbsolute(SaveDirectory);
+
+        var saveData = new Godot.Collections.Dictionary();
+        foreach (var mod in mods)
+        {
+            string key = $"{mod.Key.X},{mod.Key.Y},{mod.Key.Z}";
+            var savedFeatures = new Godot.Collections.Array();
+            if (mod.Value.Features != null)
+            {
+                foreach (string feature in mod.Value.Features)
+                    savedFeatures.Add(feature);
+            }
+
+            saveData[key] = new Godot.Collections.Dictionary
+            {
+                ["id"] = mod.Value.BlockId,
+                ["mask"] = (int)mod.Value.BitMask,
+                ["rotation"] = (int)mod.Value.Rotation,
+                ["liquid_level"] = (int)mod.Value.LiquidLevel,
+                ["liquid_falling"] = mod.Value.LiquidFalling,
+                ["liquid_source"] = mod.Value.LiquidSource,
+                ["features"] = savedFeatures
+            };
+        }
+
+        string fileName = $"{SaveDirectory}chunk_{chunkPos.X}_{chunkPos.Y}_{chunkPos.Z}.json";
+        using var file = FileAccess.Open(fileName, FileAccess.ModeFlags.Write);
+        if (file == null)
+        {
+            GD.PrintErr($"ChunkManager: Could not save modified chunk {chunkPos} before unloading.");
+            return false;
+        }
+
+        file.StoreString(Json.Stringify(saveData));
+        return true;
+    }
+
     private void UnloadChunk(Vector3I chunkPos)
     {
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk)) return;
+
+        // Streaming can unload edited terrain before the player saves/quits.
+        // Persist this chunk first so enabling streaming cannot discard edits.
+        if (!SaveChunkModifications(chunkPos, chunk))
+            return;
+
         chunk.QueueFree();
         _chunks.Remove(chunkPos);
 
