@@ -391,24 +391,9 @@ public partial class ChunkManager : Node3D
         var canvasLayer = new CanvasLayer();
         GetTree().Root.CallDeferred("add_child", canvasLayer);
 
-        // BUG FIXED HERE: _player used to only ever get assigned inside
-        // _Process (as a fallback lookup), which meant it was still NULL
-        // the first time UpdateChunks() ran below, since _Ready() always
-        // finishes before the first _Process() call. UpdateChunks() falls
-        // back to Vector3I.Zero when _player is null, which loads chunks
-        // Y=0 through Y=VerticalRenderDistance (8) - i.e. blocks 0-143.
-        // That's a hard ceiling at Y=144, exactly 44 blocks above
-        // WaterLevel (100) - matches the "world only goes 44 blocks above
-        // water" symptom exactly. And since chunk streaming-on-move is
-        // disabled below (commented out for perf), that wrong window was
-        // never recalculated for the rest of the session, no matter how
-        // tall the terrain generation math said peaks should reach -
-        // those chunks just never got queued to load in the first place.
-        //
-        // Fixed by resolving _player (and setting its real spawn
-        // position) BEFORE calling UpdateChunks(), instead of after, so
-        // the one-time initial load window correctly centers near water
-        // level from the start.
+        // Resolve the saved player position before queuing the first chunks.
+        // This avoids loading around the default spawn and then immediately
+        // streaming a second area when LoadingScreen restores the save.
         if (_player == null)
         {
             var found = GetTree().Root.FindChild("player", true, false);
@@ -416,7 +401,10 @@ public partial class ChunkManager : Node3D
         }
 
         if (_player != null)
-            _player.GlobalPosition = new Vector3(8, 120, 8); // sits just above sea level (WaterLevel=100) within the new 0-288 world height range
+        {
+            Vector3? savedPosition = LoadPlayerPosition();
+            _player.GlobalPosition = savedPosition ?? new Vector3(8, 120, 8);
+        }
 
         if (_player == null)
             GD.Print("ChunkManager: No player found");
