@@ -398,12 +398,27 @@ public partial class DebugMenu : CanvasLayer
             );
 
         // ========================================================
+        // PERFORMANCE
+        // ========================================================
+
+        ChunkManager chunkManager = ChunkManager.Instance;
+        int mobCount = GetTree().GetNodesInGroup("mobs").Count;
+        string performanceText = chunkManager != null
+            ? $"FPS: {Engine.GetFramesPerSecond()}   Chunks: {chunkManager.LoadedChunkCount}\n" +
+              $"Queue: {chunkManager.PendingChunkCount}   Mobs: {mobCount}\n" +
+              $"Last chunk: {chunkManager.LastChunkLoadMilliseconds:0.0} ms   Avg: {chunkManager.AverageChunkLoadMilliseconds:0.0} ms"
+            : "Chunk manager unavailable";
+
+        // ========================================================
         // DISPLAY
         // ========================================================
 
         _label.Text =
             "BOX DEBUG\n" +
             "══════════════════════════════════\n\n" +
+
+            "PERFORMANCE\n" +
+            performanceText + "\n\n" +
 
             "TIME\n" +
             $"Time:        {timeString}\n" +
