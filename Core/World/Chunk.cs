@@ -4,6 +4,17 @@ using System.Collections.Generic;
 public partial class Chunk : Node3D
 {
     private static Texture2D _bambooLeavesTexture;
+    private static Texture2D _torchTexture;
+
+    // Chunk meshes share a small set of block textures. Reuse materials
+    // across chunks instead of allocating several new materials every time
+    // a chunk is generated or rebuilt.
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _solidMaterialCache = new();
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _transparentMaterialCache = new();
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _cutoutMaterialCache = new();
+    private static StandardMaterial3D _solidFallbackMaterial;
+    private static StandardMaterial3D _transparentFallbackMaterial;
+    private static StandardMaterial3D _cutoutFallbackMaterial;
 
     public const int SIZE = 16;
     public const int HEIGHT = 16;
@@ -28,6 +39,7 @@ public partial class Chunk : Node3D
 
     private ChunkManager _chunkManager;
     private bool _isDirty = false;
+    private bool _lightsDirty = true;
     private Dictionary<Vector3I, BlockState> _modifiedBlocks = new();
 
     private float _randomTickTimer = 0f;
@@ -99,6 +111,10 @@ public partial class Chunk : Node3D
 
     public void SetBlock(int x, int y, int z, BlockState block)
     {
+        BlockState previous = _blocks[x, y, z];
+        if (GetBlockLightLevel(previous) != GetBlockLightLevel(block))
+            _lightsDirty = true;
+
         _blocks[x, y, z] = block;
         _isDirty = true;
         _modifiedBlocks[new Vector3I(x, y, z)] = block;
@@ -291,6 +307,12 @@ public partial class Chunk : Node3D
         int z,
         BlockState block)
     {
+        if (IsGenerated &&
+            GetBlockLightLevel(_blocks[x, y, z]) != GetBlockLightLevel(block))
+        {
+            _lightsDirty = true;
+        }
+
         _blocks[x, y, z] = block;
 
         if (block.BlockId == "water" || block.BlockId == "water_spring")
@@ -314,6 +336,9 @@ public partial class Chunk : Node3D
             ] = kvp.Value;
         }
 
+        if (mods.Count > 0)
+            _lightsDirty = true;
+
         _modifiedBlocks = mods;
         _isDirty = true;
     }
@@ -333,6 +358,9 @@ public partial class Chunk : Node3D
     {
         if (!IsInBounds(x, y, z))
             return;
+
+        if (GetBlockLightLevel(_blocks[x, y, z]) != GetBlockLightLevel(block))
+            _lightsDirty = true;
 
         _blocks[x, y, z] = block;
 
@@ -672,6 +700,116 @@ public partial class Chunk : Node3D
         return false;
     }
 
+    private static int GetBlockLightLevel(BlockState state)
+    {
+        if (string.IsNullOrEmpty(state.BlockId) || state.IsAir())
+            return 0;
+
+        return BlockRegistry.Instance?.GetBlock(state.BlockId)?.LightLevel ?? 0;
+    }
+
+    private static StandardMaterial3D GetCachedMaterial(
+        Dictionary<Texture2D, StandardMaterial3D> cache,
+        Texture2D texture,
+        ref StandardMaterial3D fallback,
+        BaseMaterial3D.TransparencyEnum transparency,
+        bool useTransparency,
+        bool cutout)
+    {
+        if (texture == null)
+        {
+            if (fallback == null)
+                fallback = CreateMaterial(null, transparency, useTransparency, cutout);
+            return fallback;
+        }
+
+        if (cache.TryGetValue(texture, out StandardMaterial3D existing))
+            return existing;
+
+        StandardMaterial3D material =
+            CreateMaterial(texture, transparency, useTransparency, cutout);
+
+        cache[texture] = material;
+        return material;
+    }
+
+    private static StandardMaterial3D CreateMaterial(
+        Texture2D texture,
+        BaseMaterial3D.TransparencyEnum transparency,
+        bool useTransparency,
+        bool cutout)
+    {
+        var material = new StandardMaterial3D
+        {
+            TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest
+        };
+
+        if (texture != null)
+            material.AlbedoTexture = texture;
+
+        if (useTransparency)
+            material.Transparency = transparency;
+
+        if (cutout)
+        {
+            material.AlphaScissorThreshold = 0.1f;
+            material.RenderPriority = 0;
+        }
+
+        if (useTransparency &&
+            !cutout &&
+            texture != null)
+        {
+            _torchTexture ??= BlockRegistry.Instance?.GetBlock("torch")?.TextureSide;
+
+            if (_torchTexture != null && texture == _torchTexture)
+            {
+                material.EmissionEnabled = true;
+                material.Emission = new Color(1.0f, 0.72f, 0.42f);
+                material.EmissionEnergyMultiplier = 0.9f;
+                material.EmissionTexture = texture;
+            }
+        }
+
+        return material;
+    }
+
+    private static StandardMaterial3D GetSolidMaterial(Texture2D texture)
+    {
+        return GetCachedMaterial(
+            _solidMaterialCache,
+            texture,
+            ref _solidFallbackMaterial,
+            BaseMaterial3D.TransparencyEnum.Disabled,
+            false,
+            false
+        );
+    }
+
+    private static StandardMaterial3D GetTransparentMaterial(Texture2D texture)
+    {
+        return GetCachedMaterial(
+            _transparentMaterialCache,
+            texture,
+            ref _transparentFallbackMaterial,
+            BaseMaterial3D.TransparencyEnum.Alpha,
+            true,
+            false
+        );
+    }
+
+    private static StandardMaterial3D GetCutoutMaterial(Texture2D texture)
+    {
+        return GetCachedMaterial(
+            _cutoutMaterialCache,
+            texture,
+            ref _cutoutFallbackMaterial,
+            BaseMaterial3D.TransparencyEnum.AlphaScissor,
+            true,
+            true
+        );
+    }
+
     public void BuildMesh()
     {
         var solidSurfaces =
@@ -907,69 +1045,20 @@ if (overlay != null)
             kvp.Value.GenerateNormals();
             kvp.Value.Commit(arrayMesh);
 
-            int surfIdx =
-                arrayMesh.GetSurfaceCount() - 1;
-
+            int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
-            {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                mat.Transparency =
-                    BaseMaterial3D
-                        .TransparencyEnum
-                        .AlphaScissor;
-
-                mat.AlphaScissorThreshold =
-                    0.1f;
-
-                mat.RenderPriority = 0;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
-
-                arrayMesh.SurfaceSetMaterial(
-                    surfIdx,
-                    mat
-                );
-            }
+                arrayMesh.SurfaceSetMaterial(surfIdx, GetCutoutMaterial(kvp.Key));
         }
 
         foreach (var kvp in solidSurfaces)
         {
             kvp.Value.GenerateNormals();
-
             kvp.Value.Commit(arrayMesh);
             kvp.Value.Commit(solidOnlyMesh);
 
-            int surfIdx =
-                arrayMesh.GetSurfaceCount() - 1;
-
+            int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
-            {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
-
-                arrayMesh.SurfaceSetMaterial(
-                    surfIdx,
-                    mat
-                );
-            }
+                arrayMesh.SurfaceSetMaterial(surfIdx, GetSolidMaterial(kvp.Key));
         }
 
         foreach (var kvp in transparentSurfaces)
@@ -977,52 +1066,14 @@ if (overlay != null)
             kvp.Value.GenerateNormals();
             kvp.Value.Commit(arrayMesh);
 
-            int surfIdx =
-                arrayMesh.GetSurfaceCount() - 1;
-
+            int surfIdx = arrayMesh.GetSurfaceCount() - 1;
             if (surfIdx >= 0)
-            {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                mat.Transparency =
-                    BaseMaterial3D
-                        .TransparencyEnum
-                        .Alpha;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
-
-                // The torch should visibly glow as well as illuminate nearby
-                // blocks. Its texture is unique, so emissive shading only
-                // affects torch pixels, not other transparent block textures.
-                Texture2D torchTexture =
-                    BlockRegistry.Instance?.GetBlock("torch")?.TextureSide;
-                if (kvp.Key != null && kvp.Key == torchTexture)
-                {
-                    mat.EmissionEnabled = true;
-                    mat.Emission = new Color(1.0f, 0.72f, 0.42f);
-                    mat.EmissionEnergyMultiplier = 0.9f;
-                    mat.EmissionTexture = kvp.Key;
-                }
-
-                arrayMesh.SurfaceSetMaterial(
-                    surfIdx,
-                    mat
-                );
-            }
+                arrayMesh.SurfaceSetMaterial(surfIdx, GetTransparentMaterial(kvp.Key));
         }
 
-        if (arrayMesh.GetSurfaceCount() > 0)
-        {
-            _meshInstance.Mesh = arrayMesh;
-        }
+        _meshInstance.Mesh = arrayMesh.GetSurfaceCount() > 0
+            ? arrayMesh
+            : null;
 
         // Always rebuild both collision systems.
         // This also removes an old plant target body after
@@ -1037,7 +1088,11 @@ if (overlay != null)
             plantTargetMesh
         );
 
-        RebuildBlockLights();
+        if (_lightsDirty)
+        {
+            RebuildBlockLights();
+            _lightsDirty = false;
+        }
 
         IsGenerated = true;
     }
