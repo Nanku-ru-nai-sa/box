@@ -11,7 +11,12 @@ public partial class Chunk : Node3D
     private BlockState[,,] _blocks = new BlockState[SIZE, HEIGHT, SIZE];
 
     private MeshInstance3D _meshInstance;
-    private MeshInstance3D _transparentMeshInstance;
+
+    // Materials are identical for the same texture/render mode, so share
+    // them across chunks instead of allocating duplicates per chunk rebuild.
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _solidMaterialCache = new();
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _transparentMaterialCache = new();
+    private static readonly Dictionary<Texture2D, StandardMaterial3D> _cutoutMaterialCache = new();
     private StaticBody3D _collisionBody;
     private readonly List<OmniLight3D> _blockLights = new();
 
@@ -62,8 +67,6 @@ public partial class Chunk : Node3D
         _meshInstance = new MeshInstance3D();
         AddChild(_meshInstance);
 
-        _transparentMeshInstance = new MeshInstance3D();
-        AddChild(_transparentMeshInstance);
     }
 
     public void SetChunkManager(ChunkManager chunkManager)
@@ -702,6 +705,47 @@ public partial class Chunk : Node3D
         return false;
     }
 
+    private static StandardMaterial3D GetCachedMaterial(
+        Dictionary<Texture2D, StandardMaterial3D> cache,
+        Texture2D texture,
+        bool transparent,
+        bool cutout,
+        bool emissive = false)
+    {
+        if (texture != null && cache.TryGetValue(texture, out StandardMaterial3D cached))
+            return cached;
+
+        var material = new StandardMaterial3D();
+        material.TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest;
+
+        if (texture != null)
+            material.AlbedoTexture = texture;
+
+        if (cutout)
+        {
+            material.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+            material.AlphaScissorThreshold = 0.1f;
+            material.RenderPriority = 0;
+        }
+        else if (transparent)
+        {
+            material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        }
+
+        if (emissive && texture != null)
+        {
+            material.EmissionEnabled = true;
+            material.Emission = new Color(1.0f, 0.72f, 0.42f);
+            material.EmissionEnergyMultiplier = 0.9f;
+            material.EmissionTexture = texture;
+        }
+
+        if (texture != null)
+            cache[texture] = material;
+
+        return material;
+    }
+
     public void BuildMesh()
     {
         var solidSurfaces =
@@ -942,27 +986,12 @@ if (overlay != null)
 
             if (surfIdx >= 0)
             {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                mat.Transparency =
-                    BaseMaterial3D
-                        .TransparencyEnum
-                        .AlphaScissor;
-
-                mat.AlphaScissorThreshold =
-                    0.1f;
-
-                mat.RenderPriority = 0;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
+                var mat = GetCachedMaterial(
+                    _cutoutMaterialCache,
+                    kvp.Key,
+                    transparent: false,
+                    cutout: true
+                );
 
                 arrayMesh.SurfaceSetMaterial(
                     surfIdx,
@@ -983,17 +1012,12 @@ if (overlay != null)
 
             if (surfIdx >= 0)
             {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
+                var mat = GetCachedMaterial(
+                    _solidMaterialCache,
+                    kvp.Key,
+                    transparent: false,
+                    cutout: false
+                );
 
                 arrayMesh.SurfaceSetMaterial(
                     surfIdx,
@@ -1012,35 +1036,19 @@ if (overlay != null)
 
             if (surfIdx >= 0)
             {
-                var mat =
-                    new StandardMaterial3D();
-
-                mat.TextureFilter =
-                    BaseMaterial3D
-                        .TextureFilterEnum
-                        .Nearest;
-
-                mat.Transparency =
-                    BaseMaterial3D
-                        .TransparencyEnum
-                        .Alpha;
-
-                if (kvp.Key != null)
-                    mat.AlbedoTexture =
-                        kvp.Key;
-
-                // The torch should visibly glow as well as illuminate nearby
-                // blocks. Its texture is unique, so emissive shading only
-                // affects torch pixels, not other transparent block textures.
+                // Preserve the torch's emissive material while sharing the
+                // resulting resource between every chunk using that texture.
                 Texture2D torchTexture =
                     BlockRegistry.Instance?.GetBlock("torch")?.TextureSide;
-                if (kvp.Key != null && kvp.Key == torchTexture)
-                {
-                    mat.EmissionEnabled = true;
-                    mat.Emission = new Color(1.0f, 0.72f, 0.42f);
-                    mat.EmissionEnergyMultiplier = 0.9f;
-                    mat.EmissionTexture = kvp.Key;
-                }
+                bool isTorchTexture = kvp.Key != null && kvp.Key == torchTexture;
+
+                var mat = GetCachedMaterial(
+                    _transparentMaterialCache,
+                    kvp.Key,
+                    transparent: true,
+                    cutout: false,
+                    emissive: isTorchTexture
+                );
 
                 arrayMesh.SurfaceSetMaterial(
                     surfIdx,
