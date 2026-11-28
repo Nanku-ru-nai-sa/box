@@ -1521,18 +1521,45 @@ public Vector2? LoadPlayerLook()
 
     private int GetSurfaceHeight(int worldX, int worldZ, int searchTop = 288, int searchBottom = 0)
     {
-        // Only the common default-range call (the one GenerateChunk and
-        // the decoration passes actually use) is cache-eligible - a
-        // custom search range means a different answer, so that path
-        // always does the real scan uncached.
         bool cacheable = searchTop == 288 && searchBottom == 0;
         var key = new Vector2I(worldX, worldZ);
 
         if (cacheable && _surfaceHeightCache.TryGetValue(key, out int cached))
             return cached;
 
+        // These world types have a known exact surface and do not need a
+        // vertical noise scan at all.
+        if (cacheable && WorldType == WorldGenType.Flat)
+        {
+            int flatSurface = FlatGroundHeight >= 0 && FlatGroundHeight < 288
+                ? FlatGroundHeight
+                : searchBottom;
+            _surfaceHeightCache[key] = flatSurface;
+            return flatSurface;
+        }
+
+        if (cacheable && WorldType == WorldGenType.OneBlock)
+        {
+            int oneBlockSurface =
+                worldX == 8 && worldZ == 8 &&
+                OneBlockHeight >= 0 && OneBlockHeight < 288
+                    ? OneBlockHeight
+                    : searchBottom;
+
+            _surfaceHeightCache[key] = oneBlockSurface;
+            return oneBlockSurface;
+        }
+
+        // Normal terrain is hard-clamped by GetNormalDensity at or below
+        // 208 (176 + the maximum 32-block Beta Mountains bonus). Scanning
+        // the empty 208-287 band for every world column was wasted noise
+        // work. Sky-island worlds retain the full search range.
+        int effectiveSearchTop = searchTop;
+        if (cacheable && WorldType == WorldGenType.Normal)
+            effectiveSearchTop = 208;
+
         int result = searchBottom;
-        for (int y = searchTop; y >= searchBottom; y--)
+        for (int y = effectiveSearchTop; y >= searchBottom; y--)
         {
             if (GetDensity(worldX, y, worldZ) > 0f)
             {
