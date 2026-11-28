@@ -106,6 +106,8 @@ public partial class ChunkManager : Node3D
     [Export] public int RockProbeDepth = 24;        // how far below the surface to check for a vein before giving up on that column
 
     public bool IsInitialLoadComplete { get; private set; } = false;
+    public int LoadedChunkCount => _chunks.Count;
+    public int PendingChunkCount => _chunksToLoad.Count;
 [Signal] public delegate void WorldReadyEventHandler();
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
