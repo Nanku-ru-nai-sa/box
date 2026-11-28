@@ -840,6 +840,8 @@ public partial class Chunk : Node3D
         );
 
         bool hasPlantTargets = false;
+        List<(Vector3 Position, int LightLevel)> lightSources =
+            _lightsDirty ? new List<(Vector3 Position, int LightLevel)>() : null;
 
         for (int x = 0; x < SIZE; x++)
         {
@@ -860,6 +862,14 @@ public partial class Chunk : Node3D
 
                     if (resource == null)
                         continue;
+
+                    if (lightSources != null && resource.LightLevel > 0)
+                    {
+                        lightSources.Add((
+                            new Vector3(x + 0.5f, y + 0.55f, z + 0.5f),
+                            resource.LightLevel
+                        ));
+                    }
 
                     var surfaces =
                         resource.IsTransparent
@@ -1099,7 +1109,7 @@ if (overlay != null)
 
         if (_lightsDirty)
         {
-            RebuildBlockLights();
+            RebuildBlockLights(lightSources);
             _lightsDirty = false;
         }
 
@@ -1111,7 +1121,8 @@ if (overlay != null)
     // Recreate dynamic point lights from blocks in this chunk.
     // LightLevel is also stored on BlockResource so future voxel-light
     // propagation can use the same source strength.
-    private void RebuildBlockLights()
+    private void RebuildBlockLights(
+        List<(Vector3 Position, int LightLevel)> lightSources)
     {
         foreach (OmniLight3D oldLight in _blockLights)
         {
@@ -1124,36 +1135,23 @@ if (overlay != null)
 
         _blockLights.Clear();
 
-        for (int x = 0; x < SIZE; x++)
+        if (lightSources == null || lightSources.Count == 0)
+            return;
+
+        foreach (var source in lightSources)
         {
-            for (int y = 0; y < HEIGHT; y++)
+            var light = new OmniLight3D
             {
-                for (int z = 0; z < SIZE; z++)
-                {
-                    BlockState block = _blocks[x, y, z];
-                    if (block.IsAir())
-                        continue;
+                Name = "BlockLight",
+                LightColor = new Color(1.0f, 0.72f, 0.42f),
+                LightEnergy = 1.35f,
+                OmniRange = Mathf.Clamp(source.LightLevel * 0.65f, 2.0f, 12.0f),
+                ShadowEnabled = false
+            };
 
-                    BlockResource resource =
-                        BlockRegistry.Instance?.GetBlock(block.BlockId);
-
-                    if (resource == null || resource.LightLevel <= 0)
-                        continue;
-
-                    var light = new OmniLight3D
-                    {
-                        Name = $"BlockLight_{x}_{y}_{z}",
-                        LightColor = new Color(1.0f, 0.72f, 0.42f),
-                        LightEnergy = 1.35f,
-                        OmniRange = Mathf.Clamp(resource.LightLevel * 0.65f, 2.0f, 12.0f),
-                        ShadowEnabled = false
-                    };
-
-                    AddChild(light);
-                    light.Position = new Vector3(x + 0.5f, y + 0.55f, z + 0.5f);
-                    _blockLights.Add(light);
-                }
-            }
+            AddChild(light);
+            light.Position = source.Position;
+            _blockLights.Add(light);
         }
     }
 
