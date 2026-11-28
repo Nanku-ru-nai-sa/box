@@ -220,6 +220,19 @@ public partial class ChunkManager : Node3D
     private Dictionary<Vector2I, int> _topsoilDepthCache = new();
     private Dictionary<Vector2I, int> _columnRefCount = new();
 
+    // Normal terrain uses several 2D noise values that are constant for
+    // every Y position in a world column. Cache them once instead of
+    // resampling them for every voxel in every vertical chunk.
+    private struct NormalColumnNoise
+    {
+        public float DepthSample;
+        public float MountainAreaSample;
+        public float BiomeTemp;
+        public float BiomeHumidity;
+    }
+
+    private Dictionary<Vector2I, NormalColumnNoise> _normalColumnNoiseCache = new();
+
     public override void _Ready()
     {
         Instance = this;
@@ -1065,6 +1078,7 @@ public Vector2? LoadPlayerLook()
                         var worldColKey = new Vector2I(baseX + dx, baseZ + dz);
                         _surfaceHeightCache.Remove(worldColKey);
                         _topsoilDepthCache.Remove(worldColKey);
+                        _normalColumnNoiseCache.Remove(worldColKey);
                     }
                 }
             }
@@ -1206,6 +1220,25 @@ public Vector2? LoadPlayerLook()
         return density;
     }
 
+    private NormalColumnNoise GetNormalColumnNoise(int worldX, int worldZ)
+    {
+        Vector2I key = new Vector2I(worldX, worldZ);
+
+        if (_normalColumnNoiseCache.TryGetValue(key, out NormalColumnNoise cached))
+            return cached;
+
+        NormalColumnNoise values = new NormalColumnNoise
+        {
+            DepthSample = _depthNoise.GetNoise2D(worldX, worldZ),
+            MountainAreaSample = _mountainAreaNoise.GetNoise2D(worldX, worldZ),
+            BiomeTemp = _biomeTemp.GetNoise2D(worldX, worldZ),
+            BiomeHumidity = _biomeHumid.GetNoise2D(worldX, worldZ)
+        };
+
+        _normalColumnNoiseCache[key] = values;
+        return values;
+    }
+
     // ===== Adapted from real Minecraft Beta 1.7.3 terrain generation =====
     // Reverse-engineered structure (see the i73 project's notes on beta gen):
     //   1. A per-column "height center" (heightmap) - a slow noise that
@@ -1232,8 +1265,10 @@ public Vector2? LoadPlayerLook()
     // straight 1:1 shrink of beta's numbers would give you.
     private float GetNormalDensity(int worldX, int worldY, int worldZ)
     {
+        NormalColumnNoise columnNoise = GetNormalColumnNoise(worldX, worldZ);
+
         // ---- 1. Height center (per-column heightmap) ----
-        float depthSample = _depthNoise.GetNoise2D(worldX, worldZ); // -1..1
+        float depthSample = columnNoise.DepthSample; // -1..1
 
         // Power-curve the noise before using it: values near the middle of
         // the -1..1 range get pulled closer to 0 (flat, at water level),
@@ -1327,7 +1362,7 @@ public Vector2? LoadPlayerLook()
         // buffer next to the coast stays exactly as flat in a Beta
         // Mountains area as it does in an Alpha one; only the mountains
         // themselves get taller.
-        float mountainAreaSample = _mountainAreaNoise.GetNoise2D(worldX, worldZ);
+        float mountainAreaSample = columnNoise.MountainAreaSample;
         bool isBetaMountainsArea = mountainAreaSample > 0.2f;
         const float betaMountainsBonus = 32f; // ~2 chunks, per request
         float areaBonus = isBetaMountainsArea ? betaMountainsBonus * mountainT : 0f;
@@ -1336,8 +1371,8 @@ public Vector2? LoadPlayerLook()
         // ---- 2. Biome chaos ----
         // Reuses the same temp/humid noise GetBiome() samples, so hot+wet
         // areas get chaotic, broken terrain and cold/dry areas stay calmer.
-        float temp = _biomeTemp.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
-        float humid = _biomeHumid.GetNoise2D(worldX, worldZ) * 0.5f + 0.5f;
+        float temp = columnNoise.BiomeTemp * 0.5f + 0.5f;
+        float humid = columnNoise.BiomeHumidity * 0.5f + 0.5f;
         // STILL CAPPING, HERE'S WHY: raising the floor last time (0.5 ->
         // 1.1) helped but didn't fully fix it, because chaos was still
         // DIVIDING the height falloff rate below (calmness / chaos). Even
@@ -1669,8 +1704,16 @@ public Vector3 GetWorldSpawnPosition()
                 int worldX = chunkPos.X * Chunk.SIZE + x;
                 int worldZ = chunkPos.Z * Chunk.SIZE + z;
 
-                float temp = _biomeTemp.GetNoise2D(worldX, worldZ);
-                float humid = _biomeHumid.GetNoise2D(worldX, worldZ);
+                NormalColumnNoise columnNoise = WorldType == WorldGenType.Normal
+                    ? GetNormalColumnNoise(worldX, worldZ)
+                    : default;
+
+                float temp = WorldType == WorldGenType.Normal
+                    ? columnNoise.BiomeTemp
+                    : _biomeTemp.GetNoise2D(worldX, worldZ);
+                float humid = WorldType == WorldGenType.Normal
+                    ? columnNoise.BiomeHumidity
+                    : _biomeHumid.GetNoise2D(worldX, worldZ);
 
                 // Real top-of-terrain height for this column. Used below so
                 // cave ceilings/walls don't get mistaken for the actual
