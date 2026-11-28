@@ -989,6 +989,19 @@ public Vector2? LoadPlayerLook()
         {
             Vector3I da = a - loadCenterChunk;
             Vector3I db = b - loadCenterChunk;
+
+            bool aIsCore =
+                Mathf.Abs(da.X) <= InitialLoadHorizontalRadius &&
+                Mathf.Abs(da.Z) <= InitialLoadHorizontalRadius &&
+                Mathf.Abs(da.Y) <= InitialLoadVerticalRadius;
+            bool bIsCore =
+                Mathf.Abs(db.X) <= InitialLoadHorizontalRadius &&
+                Mathf.Abs(db.Z) <= InitialLoadHorizontalRadius &&
+                Mathf.Abs(db.Y) <= InitialLoadVerticalRadius;
+
+            if (aIsCore != bIsCore)
+                return aIsCore ? -1 : 1;
+
             float distA = da.X * da.X + da.Z * da.Z + da.Y * da.Y * 1.5f;
             float distB = db.X * db.X + db.Z * db.Z + db.Y * db.Y * 1.5f;
             return distA.CompareTo(distB);
