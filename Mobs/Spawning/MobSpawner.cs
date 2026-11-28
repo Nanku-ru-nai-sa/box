@@ -23,6 +23,11 @@ public partial class MobSpawner : Node3D
     [Export]
     public int MaxSpawnAttemptsPerTick = 5;
 
+    // A world-wide cap prevents multiple species/spawners from collectively
+    // creating an unbounded population. Per-species JSON limits still apply.
+    [Export]
+    public int MaxTotalWorldMobs = 96;
+
     [Export]
     public bool SpawnAutomatically = true;
 
@@ -163,6 +168,12 @@ public partial class MobSpawner : Node3D
 
     private void TrySpawnMobs()
     {
+        int totalMobCap = Mathf.Max(1, MaxTotalWorldMobs);
+        int totalMobCount = GetTree().GetNodesInGroup("mobs").Count;
+
+        if (totalMobCount >= totalMobCap)
+            return;
+
         int attempts = 0;
 
         while (
@@ -225,8 +236,10 @@ public partial class MobSpawner : Node3D
                 );
 
             int availableSlots =
-                definition.spawning.maxWorldCount -
-                currentCount;
+                Mathf.Min(
+                    definition.spawning.maxWorldCount - currentCount,
+                    totalMobCap - totalMobCount
+                );
 
             groupSize =
                 Mathf.Min(
@@ -268,6 +281,8 @@ public partial class MobSpawner : Node3D
                     definitionPath,
                     spawnPosition
                 );
+
+                totalMobCount++;
             }
 
             // Spawn one group per timer tick for now.
