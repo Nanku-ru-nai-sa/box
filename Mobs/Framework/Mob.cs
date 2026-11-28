@@ -2565,7 +2565,7 @@ private void RollAppearance()
         // Sweep the mob's complete footprint along the look-ahead corridor.
         // This is navigation-only: the bamboo model and physical collision
         // remain narrow, but every bamboo voxel is treated as a full wall cell.
-        const float sampleStep = 0.2f;
+        const float sampleStep = 0.25f;
         int forwardSamples = Mathf.Max(1, Mathf.CeilToInt(distance / sampleStep));
 
         Vector3 bodyBase = GlobalPosition +
@@ -2578,14 +2578,14 @@ private void RollAppearance()
 
             for (int y = minY; y <= maxY; y++)
             {
-                for (int xSample = -2; xSample <= 2; xSample++)
+                for (int xSample = -1; xSample <= 1; xSample++)
                 {
-                    for (int zSample = -2; zSample <= 2; zSample++)
+                    for (int zSample = -1; zSample <= 1; zSample++)
                     {
                         Vector3 sample = new Vector3(
-                            bodyCenter.X + xSample * halfX * 0.5f,
+                            bodyCenter.X + xSample * halfX,
                             y + 0.5f,
-                            bodyCenter.Z + zSample * halfZ * 0.5f
+                            bodyCenter.Z + zSample * halfZ
                         );
 
                         BlockState block = world.GetBlockAtWorld(new Vector3I(
