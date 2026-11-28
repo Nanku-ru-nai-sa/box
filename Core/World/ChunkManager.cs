@@ -916,6 +916,16 @@ public Vector2? LoadPlayerLook()
 
         _lastPlayerChunk = playerChunk;
 
+        // Keep the requested vertical window inside the finite world even
+        // if a saved player position is temporarily below bedrock or above
+        // the build-height cap.
+        int centerChunkY = Mathf.Clamp(playerChunk.Y, 0, 17);
+        Vector3I loadCenterChunk = new Vector3I(
+            playerChunk.X,
+            centerChunkY,
+            playerChunk.Z
+        );
+
         _chunksToLoad.Clear();
         _chunksToLoadSet.Clear();
         _chunkLoadQueueIndex = 0;
@@ -925,8 +935,8 @@ public Vector2? LoadPlayerLook()
 
         InitialLoadTargetCount = 0;
 
-        int minY = Mathf.Max(0, playerChunk.Y - VerticalRenderDistance);
-        int maxY = Mathf.Min(17, playerChunk.Y + VerticalRenderDistance);
+        int minY = Mathf.Max(0, centerChunkY - VerticalRenderDistance);
+        int maxY = Mathf.Min(17, centerChunkY + VerticalRenderDistance);
 
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
@@ -938,7 +948,7 @@ public Vector2? LoadPlayerLook()
 
                 for (int y = minY; y <= maxY; y++)
                 {
-                    int dy = y - playerChunk.Y;
+                    int dy = y - centerChunkY;
 
                     float normalizedDistance =
                         horizontalDistanceSquared / (horizontalRadius * horizontalRadius) +
@@ -977,8 +987,8 @@ public Vector2? LoadPlayerLook()
 
         _chunksToLoad.Sort((a, b) =>
         {
-            Vector3I da = a - playerChunk;
-            Vector3I db = b - playerChunk;
+            Vector3I da = a - loadCenterChunk;
+            Vector3I db = b - loadCenterChunk;
             float distA = da.X * da.X + da.Z * da.Z + da.Y * da.Y * 1.5f;
             float distB = db.X * db.X + db.Z * db.Z + db.Y * db.Y * 1.5f;
             return distA.CompareTo(distB);
@@ -992,7 +1002,7 @@ public Vector2? LoadPlayerLook()
         {
             int dx = pos.X - playerChunk.X;
             int dz = pos.Z - playerChunk.Z;
-            int dy = pos.Y - playerChunk.Y;
+            int dy = pos.Y - centerChunkY;
 
             float normalizedDistance =
                 (dx * dx + dz * dz) / (unloadHorizontalRadius * unloadHorizontalRadius) +
