@@ -2356,7 +2356,7 @@ private void RollAppearance()
         {
             bool bambooAhead = IsBambooVoxelBlocking(
                 direction,
-                Mathf.Max(StepCheckDistance, 0.15f)
+                Mathf.Max(StepCheckDistance + 0.5f, 1.25f)
             );
 
             // A player is a physical body. When the undead reaches
@@ -2500,7 +2500,11 @@ private void RollAppearance()
                 0.15f
             );
 
-        if (IsBambooVoxelBlocking(direction, checkDistance))
+        // Bamboo's visible mesh is much narrower than its navigation
+        // footprint. Look a little farther ahead than the physical step test
+        // so mobs turn before they reach the stalk instead of pushing into it.
+        float bambooLookAhead = Mathf.Max(checkDistance + 0.5f, 1.25f);
+        if (IsBambooVoxelBlocking(direction, bambooLookAhead))
             return true;
 
         Transform3D testTransform =
@@ -2548,44 +2552,55 @@ private void RollAppearance()
             collisionPosition = _modelCollision.Position;
         }
 
-        Vector3 bodyCenter = GlobalPosition +
-            direction * distance +
-            new Vector3(collisionPosition.X, 0f, collisionPosition.Z);
-
-        float halfX = _collisionBuilt ? collisionSize.X * 0.42f : 0.2f;
-        float halfZ = _collisionBuilt ? collisionSize.Z * 0.42f : 0.2f;
+        float halfX = _collisionBuilt ? collisionSize.X * 0.5f + 0.04f : 0.24f;
+        float halfZ = _collisionBuilt ? collisionSize.Z * 0.5f + 0.04f : 0.24f;
         float feetY = GlobalPosition.Y +
             (_collisionBuilt ? collisionPosition.Y - collisionSize.Y * 0.5f : 0.05f);
         float topY = GlobalPosition.Y +
             (_collisionBuilt ? collisionPosition.Y + collisionSize.Y * 0.5f : 1.5f);
 
-        int minY = Mathf.FloorToInt(feetY + 0.05f);
-        int maxY = Mathf.FloorToInt(Mathf.Max(feetY + 0.05f, topY - 0.05f));
+        int minY = Mathf.FloorToInt(feetY + 0.02f);
+        int maxY = Mathf.FloorToInt(Mathf.Max(feetY + 0.02f, topY - 0.02f));
 
-        // Nine footprint samples catch the whole voxel without allocating arrays
-        // every physics frame.
-        for (int y = minY; y <= maxY; y++)
+        // Sweep the mob's complete footprint along the look-ahead corridor.
+        // This is navigation-only: the bamboo model and physical collision
+        // remain narrow, but every bamboo voxel is treated as a full wall cell.
+        const float sampleStep = 0.2f;
+        int forwardSamples = Mathf.Max(1, Mathf.CeilToInt(distance / sampleStep));
+
+        Vector3 bodyBase = GlobalPosition +
+            new Vector3(collisionPosition.X, 0f, collisionPosition.Z);
+
+        for (int forwardSample = 0; forwardSample <= forwardSamples; forwardSample++)
         {
-            for (int xSample = -1; xSample <= 1; xSample++)
+            float forwardDistance = distance * forwardSample / forwardSamples;
+            Vector3 bodyCenter = bodyBase + direction * forwardDistance;
+
+            for (int y = minY; y <= maxY; y++)
             {
-                for (int zSample = -1; zSample <= 1; zSample++)
+                for (int xSample = -2; xSample <= 2; xSample++)
                 {
-                    Vector3 sample = new Vector3(
-                        bodyCenter.X + xSample * halfX,
-                        y + 0.5f,
-                        bodyCenter.Z + zSample * halfZ
-                    );
+                    for (int zSample = -2; zSample <= 2; zSample++)
+                    {
+                        Vector3 sample = new Vector3(
+                            bodyCenter.X + xSample * halfX * 0.5f,
+                            y + 0.5f,
+                            bodyCenter.Z + zSample * halfZ * 0.5f
+                        );
 
-                    BlockState block = world.GetBlockAtWorld(new Vector3I(
-                        Mathf.FloorToInt(sample.X),
-                        Mathf.FloorToInt(sample.Y),
-                        Mathf.FloorToInt(sample.Z)
-                    ));
+                        BlockState block = world.GetBlockAtWorld(new Vector3I(
+                            Mathf.FloorToInt(sample.X),
+                            Mathf.FloorToInt(sample.Y),
+                            Mathf.FloorToInt(sample.Z)
+                        ));
 
-                    if (block.BlockId == "bamboo" ||
-                        block.BlockId == "big_bamboo" ||
-                        block.BlockId == "bamboo_stick")
-                        return true;
+                        // Bamboo shoots are also treated as occupied voxel cells.
+                        if (block.BlockId == "bamboo_shoot" ||
+                            block.BlockId == "bamboo" ||
+                            block.BlockId == "big_bamboo" ||
+                            block.BlockId == "bamboo_stick")
+                            return true;
+                    }
                 }
             }
         }
@@ -2886,7 +2901,9 @@ return true;
             return true;
 
         // A narrow bamboo mesh must still count as a full navigation obstacle.
-        if (IsBambooVoxelBlocking(direction, Mathf.Max(StepCheckDistance, 0.15f)))
+        if (IsBambooVoxelBlocking(
+                direction,
+                Mathf.Max(StepCheckDistance + 0.5f, 1.25f)))
             return false;
 
         return TryStepTestOnly(direction);
