@@ -125,8 +125,14 @@ public partial class LoadingScreen : Node
         if (!_worldReadyReceived)
         {
             var cm = FindChunkManager();
-            if (cm != null && _expectedChunks > 0)
+            if (cm != null)
             {
+                if (cm.InitialLoadTargetCount > 0)
+                    _expectedChunks = cm.InitialLoadTargetCount;
+
+                if (_expectedChunks <= 0)
+                    return;
+
                 int loaded = cm.InitialLoadTargetCount > 0
                     ? cm.InitialLoadedChunkCount
                     : CountLoadedChunks(cm);
