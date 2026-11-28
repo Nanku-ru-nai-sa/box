@@ -324,8 +324,16 @@ public partial class Chunk : Node3D
 
         _blocks[x, y, z] = block;
 
-        if (block.BlockId == "water" || block.BlockId == "water_spring")
+        // Generated ocean water is already a stable full-strength source
+        // field. Enqueueing every water voxel made world startup spend a
+        // long time simulating thousands of blocks that do not need to flow.
+        // Springs and finite/flowing cells still enter the liquid queue.
+        if (block.BlockId == "water_spring" ||
+            (block.BlockId == "water" &&
+             (!block.LiquidSource || block.LiquidLevel < 16)))
+        {
             NotifyLiquidAt(x, y, z, block);
+        }
     }
 
     public Dictionary<Vector3I, BlockState> GetModifications()
