@@ -233,6 +233,14 @@ private float _stepTargetY = 0f;
 
     private Node3D _player;
 
+    // Distant landed mobs are parked until the player approaches again.
+    // _Process keeps a very cheap, low-frequency wake check running while
+    // their expensive physics/AI/animation work is disabled.
+    private float _distanceLodTimer = 0f;
+    private bool _pausedForDistance = false;
+    private const float MobSimulationSleepDistanceSquared = 64f * 64f;
+    private const float MobSimulationWakeDistanceSquared = 56f * 56f;
+
     private Node3D _threat;
 
     private Node3D _hostileTarget;
@@ -1889,6 +1897,54 @@ private void RollAppearance()
     // =========================================================
     // PHYSICS PROCESS
     // =========================================================
+
+    public override void _Process(double delta)
+    {
+        if (!_pausedForDistance &&
+            (IsMounted || _health <= 0f || !_hasLanded || _isDayDespawning || _isBreeding))
+            return;
+
+        _distanceLodTimer -= (float)delta;
+        if (_distanceLodTimer > 0f)
+            return;
+
+        _distanceLodTimer = 0.5f;
+
+        if (_player == null || !GodotObject.IsInstanceValid(_player))
+        {
+            _player = GetTree().GetFirstNodeInGroup("player") as Node3D;
+
+            if (_player == null)
+            {
+                var found = GetTree().Root.FindChild("player", true, false);
+                _player = found as Node3D;
+            }
+        }
+
+        if (_player == null || !GodotObject.IsInstanceValid(_player))
+            return;
+
+        float distanceSquared = GlobalPosition.DistanceSquaredTo(_player.GlobalPosition);
+
+        if (!_pausedForDistance &&
+            !IsMounted &&
+            _health > 0f &&
+            _hasLanded &&
+            !_isDayDespawning &&
+            !_isBreeding &&
+            distanceSquared > MobSimulationSleepDistanceSquared)
+        {
+            _pausedForDistance = true;
+            Velocity = Vector3.Zero;
+            SetPhysicsProcess(false);
+        }
+        else if (_pausedForDistance &&
+                 distanceSquared < MobSimulationWakeDistanceSquared)
+        {
+            _pausedForDistance = false;
+            SetPhysicsProcess(true);
+        }
+    }
 
     public override void _PhysicsProcess(double delta)
     {
