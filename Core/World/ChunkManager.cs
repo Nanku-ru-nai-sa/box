@@ -111,6 +111,9 @@ public partial class ChunkManager : Node3D
 [Signal] public delegate void WorldReadyEventHandler();
 
     private Dictionary<Vector3I, Chunk> _chunks = new();
+    // Chunks known to contain no generated terrain are represented as air
+    // without allocating a Node, 4096-block array, mesh, or collision body.
+    private HashSet<Vector3I> _knownEmptyChunks = new();
     private List<Vector3I> _chunksToLoad = new();
     // Mirrors _chunksToLoad's contents for O(1) "is this queued already"
     // checks. UpdateChunks() re-scans up to ~15x15x17 candidate positions
@@ -886,6 +889,11 @@ public Vector2? LoadPlayerLook()
             }
         }
 
+        _knownEmptyChunks.RemoveWhere(pos =>
+            Mathf.Abs(pos.X - playerChunk.X) > RenderDistance + 2 ||
+            Mathf.Abs(pos.Z - playerChunk.Z) > RenderDistance + 2 ||
+            Mathf.Abs(pos.Y - playerChunk.Y) > VerticalRenderDistance + 2);
+
         for (int x = -RenderDistance; x <= RenderDistance; x++)
         {
             for (int z = -RenderDistance; z <= RenderDistance; z++)
@@ -909,7 +917,9 @@ public Vector2? LoadPlayerLook()
                         playerChunk.Z + z
                     );
 
-                    if (!_chunks.ContainsKey(chunkPos) && _chunksToLoadSet.Add(chunkPos))
+                    if (!_chunks.ContainsKey(chunkPos) &&
+                        !_knownEmptyChunks.Contains(chunkPos) &&
+                        _chunksToLoadSet.Add(chunkPos))
                         _chunksToLoad.Add(chunkPos);
                 }
             }
@@ -951,9 +961,61 @@ public Vector2? LoadPlayerLook()
                Mathf.Abs(chunkPos.Y - playerChunk.Y) <= ActiveSimulationVerticalDistance;
     }
 
+    private bool IsChunkGuaranteedEmpty(Vector3I chunkPos)
+    {
+        if (WorldType == WorldGenType.Normal)
+            return chunkPos.Y >= 13; // normal terrain is hard-capped below Y=208
+
+        if (WorldType == WorldGenType.Flat)
+            return chunkPos.Y != Mathf.FloorToInt((float)FlatGroundHeight / Chunk.HEIGHT);
+
+        if (WorldType == WorldGenType.OneBlock)
+            return chunkPos.X != 0 ||
+                   chunkPos.Z != 0 ||
+                   chunkPos.Y != Mathf.FloorToInt((float)OneBlockHeight / Chunk.HEIGHT);
+
+        // Sky Islands can contain terrain throughout the full world height.
+        return false;
+    }
+
+    private void RegisterLoadedChunk(Vector3I chunkPos)
+    {
+        var columnKey = new Vector2I(chunkPos.X, chunkPos.Z);
+        _columnRefCount[columnKey] = _columnRefCount.GetValueOrDefault(columnKey, 0) + 1;
+    }
+
+    private Chunk CreateEmptyChunkForEdit(Vector3I chunkPos)
+    {
+        var chunk = new Chunk();
+        chunk.SetChunkManager(this);
+        AddChild(chunk);
+        chunk.Initialize(chunkPos);
+        chunk.MarkGeneratedEmpty();
+
+        Vector3I playerChunk = _player != null ? WorldToChunk(_player.GlobalPosition) : chunkPos;
+        chunk.SetRandomTicksEnabled(IsWithinActiveSimulationRange(chunkPos, playerChunk));
+
+        _chunks[chunkPos] = chunk;
+        RegisterLoadedChunk(chunkPos);
+        return chunk;
+    }
+
     private void LoadChunk(Vector3I chunkPos)
     {
         if (_chunks.ContainsKey(chunkPos)) return;
+
+        bool guaranteedEmpty = IsChunkGuaranteedEmpty(chunkPos);
+        string savedChunkPath = $"{SaveDirectory}chunk_{chunkPos.X}_{chunkPos.Y}_{chunkPos.Z}.json";
+
+        // If this position is guaranteed to be air and has never been edited,
+        // don't allocate a Chunk node or run its terrain/mesh generation.
+        if (guaranteedEmpty && !FileAccess.FileExists(savedChunkPath))
+        {
+            _knownEmptyChunks.Add(chunkPos);
+            return;
+        }
+
+        _knownEmptyChunks.Remove(chunkPos);
 
         var chunk = new Chunk();
         chunk.SetChunkManager(this);
@@ -961,7 +1023,12 @@ public Vector2? LoadPlayerLook()
         chunk.Initialize(chunkPos);
         Vector3I playerChunk = _player != null ? WorldToChunk(_player.GlobalPosition) : chunkPos;
         chunk.SetRandomTicksEnabled(IsWithinActiveSimulationRange(chunkPos, playerChunk));
-        GenerateChunk(chunk, chunkPos);
+
+        if (guaranteedEmpty)
+            chunk.MarkGeneratedEmpty();
+        else
+            GenerateChunk(chunk, chunkPos);
+
         LoadChunkModifications(chunk, chunkPos);
 
         // Re-queue liquid blocks from saved modifications. Generated liquids
@@ -982,9 +1049,7 @@ public Vector2? LoadPlayerLook()
 
         chunk.BuildMesh();
         _chunks[chunkPos] = chunk;
-
-        var columnKey = new Vector2I(chunkPos.X, chunkPos.Z);
-        _columnRefCount[columnKey] = _columnRefCount.GetValueOrDefault(columnKey, 0) + 1;
+        RegisterLoadedChunk(chunkPos);
     }
 
     private bool SaveChunkModifications(Vector3I chunkPos, Chunk chunk)
@@ -2439,7 +2504,14 @@ public Vector3 GetWorldSpawnPosition()
     {
         Vector3I chunkPos = WorldToChunk(worldPos);
         if (!_chunks.TryGetValue(chunkPos, out Chunk chunk))
-            return;
+        {
+            if (state.IsAir() || !_knownEmptyChunks.Remove(chunkPos))
+                return;
+
+            // A player can place a block into a previously skipped empty
+            // chunk. Materialize it only when an edit actually needs it.
+            chunk = CreateEmptyChunkForEdit(chunkPos);
+        }
 
         int localX = worldPos.X - chunkPos.X * Chunk.SIZE;
         int localY = worldPos.Y - chunkPos.Y * Chunk.HEIGHT;
