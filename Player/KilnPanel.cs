@@ -48,7 +48,8 @@ public partial class KilnPanel : Control
         for (int i = 0; i < 3; i++)
         {
             InventorySlot slot = _slots.Count > i ? _slots[i] : null;
-            _slotIcons[i].Texture = slot == null || slot.IsEmpty ? null : GetIcon(slot.ItemId);
+            Texture2D itemTexture = slot == null || slot.IsEmpty ? null : GetIcon(slot.ItemId);
+            FitSlotIcon(_slotIcons[i], itemTexture);
             _slotCounts[i].Text = slot != null && slot.Count > 1 ? slot.Count.ToString() : "";
         }
 
@@ -107,12 +108,9 @@ public partial class KilnPanel : Control
         panel.AddThemeStyleboxOverride("panel", MakeSlotStyle(false));
 
         var icon = new TextureRect();
-        icon.AnchorRight = 1f;
-        icon.AnchorBottom = 1f;
-        icon.OffsetLeft = 5;
-        icon.OffsetTop = 5;
-        icon.OffsetRight = -5;
-        icon.OffsetBottom = -5;
+        // The icon is sized by FitSlotIcon so pixel art can use whole-number
+        // scaling where possible instead of being stretched to an arbitrary
+        // 46x46 rectangle.
         icon.ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize;
         icon.StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered;
         icon.TextureFilter = CanvasItem.TextureFilterEnum.Nearest;
@@ -172,6 +170,41 @@ public partial class KilnPanel : Control
             CornerRadiusTopLeft = 3, CornerRadiusTopRight = 3,
             CornerRadiusBottomLeft = 3, CornerRadiusBottomRight = 3
         };
+    }
+
+    private static void FitSlotIcon(TextureRect icon, Texture2D texture)
+    {
+        icon.Texture = texture;
+
+        if (texture == null)
+        {
+            icon.Size = Vector2.Zero;
+            return;
+        }
+
+        Vector2 sourceSize = texture.GetSize();
+        const float maxIconSize = SlotSize - 8f;
+
+        float maxScale = Mathf.Min(
+            maxIconSize / Mathf.Max(1f, sourceSize.X),
+            maxIconSize / Mathf.Max(1f, sourceSize.Y)
+        );
+
+        // Pixel art should be enlarged by whole pixels whenever it fits.
+        // Only use fractional scaling when the source image is larger than
+        // the available slot area and must be reduced to fit.
+        float scale = maxScale >= 1f ? Mathf.Floor(maxScale) : maxScale;
+        Vector2 displaySize = sourceSize * scale;
+
+        icon.AnchorLeft = 0f;
+        icon.AnchorTop = 0f;
+        icon.AnchorRight = 0f;
+        icon.AnchorBottom = 0f;
+        icon.Position = new Vector2(
+            (SlotSize - displaySize.X) * 0.5f,
+            (SlotSize - displaySize.Y) * 0.5f
+        );
+        icon.Size = displaySize;
     }
 
     private static Texture2D GetIcon(string itemId)
